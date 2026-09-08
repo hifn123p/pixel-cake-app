@@ -36,7 +36,12 @@ jobs:
       - name: Install Android SDK platform (API 37)
         run: |
           yes | sdkmanager --licenses >/dev/null 2>&1 || true
-          sdkmanager "platforms;android-37"
+          # 刷新本地仓库索引，确保能识别最新平台
+          sdkmanager --update >/dev/null 2>&1 || true
+          # API 37 在部分 runner 上尚未进入 stable 频道，先从 canary 频道拉取，失败再回退 stable
+          sdkmanager --channel=3 "platforms;android-37" || sdkmanager "platforms;android-37"
+          # AGP 8.13 需要 build-tools（已装则跳过）；非致命，缺失时由 AGP 自动补全
+          sdkmanager "build-tools;35.0.0" || true
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -77,7 +82,12 @@ jobs:
       - name: Install Android SDK platform (API 37)
         run: |
           yes | sdkmanager --licenses >/dev/null 2>&1 || true
-          sdkmanager "platforms;android-37"
+          # 刷新本地仓库索引，确保能识别最新平台
+          sdkmanager --update >/dev/null 2>&1 || true
+          # API 37 在部分 runner 上尚未进入 stable 频道，先从 canary 频道拉取，失败再回退 stable
+          sdkmanager --channel=3 "platforms;android-37" || sdkmanager "platforms;android-37"
+          # AGP 8.13 需要 build-tools（已装则跳过）；非致命，缺失时由 AGP 自动补全
+          sdkmanager "build-tools;35.0.0" || true
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -132,7 +142,12 @@ jobs:
       - name: Install Android SDK platform (API 37)
         run: |
           yes | sdkmanager --licenses >/dev/null 2>&1 || true
-          sdkmanager "platforms;android-37"
+          # 刷新本地仓库索引，确保能识别最新平台
+          sdkmanager --update >/dev/null 2>&1 || true
+          # API 37 在部分 runner 上尚未进入 stable 频道，先从 canary 频道拉取，失败再回退 stable
+          sdkmanager --channel=3 "platforms;android-37" || sdkmanager "platforms;android-37"
+          # AGP 8.13 需要 build-tools（已装则跳过）；非致命，缺失时由 AGP 自动补全
+          sdkmanager "build-tools;35.0.0" || true
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
