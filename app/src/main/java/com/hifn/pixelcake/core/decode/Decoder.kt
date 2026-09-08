@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import com.hifn.pixelcake.arw.ArwPreviewDecoder
+import com.hifn.pixelcake.arw.ArwFullDecoder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlin.math.max
@@ -35,16 +36,21 @@ object Decoder {
      * 注意：ARW 当前仍取内嵌预览（全量解码待 P1b），故 RAW 导出实为预览分辨率。
      */
     suspend fun decodeFullRes(context: Context, uri: Uri, longEdge: Int): DecodedImage? =
-        decodeInternal(context, uri, longEdge)
+        decodeInternal(context, uri, longEdge, fullRes = true)
 
-    private suspend fun decodeInternal(context: Context, uri: Uri, longEdge: Int): DecodedImage? =
+    private suspend fun decodeInternal(context: Context, uri: Uri, longEdge: Int, fullRes: Boolean = false): DecodedImage? =
         withContext(Dispatchers.IO) {
             val cr = context.contentResolver
             val mime = cr.getType(uri).orEmpty().lowercase()
             val isArw = mime.contains("arw") || uri.toString().endsWith(".arw", ignoreCase = true)
             if (isArw) {
-                val bmp = ArwPreviewDecoder.decodePreview(context, uri, longEdge) ?: return@withContext null
-                return@withContext DecodedImage(bmp, "image/arw", bmp.width, bmp.height, true)
+                val dec = if (fullRes) {
+                    ArwFullDecoder.decodeFull(context, uri, longEdge)
+                } else {
+                    val bmp = ArwPreviewDecoder.decodePreview(context, uri, longEdge) ?: return@withContext null
+                    DecodedImage(bmp, "image/arw", bmp.width, bmp.height, true)
+                }
+                return@withContext dec
             }
             val stream = cr.openInputStream(uri) ?: return@withContext null
             stream.use {
