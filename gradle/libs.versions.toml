@@ -7,9 +7,11 @@ coreKtx = "1.17.0"
 activityCompose = "1.12.3"
 lifecycleRuntimeKtx = "2.10.0"
 
-compileSdk = "37"
+# CI runner 的 SDK 仓库（截至 2026-08 镜像）尚未发布 platforms;android-37，
+# 故 compile/target 暂对齐 minSdk=36；待官方发布 API 37 平台后改回 37。
+compileSdk = "36"
 minSdk = "36"
-targetSdk = "37"
+targetSdk = "36"
 jvmTarget = "17"
 
 [libraries]

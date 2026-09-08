@@ -33,13 +33,14 @@ jobs:
 
       # compileSdk 37（Android 17）平台不一定预装在 runner 上，显式安装；
       # build-tools 用 runner 自带的最新版本即可。
-      - name: Install Android SDK platform (API 37)
+      - name: Install Android SDK platform (API 36)
         run: |
           yes | sdkmanager --licenses >/dev/null 2>&1 || true
-          # 刷新本地仓库索引，确保能识别最新平台
           sdkmanager --update >/dev/null 2>&1 || true
-          # API 37 在部分 runner 上尚未进入 stable 频道，先从 canary 频道拉取，失败再回退 stable
-          sdkmanager --channel=3 "platforms;android-37" || sdkmanager "platforms;android-37"
+          # 主用 API 36（runner 仓库已发布）；待官方发布 API 37 平台后可改回 37
+          sdkmanager "platforms;android-36"
+          # 非致命：若 API 37 平台已发布则一并安装（便于以后切换）
+          sdkmanager --channel=3 "platforms;android-37" >/dev/null 2>&1 || true
           # AGP 8.13 需要 build-tools（已装则跳过）；非致命，缺失时由 AGP 自动补全
           sdkmanager "build-tools;35.0.0" || true
 
@@ -79,13 +80,14 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install Android SDK platform (API 37)
+      - name: Install Android SDK platform (API 36)
         run: |
           yes | sdkmanager --licenses >/dev/null 2>&1 || true
-          # 刷新本地仓库索引，确保能识别最新平台
           sdkmanager --update >/dev/null 2>&1 || true
-          # API 37 在部分 runner 上尚未进入 stable 频道，先从 canary 频道拉取，失败再回退 stable
-          sdkmanager --channel=3 "platforms;android-37" || sdkmanager "platforms;android-37"
+          # 主用 API 36（runner 仓库已发布）；待官方发布 API 37 平台后可改回 37
+          sdkmanager "platforms;android-36"
+          # 非致命：若 API 37 平台已发布则一并安装（便于以后切换）
+          sdkmanager --channel=3 "platforms;android-37" >/dev/null 2>&1 || true
           # AGP 8.13 需要 build-tools（已装则跳过）；非致命，缺失时由 AGP 自动补全
           sdkmanager "build-tools;35.0.0" || true
 
@@ -139,13 +141,14 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install Android SDK platform (API 37)
+      - name: Install Android SDK platform (API 36)
         run: |
           yes | sdkmanager --licenses >/dev/null 2>&1 || true
-          # 刷新本地仓库索引，确保能识别最新平台
           sdkmanager --update >/dev/null 2>&1 || true
-          # API 37 在部分 runner 上尚未进入 stable 频道，先从 canary 频道拉取，失败再回退 stable
-          sdkmanager --channel=3 "platforms;android-37" || sdkmanager "platforms;android-37"
+          # 主用 API 36（runner 仓库已发布）；待官方发布 API 37 平台后可改回 37
+          sdkmanager "platforms;android-36"
+          # 非致命：若 API 37 平台已发布则一并安装（便于以后切换）
+          sdkmanager --channel=3 "platforms;android-37" >/dev/null 2>&1 || true
           # AGP 8.13 需要 build-tools（已装则跳过）；非致命，缺失时由 AGP 自动补全
           sdkmanager "build-tools;35.0.0" || true
 
