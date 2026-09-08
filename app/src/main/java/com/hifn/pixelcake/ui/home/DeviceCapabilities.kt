@@ -4,6 +4,7 @@ import android.app.ActivityManager
 import android.content.Context
 import android.os.Build
 import android.view.Display
+import android.hardware.display.DisplayManager
 
 /**
  * 一加 15 / A7C2 的关键尺寸常量。
@@ -35,7 +36,8 @@ data class DeviceCapabilities(
 )
 
 fun Context.probeCapabilities(): DeviceCapabilities {
-    val display = display
+    val displayManager = getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
+    val display = displayManager.getDisplay(Display.DEFAULT_DISPLAY)
     val memInfo = ActivityManager.MemoryInfo().also {
         (getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager).getMemoryInfo(it)
     }
