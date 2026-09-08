@@ -2,14 +2,10 @@ package com.hifn.pixelcake.ui.home
 
 import android.Manifest
 import android.content.pm.PackageManager
-import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,7 +13,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
@@ -30,41 +25,29 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
-import com.hifn.pixelcake.arw.ArwPreviewDecoder
 import com.hifn.pixelcake.diag.DebugLog
 import com.hifn.pixelcake.ui.theme.Bad
 import com.hifn.pixelcake.ui.theme.Ok
 import com.hifn.pixelcake.ui.theme.Warn
-import kotlinx.coroutines.launch
 
 /**
- * 第 1 步的落地页。
+ * 第 1 步的落地页 + P1a 导入入口。
  *
- * 不是 Hello World —— 而是设备能力实测面板。
- * 把它装到一加 15 上，可以直接验证技术方案中的三条核心假设：
- *   1. 屏幕是否真的支持广色域（决定 Display P3 管线是否成立）
- *   2. HDR 能力（决定 Ultra HDR 输出是否可用）
- *   3. 可用内存 vs fp16 三缓冲占用（决定能否全分辨率实时处理）
- *
- * M0b：新增「打开 ARW 文件」入口，走纯 Kotlin TIFF/IFD 解析内嵌预览（零 NDK）。
+ * 不是 Hello World —— 而是设备能力实测面板；并作为编辑链路的起点。
+ * M0b 的 ARW 内嵌预览已并入「打开 ARW 文件」入口（进编辑器以预览图呈现，P1b 才开放全量修图）。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen() {
+fun HomeScreen(onImportPhoto: () -> Unit, onImportArw: () -> Unit) {
     val context = LocalContext.current
     val caps = remember { context.probeCapabilities() }
-    val profile = remember { caps.resolutionProfile() }
 
     var granted by remember {
         mutableStateOf(
@@ -79,29 +62,6 @@ fun HomeScreen() {
 
     var logExported by remember { mutableStateOf(false) }
 
-    val scope = rememberCoroutineScope()
-    var arwPreview by remember { mutableStateOf<ImageBitmap?>(null) }
-    var arwStatus by remember { mutableStateOf("选择一个 .arw 文件以查看内嵌预览") }
-
-    val arwLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocument()
-    ) { uri: Uri? ->
-        uri ?: run {
-            arwStatus = "未选择文件"
-            return@rememberLauncherForActivityResult
-        }
-        DebugLog.i(DebugLog.TAG_IMPORT, "arw picked", mapOf("uri" to uri.toString()))
-        scope.launch {
-            val bmp = ArwPreviewDecoder.decodePreview(context, uri, profile.proxyLongEdge)
-            arwPreview = bmp?.asImageBitmap()
-            arwStatus = if (bmp != null) {
-                "预览加载成功 ${bmp.width}x${bmp.height}"
-            } else {
-                "无法解码该 ARW 的预览"
-            }
-        }
-    }
-
     Scaffold(
         topBar = {
             TopAppBar(
@@ -115,7 +75,7 @@ fun HomeScreen() {
     ) { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(padding),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item {
@@ -186,30 +146,20 @@ fun HomeScreen() {
             }
 
             item {
-                SectionCard("ARW 预览（M0b · 纯 Kotlin TIFF/IFD）") {
+                SectionCard("导入（P1a 编辑链路）") {
                     Button(
-                        onClick = { arwLauncher.launch(arrayOf("*/*")) },
-                        modifier = Modifier.padding(top = 4.dp)
+                        onClick = onImportPhoto,
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
                     ) {
-                        Text("打开 ARW 文件")
+                        Text("导入照片（JPEG / HEIF）")
                     }
-                    Spacer(Modifier.height(12.dp))
-                    if (arwPreview != null) {
-                        Image(
-                            bitmap = arwPreview!!,
-                            contentDescription = "ARW 内嵌预览",
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(220.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                        )
+                    Spacer(Modifier.height(8.dp))
+                    Button(
+                        onClick = onImportArw,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("打开 ARW 文件（预览，P1b 开放修图）")
                     }
-                    Text(
-                        arwStatus,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 8.dp)
-                    )
                 }
             }
 
