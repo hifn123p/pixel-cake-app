@@ -93,4 +93,7 @@ dependencies {
     implementation(libs.compose.material3)
 
     debugImplementation(libs.compose.ui.tooling)
+
+    // M0b：纯 Kotlin ARW 预览解析的 JVM 单测
+    testImplementation("junit:junit:4.13.2")
 }
