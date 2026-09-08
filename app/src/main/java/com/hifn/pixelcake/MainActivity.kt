@@ -63,6 +63,7 @@ private fun AppRoot() {
 
     var screen by remember { mutableStateOf("home") }
     var imported by remember { mutableStateOf<DecodedImage?>(null) }
+    var srcUri by remember { mutableStateOf<Uri?>(null) }
     val history = remember { EditHistory() }
     var params by remember { mutableStateOf(EditParams()) }
     var rendered by remember { mutableStateOf<Bitmap?>(null) }
@@ -92,6 +93,7 @@ private fun AppRoot() {
                 DebugLog.w(DebugLog.TAG_DECODE, "decode failed", mapOf("uri" to uri.toString()))
             } else {
                 imported = dec
+                srcUri = uri
                 history.reset()
                 params = EditParams()
                 status = if (dec.isRaw) "ARW 当前仅预览（全量修图待 P1b 开放）" else ""
@@ -131,10 +133,39 @@ private fun AppRoot() {
                     onRedo = { if (history.redo()) params = history.current },
                     onExport = {
                         scope.launch {
-                            val bmp = rendered ?: src.bitmap
-                            val uri = Exporter.export(context, bmp, ExportFormat.JPEG, 92)
-                            status = if (uri != null) "已导出：$uri" else "导出失败"
-                            DebugLog.i(DebugLog.TAG_EDIT, "export", mapOf("ok" to (uri != null)))
+                            val img = imported ?: return@launch
+                            val uri = srcUri
+                            status = "正在生成导出…"
+                            val result = withContext(Dispatchers.Default) {
+                                var fullBase: DecodedImage? = null
+                                var fullTarget: Bitmap? = null
+                                try {
+                                    if (uri != null) fullBase = Decoder.decodeFullRes(context, uri, profile.fullResLongEdge)
+                                    if (fullBase != null) {
+                                        fullTarget = Bitmap.createBitmap(
+                                            fullBase.bitmap.width, fullBase.bitmap.height, Bitmap.Config.ARGB_8888
+                                        )
+                                        EditEngine.renderInto(fullTarget, fullBase.bitmap, params)
+                                        val out = withContext(Dispatchers.IO) {
+                                            Exporter.export(context, fullTarget, ExportFormat.JPEG, 92)
+                                        }
+                                        val label = if (fullBase.isRaw) "ARW 预览分辨率" else "全分辨率"
+                                        out to label
+                                    } else {
+                                        val proxy = rendered ?: img.bitmap
+                                        val out = withContext(Dispatchers.IO) {
+                                            Exporter.export(context, proxy, ExportFormat.JPEG, 92)
+                                        }
+                                        out to "代理分辨率"
+                                    }
+                                } finally {
+                                    fullTarget?.recycle()
+                                    fullBase?.bitmap?.recycle()
+                                }
+                            }
+                            val (exportedUri, label) = result
+                            status = if (exportedUri != null) "已导出（$label）：$exportedUri" else "导出失败"
+                            DebugLog.i(DebugLog.TAG_EDIT, "export", mapOf("ok" to (exportedUri != null), "tier" to label))
                         }
                     },
                     onBack = {
@@ -142,6 +173,7 @@ private fun AppRoot() {
                         rendered = null
                         src.bitmap.recycle()
                         imported = null
+                        srcUri = null
                         screen = "home"
                     }
                 )

@@ -25,7 +25,19 @@ data class DecodedImage(
  * 都不全量载入，避免 65MB ARW / 33MP JPEG 占内存。
  */
 object Decoder {
+    /** 代理分辨率解码（编辑预览用），降采样到 longEdge。 */
     suspend fun decodeToProxy(context: Context, uri: Uri, longEdge: Int): DecodedImage? =
+        decodeInternal(context, uri, longEdge)
+
+    /**
+     * 导出用全分辨率解码，与 [decodeToProxy] 同一路由与采样逻辑，
+     * 仅 longEdge 传入 fullResLongEdge（JPEG/HEIF 基本按原图长边采样）。
+     * 注意：ARW 当前仍取内嵌预览（全量解码待 P1b），故 RAW 导出实为预览分辨率。
+     */
+    suspend fun decodeFullRes(context: Context, uri: Uri, longEdge: Int): DecodedImage? =
+        decodeInternal(context, uri, longEdge)
+
+    private suspend fun decodeInternal(context: Context, uri: Uri, longEdge: Int): DecodedImage? =
         withContext(Dispatchers.IO) {
             val cr = context.contentResolver
             val mime = cr.getType(uri).orEmpty().lowercase()
