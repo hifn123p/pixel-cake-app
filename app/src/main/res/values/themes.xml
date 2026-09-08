@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!--
+      Compose 项目无需 AppCompat 主题，但窗口仍需一个平台主题来设置
+      状态栏/导航栏背景与窗口背景。使用平台自带主题，零额外依赖。
+    -->
+    <style name="Theme.PixelCake" parent="android:Theme.Material.NoActionBar">
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:enforceStatusBarContrast">false</item>
+        <item name="android:enforceNavigationBarContrast">false</item>
+    </style>
+
+</resources>

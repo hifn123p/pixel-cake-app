@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  照片存放在 MediaStore 公共媒体库，不属于应用私有数据，天然不参与 Auto Backup。
+  因此这里只需要声明 SharedPreferences（用户偏好）与预设数据库。
+
+  注意：一旦出现 <include>，未列出的 domain 即默认不备份，
+  不能再对其写 <exclude>，否则 lint 会报 FullBackupContent 错误。
+-->
+<full-backup-content>
+    <include domain="sharedpref" path="." />
+    <include domain="database" path="presets.db" />
+</full-backup-content>

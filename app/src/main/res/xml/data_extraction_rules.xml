@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 12+ 的云端备份 / 设备迁移规则。
+  与 backup_rules.xml 保持一致：只迁移用户偏好与预设数据库。
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <include domain="sharedpref" path="." />
+        <include domain="database" path="presets.db" />
+    </cloud-backup>
+    <device-transfer>
+        <include domain="sharedpref" path="." />
+        <include domain="database" path="presets.db" />
+    </device-transfer>
+</data-extraction-rules>

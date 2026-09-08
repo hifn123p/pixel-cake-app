@@ -1,0 +1,34 @@
+# ---------- IDE / 构建 ----------
+*.iml
+.gradle
+/local.properties
+/.idea
+/.kotlin
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+
+# 模块构建产物
+app/build/
+app/release/
+app/debug/
+
+# 签名文件永远不要入库
+*.jks
+*.keystore
+*.p12
+!debug.keystore
+
+# NDK / CMake 产物（P1b 引入 LibRaw 后会产生）
+app/.cxx/
+app/build/intermediates/cxx/
+
+# ---------- 项目本地文件（不进 App 仓库） ----------
+# WorkBuddy 项目记忆，属于本地工作区，不应进入代码仓库
+.workbuddy/
+
+# 历史规划文档归档（仅本地追溯用）
+docs/archive/

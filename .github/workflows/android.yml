@@ -1,0 +1,163 @@
+name: Android CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  # 允许在 GitHub 网页手动触发
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build Debug APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      # compileSdk 37（Android 17）平台不一定预装在 runner 上，显式安装；
+      # build-tools 用 runner 自带的最新版本即可。
+      - name: Install Android SDK platform (API 37)
+        run: |
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          sdkmanager "platforms;android-37"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Assemble debug APK
+        run: ./gradlew assembleDebug --stacktrace
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: pixelcake-debug-${{ github.sha }}
+          path: app/build/outputs/apk/debug/*.apk
+          retention-days: 90
+
+  # 第 1 步不因 lint 阻断 CI，仅产出报告供查看
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    continue-on-error: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK platform (API 37)
+        run: |
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          sdkmanager "platforms;android-37"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Run lint
+        run: ./gradlew lintDebug
+
+      - name: Upload lint report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lint-report-${{ github.sha }}
+          path: app/build/reports/lint-results-debug.html
+          retention-days: 7
+
+  # secrets 上下文不允许出现在 job 级 if 中（GitHub 会直接判定 workflow 非法，
+  # 导致整个文件解析失败、一个 job 都不创建）。因此单独用一个 job 探测，
+  # 再把结果以 output 的形式传给 release。
+  check-signing:
+    name: Check signing secrets
+    runs-on: ubuntu-latest
+    outputs:
+      has-keystore: ${{ steps.check.outputs.has }}
+    steps:
+      - name: Probe KEYSTORE_BASE64
+        id: check
+        run: echo "has=${{ secrets.KEYSTORE_BASE64 != '' }}" >> "$GITHUB_OUTPUT"
+
+  release:
+    name: Signed Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    needs: [build, check-signing]
+    if: needs.check-signing.outputs.has-keystore == 'true'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK platform (API 37)
+        run: |
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          sdkmanager "platforms;android-37"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Decode keystore from Secrets
+        run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > "$RUNNER_TEMP/pixelcake.jks"
+
+      - name: Assemble signed release
+        env:
+          KEYSTORE_PATH: ${{ runner.temp }}/pixelcake.jks
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: ./gradlew assembleRelease --stacktrace
+
+      - name: Upload signed APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: pixelcake-release-${{ github.sha }}
+          path: app/build/outputs/apk/release/*.apk
+          retention-days: 90
+
+      - name: Clean up keystore
+        if: always()
+        run: rm -f "$RUNNER_TEMP/pixelcake.jks"
