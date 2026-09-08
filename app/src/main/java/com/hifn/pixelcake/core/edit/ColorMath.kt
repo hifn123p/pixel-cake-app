@@ -40,9 +40,9 @@ object ColorMath {
         temperature: Float, tint: Float
     ): Triple<Float, Float, Float> {
         // 色温>0 偏暖(增 R 减 B)；色调>0 偏品红(增 R/B 减 G)
-        val wr = 1f + temperature * 0.18f + tint * 0.10f
-        val wg = 1f - tint * 0.12f
-        val wb = 1f - temperature * 0.18f + tint * 0.06f
+        val wr = 1f + temperature * 0.28f + tint * 0.14f
+        val wg = 1f - tint * 0.16f
+        val wb = 1f - temperature * 0.28f + tint * 0.08f
         return Triple(r * wr, g * wg, b * wb)
     }
 
@@ -82,20 +82,20 @@ object ColorMath {
                 Triple(l, l, l)
             }
             "warm" -> Triple(
-                (r * (1f + 0.10f * i)).coerceIn(0f, 1f),
+                (r * (1f + 0.16f * i)).coerceIn(0f, 1f),
                 g,
-                (b * (1f - 0.08f * i)).coerceIn(0f, 1f)
+                (b * (1f - 0.12f * i)).coerceIn(0f, 1f)
             )
             "cool" -> Triple(
-                (r * (1f - 0.08f * i)).coerceIn(0f, 1f),
+                (r * (1f - 0.12f * i)).coerceIn(0f, 1f),
                 g,
-                (b * (1f + 0.10f * i)).coerceIn(0f, 1f)
+                (b * (1f + 0.16f * i)).coerceIn(0f, 1f)
             )
             "film" -> {
-                val c = applyContrast((r * (1f + 0.06f * i)).coerceIn(0f, 1f), 0.12f * i)
-                val cg = applyContrast(g, 0.12f * i)
-                val cb = applyContrast((b * (1f - 0.04f * i)).coerceIn(0f, 1f), 0.12f * i)
-                val sat = applySaturation(c, cg, cb, 0.08f * i)
+                val c = applyContrast((r * (1f + 0.08f * i)).coerceIn(0f, 1f), 0.16f * i)
+                val cg = applyContrast(g, 0.16f * i)
+                val cb = applyContrast((b * (1f - 0.06f * i)).coerceIn(0f, 1f), 0.16f * i)
+                val sat = applySaturation(c, cg, cb, 0.12f * i)
                 Triple(sat.first, sat.second, sat.third)
             }
             else -> Triple(r, g, b)

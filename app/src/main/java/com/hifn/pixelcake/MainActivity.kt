@@ -69,25 +69,33 @@ private fun AppRoot() {
     var rendered by remember { mutableStateOf<Bitmap?>(null) }
     var status by remember { mutableStateOf("") }
     val renderMutex = remember { Mutex() }
+    var renderStamp by remember { mutableStateOf(0) }
 
     // 参数或导入变化 -> 异步把参数栈重渲到代理图（复用目标位图，避免每帧重分配）
     LaunchedEffect(params, imported) {
         val src = imported ?: return@LaunchedEffect
-        val target = rendered ?: run {
-            val b = Bitmap.createBitmap(src.bitmap.width, src.bitmap.height, Bitmap.Config.ARGB_8888)
-            rendered = b
-            b
+        val base = src.bitmap
+        // 复用同尺寸目标位图；换图尺寸变化才重建，避免每帧重分配
+        val target = if (rendered == null || rendered!!.width != base.width || rendered!!.height != base.height) {
+            Bitmap.createBitmap(base.width, base.height, Bitmap.Config.ARGB_8888)
+        } else {
+            rendered!!
         }
         renderMutex.withLock {
-            withContext(Dispatchers.Default) { EditEngine.renderInto(target, src.bitmap, params) }
+            withContext(Dispatchers.Default) { EditEngine.renderInto(target, base, params) }
         }
-        DebugLog.d(DebugLog.TAG_EDIT, "render done", mapOf("w" to target.width, "h" to target.height))
+        // 关键修复：渲染完成后再赋值并递增 stamp。
+        // renderInto 是原位修改同一 Bitmap，若不触发重组，Compose 会一直显示赋值时(仍空白)那一帧，
+        // 导致预览空白、只有按住(showOriginal 触发重组)才刷新。
+        rendered = target
+        renderStamp++
+        DebugLog.d(DebugLog.TAG_EDIT, "render done", mapOf("w" to target.width, "h" to target.height, "stamp" to renderStamp))
     }
 
     val openInEditor: (Uri) -> Unit = { uri ->
         DebugLog.i(DebugLog.TAG_IMPORT, "pick", mapOf("uri" to uri.toString()))
         scope.launch {
-            val dec = Decoder.decodeToProxy(context, uri, profile.proxyLongEdge)
+            val dec = runCatching { Decoder.decodeToProxy(context, uri, profile.proxyLongEdge) }.getOrNull()
             if (dec == null) {
                 status = "无法解码该文件"
                 DebugLog.w(DebugLog.TAG_DECODE, "decode failed", mapOf("uri" to uri.toString()))
@@ -121,6 +129,7 @@ private fun AppRoot() {
                 EditorScreen(
                     original = src.bitmap,
                     rendered = rendered,
+                    renderVersion = renderStamp,
                     params = params,
                     canUndo = history.canUndo,
                     canRedo = history.canRedo,
@@ -174,6 +183,7 @@ private fun AppRoot() {
                         src.bitmap.recycle()
                         imported = null
                         srcUri = null
+                        renderStamp = 0
                         screen = "home"
                     }
                 )

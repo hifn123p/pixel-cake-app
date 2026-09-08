@@ -42,6 +42,7 @@ import kotlin.math.round
 fun EditorScreen(
     original: Bitmap,
     rendered: Bitmap?,
+    renderVersion: Int,
     params: EditParams,
     canUndo: Boolean,
     canRedo: Boolean,
@@ -53,7 +54,11 @@ fun EditorScreen(
     onBack: () -> Unit
 ) {
     var showOriginal by remember { mutableStateOf(false) }
-    val display: ImageBitmap? = if (showOriginal) original.asImageBitmap() else rendered?.asImageBitmap()
+    // renderVersion 每次重渲自增，确保本可组合项重组并重绘当前(已被原位修改的)Bitmap。
+    val display: ImageBitmap? = run {
+        val _v = renderVersion
+        if (showOriginal) original.asImageBitmap() else rendered?.asImageBitmap()
+    }
 
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Row(

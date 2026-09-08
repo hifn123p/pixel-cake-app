@@ -6,6 +6,7 @@ import android.graphics.BitmapFactory
 import android.net.Uri
 import com.hifn.pixelcake.arw.ArwPreviewDecoder
 import com.hifn.pixelcake.arw.ArwFullDecoder
+import com.hifn.pixelcake.diag.DebugLog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlin.math.max
@@ -40,6 +41,7 @@ object Decoder {
 
     private suspend fun decodeInternal(context: Context, uri: Uri, longEdge: Int, fullRes: Boolean = false): DecodedImage? =
         withContext(Dispatchers.IO) {
+            try {
             val cr = context.contentResolver
             val mime = cr.getType(uri).orEmpty().lowercase()
             val isArw = mime.contains("arw") || uri.toString().endsWith(".arw", ignoreCase = true)
@@ -77,6 +79,10 @@ object Decoder {
                 }
             }
             return@withContext null
+            } catch (t: Throwable) {
+                DebugLog.e(DebugLog.TAG_DECODE, "decode error", mapOf("uri" to uri.toString(), "err" to (t.message ?: t.javaClass.simpleName)))
+                null
+            }
         }
 
     private fun computeSample(ow: Int, oh: Int, longEdge: Int): Int {
