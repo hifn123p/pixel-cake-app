@@ -14,7 +14,7 @@ description: 像素蛋糕（AI 人像精修）安卓应用的唯一开发计划�
 > v3.0 相对之前的关键变更：
 > 1. **ARW 修图必须走全量 RAW**（LibRaw 真解马赛克），内嵌预览**只用于打开/快速预览**，不作为修图数据源。
 > 2. **P1 拆为 P1a / P1b**（先拿首个真机 APK，再堆完整人像功能）。
-> 3. **SDK 定档 minSdk 36 / targetSdk 37 / compileSdk 37**（Android 17 = API 37 已于 2026-06-16 稳定）。
+> 3. **SDK：minSdk 36；compileSdk / targetSdk 暂对齐 36**（CI runner 的 SDK 仓库截至 2026-08 镜像尚未发布 `platforms;android-37`，`sdkmanager` 在 stable 与 canary 均 `Failed to find package`，故暂降到 36；待官方发布 API 37 平台后改回 37，代码已预留非致命的 37 安装尝试）。
 > 4. 修正 A7C II 规格（33MP / 7008×4672 / 14bit）与 ARW 体积，重算内存与自适应档位。
 > 5. 删除"16-bit 导出"过度承诺：内部 16-bit 保精度，**导出最高 8/10-bit**。
 
