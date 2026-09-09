@@ -6,7 +6,7 @@
 
 [![Platform](https://img.shields.io/badge/Platform-Android%2016%2B-3DDC84?logo=android)](https://developer.android.com)
 [![minSdk](https://img.shields.io/badge/minSdk-36-blue)](https://developer.android.com)
-[![targetSdk](https://img.shields.io/badge/targetSdk-37-blue)](https://developer.android.com)
+[![targetSdk](https://img.shields.io/badge/targetSdk-36-blue)](https://developer.android.com)
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.2.21-7F52FF?logo=kotlin)](https://kotlinlang.org)
 [![Compose](https://img.shields.io/badge/Jetpack%20Compose-Material3-4285F4?logo=jetpackcompose)](https://developer.android.com/jetpack/compose)
 [![Build](https://img.shields.io/badge/Build-GitHub%20Actions-2088FF?logo=githubactions)](https://github.com/features/actions)
@@ -41,11 +41,11 @@
 | 🚀 实时预览 | 代理图 + GPU 链（RenderEffect / AGSL），滑块拖动 <16ms/帧 |
 | 💾 导出 | 写回相册（JPEG / PNG；HEIF 视设备编码器），按设备档位自适应分辨率 |
 | 🐞 调试日志 | 内置结构化日志，可导出分享——无本地构建环境下的唯一联调回路 |
+| 📷 ARW 全量修图 | LibRaw NDK 真解马赛克 → 16-bit 线性（P1b-1/2/3 已接入并启用；人像算子 / 预设见 P1b-4/5） |
 
 ### 规划中
 - 🧴 人像精修：中性灰磨皮 / 美型液化 / 祛瑕 / 追色 / AGSL 局部
 - 🎨 内置人像预设 ~10 套（参数栈 + `.cube` 电影/胶片 LUT）
-- 📷 **ARW 全量修图**：LibRaw 真解马赛克 → 16-bit 管线，保留完整宽容度
 - 🤖 ML 自动蒙版：人脸检测 / 关键点 / 分割（TFLite + NNAPI）
 - 📡 A7C2 相机直连：USB PTP 拉图 + 套预设 + 边拍边看
 - ☁️ 云端 NAS：Docker 化 Rust 引擎 + HTTP API，单张/批量后台修图
@@ -87,7 +87,7 @@ com.hifn.pixelcake
 
 | 来源 | 复用内容（路径） |
 |---|---|
-| `pixel-cake-android` | `ui/home/DeviceCapabilities.kt`（设备探测）· `ui/home/HomeScreen.kt` · `raw/RawInfo.kt` · `MainActivity.kt` · `ui/theme/` · `cpp/raw_bridge.cpp`（孤儿 LibRaw JNI，待接入）· `.github/workflows/android.yml` |
+| `pixel-cake-android` | `ui/home/DeviceCapabilities.kt`（设备探测）· `ui/home/HomeScreen.kt` · `raw/RawInfo.kt` · `MainActivity.kt` · `ui/theme/` · `cpp/raw_bridge.cpp`（LibRaw JNI，已接入）· `.github/workflows/android.yml` |
 | `pixel-cake`（Rust） | `engine/src/retouch/{neutral_gray,beauty,color_transfer,inpaint,enhance}.rs` · `engine/src/detect/{face,landmark,segment}.rs` · `engine/src/raw.rs` · `engine/src/color/lut.rs` · `crates/scheduler`（P3 任务队列） |
 
 - **复用**：Compose 基建、设备探测、CI 骨架、LibRaw、Rust 修图算法（P3）
@@ -107,10 +107,10 @@ com.hifn.pixelcake
 
 | 阶段 | 目标 | 状态 |
 |---|---|---|
-| **M0a** | SDK 升 minSdk36/target37/compile37 + CI 出首个可装 APK | ⬜ |
-| **M0b** | ARW 内嵌预览解码（纯 Kotlin，零 NDK） | ⬜ |
-| **P1a** | 最小可用编辑链路 → **首个真机可测 APK**（导入/曝光·曲线·LUT/导出/日志） | ⬜ |
-| **P1b** | 完整人像修图 + ARW 全量修图 + 内置预设 ~10 套 | ⬜ |
+| **M0a** | SDK 升 minSdk36 + CI 出首个可装 APK + DebugLog | ✅ |
+| **M0b** | ARW 内嵌预览解码（纯 Kotlin，零 NDK） | ✅ |
+| **P1a** | 最小可用编辑链路 → **首个真机可测 APK**（导入/曝光·曲线·LUT/导出/日志） | ✅ |
+| **P1b** | 完整人像修图 + ARW 全量修图 + 内置预设 ~10 套 | 🔧 进行中（LibRaw 全量解码已接入启用；人像算子/预设待做） |
 | **P1+** | ML 自动蒙版（ONNX → TFLite） | ⬜ |
 | **P2** | A7C2 相机直连（USB PTP PoC）+ 边拍边看 | ⬜ |
 | **P3** | NAS Docker 化 + HTTP API，单张/批量后台修图 | ⬜ |
@@ -119,7 +119,7 @@ com.hifn.pixelcake
 
 ## 📱 设备要求
 
-- **Android 16+（API 36）**，targetSdk / compileSdk **37（Android 17）**
+- **Android 16+（API 36）**，targetSdk / compileSdk **36（暂对齐；CI runner 未发布 `platforms;android-37`，待官方发布后升 37）**
 - 推荐 **RAM ≥ 8GB**；全分辨率 33MP 解码：RGBA_8888 ≈ 131MB、RGBA_F16 ≈ 262MB
 - 自适应档位：≥12GB 全分辨率+F16 ｜ 8–12GB 全分辨率 RGBA_8888 ｜ 6–8GB 全分辨率+单 Bitmap 复用 ｜ <6GB 降至长边 4096
 - 调试真机：**一加15**（骁龙 8 Elite）；相机：**Sony A7C II**（33MP / 7008×4672 / 14bit）
@@ -136,6 +136,7 @@ git push origin main        # 推送后 GitHub Actions 自动接管
 
 `.github/workflows/android.yml` 会执行：ktlint/detekt → unit tests → `assembleRelease`（`KEYSTORE_BASE64` 签名）→ 产物与通知。
 
+- **子模块**：LibRaw 经 git 子模块引入，CI 用 `actions/checkout` 递归拉取；本机首次构建前执行 `git submodule update --init --recursive`（走 SSH 可避开代理证书问题）。
 - **通知策略**：签名 APK 一律作 workflow artifact（保留 90 天）；配置 `FIREBASE_APP_ID` 等 secret 后才额外走 Firebase App Distribution（邮件 + 一键安装）。
 - **密钥**：全部存放 GitHub Secrets，仓库内零 `.env`。
 

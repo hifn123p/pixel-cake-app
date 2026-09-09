@@ -2,7 +2,7 @@
 title: 像素蛋糕 App — 开发计划（唯一有效文档 v3.0）
 status: active
 created: 2026-09-05
-updated: 2026-09-08
+updated: 2026-09-09
 project: D:\AI_Project
 replaces: [PLAN.md, FEASIBILITY_REPORT.md, P1_MVP_DESIGN.md, PLAN_REVIEW.md]
 description: 像素蛋糕（AI 人像精修）安卓应用的唯一开发计划：项目介绍、功能、核心原理、技术路线、代码架构（复用清单含具体路径 / 新开发模块）、设备要求、交付调试与风险。旧规划文档已归档至 docs/archive/。
@@ -19,6 +19,18 @@ description: 像素蛋糕（AI 人像精修）安卓应用的唯一开发计划�
 > 5. 删除"16-bit 导出"过度承诺：内部 16-bit 保精度，**导出最高 8/10-bit**。
 
 ---
+
+## 0. 当前进度（2026-09-09）
+
+| 阶段 | 状态 | 说明 |
+|---|---|---|
+| M0a | ✅ | SDK 升 36 + CI 出首个可装 APK + DebugLog 模块 |
+| M0b | ✅ | ARW 内嵌 JPEG 预览解码（纯 Kotlin TIFF/IFD，零 NDK） |
+| P1a | ✅ | 最小编辑链路 → 首个真机可测 APK（导入/曝光·曲线·LUT/导出/日志） |
+| P1b | 🔧 | **LibRaw 全量解码已接入并启用**（子模块 `third_party/LibRaw`[master `dde798dd`] + LibRaw-cmake[`eb98e432`]，静态链接；`raw_bridge.cpp` 全量解马赛克→RGBA；`useLibRaw=true`，失败回退预览）。待做：P1b-4 人像算子（中性灰/美颜/修复/追色）、P1b-5 ~10 预设、P1b-6 统一真机测试 |
+| P1+ / P2 / P3 | ⬜ | 待启动 |
+
+> LibRaw master API 注意：已移除 `dcraw_free()`，释放产物用 `free_image()`；Kotlin `val version` 与 native `getVersion()` JVM 签名冲突，已改名 `librawVersion`（详见 §8 风险表与每日日志 2026-09-09）。
 
 ## 1. 项目介绍
 
