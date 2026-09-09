@@ -22,5 +22,5 @@ object RawNative {
      */
     external fun decodeFull(path: String, maxLongSide: Int): RawImage?
 
-    val version: String get() = getVersion()
+    val librawVersion: String get() = getVersion()
 }
