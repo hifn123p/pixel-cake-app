@@ -9,6 +9,7 @@ plugins {
 android {
     namespace = "com.hifn.pixelcake"
     compileSdk = libs.versions.compileSdk.get().toInt()
+    ndkVersion = "27.0.12077973"
 
     defaultConfig {
         applicationId = "com.hifn.pixelcake"
@@ -18,6 +19,13 @@ android {
         versionName = "0.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        externalNativeBuild {
+            cmake {
+                abiFilters += "arm64-v8a"
+                arguments += listOf("-DANDROID_STL=c++_static")
+            }
+        }
     }
 
     // 只保留中英文资源，剔除 AndroidX 等依赖带入的多语言字符串（约可省几百 KB）。
@@ -71,7 +79,17 @@ android {
         }
     }
 
-    // 第 2 步引入 LibRaw 后，此处添加 externalNativeBuild { cmake { ... } }
+    ndk {
+        // P1b 仅面向一加15(arm64-v8a)；限单一 ABI 缩短 CI 构建并规避 x86 NDK 差异
+        abiFilters += "arm64-v8a"
+    }
+
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
+        }
+    }
 }
 
 // kotlinOptions 在 KGP 2.2 已废弃，改用 compilerOptions DSL
