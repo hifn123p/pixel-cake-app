@@ -25,6 +25,11 @@ android {
                 arguments += listOf("-DANDROID_STL=c++_static")
             }
         }
+
+        ndk {
+            // P1b 仅面向一加15(arm64-v8a)；限单一 ABI 缩短 CI 构建并规避 x86 NDK 差异
+            abiFilters += "arm64-v8a"
+        }
     }
 
     // 只保留中英文资源，剔除 AndroidX 等依赖带入的多语言字符串（约可省几百 KB）。
@@ -76,11 +81,6 @@ android {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
-    }
-
-    ndk {
-        // P1b 仅面向一加15(arm64-v8a)；限单一 ABI 缩短 CI 构建并规避 x86 NDK 差异
-        abiFilters += "arm64-v8a"
     }
 
     externalNativeBuild {
