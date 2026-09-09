@@ -22,8 +22,8 @@ import java.io.File
  */
 object ArwFullDecoder {
 
-    /** P1b 总开关：false=走 Kotlin 预览回退；true=走 LibRaw 全量解码。 */
-    var useLibRaw: Boolean = false
+    /** P1b 总开关：P1b-3 起置 true，走 LibRaw 全量解码（失败回退预览）。 */
+    var useLibRaw: Boolean = true
 
     suspend fun decodeFull(context: Context, uri: Uri, longEdge: Int): DecodedImage? =
         if (useLibRaw) decodeViaLibRaw(context, uri, longEdge)
