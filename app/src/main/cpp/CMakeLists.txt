@@ -1,5 +1,11 @@
 cmake_minimum_required(VERSION 3.22.1)
 
+# ⚠️ 许可合规（FIX_LIST F10 / DEV_PLAN §8 D06）：LibRaw 以 LGPL-2.1 / CDDL-1.0 双许可发布。
+# 下方把 LibRaw 以**静态库**链接进闭源 APK，触发 LGPL 的「可重新链接」义务——
+# 一旦分发，须向用户提供可在其自有 LibRaw 版本上重新链接的本项目目标文件（.o/.so），
+# 或改为把 LibRaw 编成独立动态库 .so 再链接。自用阶段无碍；分发即硬合规项。
+# 许可证全文与归因见仓库根 NOTICE。
+
 # P1b raw bridge：在本 CMake 工程中集成 LibRaw 静态库，实现 ARW 全量解码。
 project(rawbridge LANGUAGES CXX)
 

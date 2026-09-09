@@ -4,7 +4,6 @@ import android.content.ContentValues
 import android.content.Context
 import android.graphics.Bitmap
 import android.net.Uri
-import android.os.Build
 import android.provider.MediaStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -14,7 +13,12 @@ import java.util.Locale
 
 enum class ExportFormat { JPEG, PNG }
 
-/** 把位图写入系统相册 Pictures/PixelCake（API 29+ 作用域存储，无需写权限）。 */
+/**
+ * 把位图写入系统相册 Pictures/PixelCake（作用域存储，无需任何读取权限）。
+ *
+ * minSdk 36 > Q，因此 `RELATIVE_PATH` / `IS_PENDING` 一定可用——
+ * 此前那些 `if (Build.VERSION.SDK_INT >= Q)` 判断是死代码（FIX_LIST F20），已移除。
+ */
 object Exporter {
     suspend fun export(
         context: Context,
@@ -31,10 +35,8 @@ object Exporter {
         val values = ContentValues().apply {
             put(MediaStore.Images.Media.DISPLAY_NAME, name)
             put(MediaStore.Images.Media.MIME_TYPE, mime)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/PixelCake")
-                put(MediaStore.Images.Media.IS_PENDING, 1)
-            }
+            put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/PixelCake")
+            put(MediaStore.Images.Media.IS_PENDING, 1)
         }
         val uri = cr.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values) ?: return@withContext null
         try {
@@ -45,11 +47,9 @@ object Exporter {
                     os
                 )
             }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                values.clear()
-                values.put(MediaStore.Images.Media.IS_PENDING, 0)
-                cr.update(uri, values, null, null)
-            }
+            values.clear()
+            values.put(MediaStore.Images.Media.IS_PENDING, 0)
+            cr.update(uri, values, null, null)
             uri
         } catch (e: Exception) {
             try { cr.delete(uri, null, null) } catch (_: Exception) {}

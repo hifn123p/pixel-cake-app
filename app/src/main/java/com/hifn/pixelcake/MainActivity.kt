@@ -18,8 +18,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import com.hifn.pixelcake.arw.ArwFullDecoder
 import com.hifn.pixelcake.core.decode.DecodedImage
 import com.hifn.pixelcake.core.decode.Decoder
 import com.hifn.pixelcake.core.decode.Exporter
@@ -34,10 +36,17 @@ import com.hifn.pixelcake.ui.home.probeCapabilities
 import com.hifn.pixelcake.ui.home.resolutionProfile
 import com.hifn.pixelcake.ui.theme.PixelCakeTheme
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+
+/** 滑块拖动时的重渲节流窗口（FIX_LIST F08）。16ms ≈ 一帧，肉眼无感但能挡掉绝大多数中间值。 */
+private const val RENDER_THROTTLE_MS = 16L
 
 class MainActivity : ComponentActivity() {
 
@@ -68,28 +77,47 @@ private fun AppRoot() {
     var params by remember { mutableStateOf(EditParams()) }
     var rendered by remember { mutableStateOf<Bitmap?>(null) }
     var status by remember { mutableStateOf("") }
+    var exporting by remember { mutableStateOf(false) }
+    var exportCancelled by remember { mutableStateOf(false) }
     val renderMutex = remember { Mutex() }
     var renderStamp by remember { mutableStateOf(0) }
 
-    // 参数或导入变化 -> 异步把参数栈重渲到代理图（复用目标位图，避免每帧重分配）
-    LaunchedEffect(params, imported) {
+    // 参数或导入变化 -> 异步把参数栈重渲到代理图（复用目标位图，避免每帧重分配）。
+    // 用 snapshotFlow + conflate + collectLatest 做节流与取消：
+    // 拖动过程中只保留最新一帧待渲，旧帧直接丢弃（FIX_LIST F08）。
+    LaunchedEffect(imported) {
         val src = imported ?: return@LaunchedEffect
-        val base = src.bitmap
-        // 复用同尺寸目标位图；换图尺寸变化才重建，避免每帧重分配
-        val target = if (rendered == null || rendered!!.width != base.width || rendered!!.height != base.height) {
-            Bitmap.createBitmap(base.width, base.height, Bitmap.Config.ARGB_8888)
-        } else {
-            rendered!!
-        }
-        renderMutex.withLock {
-            withContext(Dispatchers.Default) { EditEngine.renderInto(target, base, params) }
-        }
-        // 关键修复：渲染完成后再赋值并递增 stamp。
-        // renderInto 是原位修改同一 Bitmap，若不触发重组，Compose 会一直显示赋值时(仍空白)那一帧，
-        // 导致预览空白、只有按住(showOriginal 触发重组)才刷新。
-        rendered = target
-        renderStamp++
-        DebugLog.d(DebugLog.TAG_EDIT, "render done", mapOf("w" to target.width, "h" to target.height, "stamp" to renderStamp))
+        snapshotFlow { params }
+            .conflate()
+            .collectLatest { p ->
+                delay(RENDER_THROTTLE_MS)
+                val w = src.linear?.width ?: src.bitmap.width
+                val h = src.linear?.height ?: src.bitmap.height
+                val target = renderMutex.withLock {
+                    val existing = rendered
+                    val bmp = if (existing == null || existing.width != w || existing.height != h) {
+                        Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+                    } else existing
+                    withContext(Dispatchers.Default) {
+                        val linear = src.linear
+                        if (linear != null) {
+                            // 协作取消：collectLatest 取消协程后，这里会在下一带边界退出
+                            EditEngine.renderIntoLinear(bmp, linear, p) { !isActive }
+                        } else {
+                            EditEngine.renderIntoSrgb(bmp, src.bitmap, p)
+                        }
+                    }
+                    bmp
+                }
+                // 渲染完成后再赋值并递增 stamp：renderInto* 是原位修改同一 Bitmap，
+                // 不触发重组的话 Compose 会一直显示赋值时那一帧（预览空白）。
+                rendered = target
+                renderStamp++
+                DebugLog.d(
+                    DebugLog.TAG_EDIT, "render done",
+                    mapOf("w" to target.width, "h" to target.height, "stamp" to renderStamp)
+                )
+            }
     }
 
     val openInEditor: (Uri) -> Unit = { uri ->
@@ -104,12 +132,15 @@ private fun AppRoot() {
                 srcUri = uri
                 history.reset()
                 params = EditParams()
-                status = if (dec.isRaw) "ARW 当前仅预览（全量修图待 P1b 开放）" else ""
+                status = if (dec.linear != null) "RAW 已按 16-bit 线性管线载入" else ""
                 screen = "editor"
                 DebugLog.i(
                     DebugLog.TAG_DECODE,
                     "decoded",
-                    mapOf("w" to dec.width, "h" to dec.height, "raw" to dec.isRaw, "mime" to dec.mime)
+                    mapOf(
+                        "w" to dec.width, "h" to dec.height, "raw" to dec.isRaw,
+                        "mime" to dec.mime, "linear" to (dec.linear != null)
+                    )
                 )
             }
         }
@@ -134,52 +165,94 @@ private fun AppRoot() {
                     canUndo = history.canUndo,
                     canRedo = history.canRedo,
                     status = status,
+                    exporting = exporting,
                     onParamChange = {
+                        // F08：拖动过程中只更新参数，不进撤销栈
                         params = it
-                        history.push(it)
                     },
+                    onParamCommit = { history.push(params) },
                     onUndo = { if (history.undo()) params = history.current },
                     onRedo = { if (history.redo()) params = history.current },
                     onExport = {
                         scope.launch {
                             val img = imported ?: return@launch
-                            val uri = srcUri
+                            exporting = true
+                            exportCancelled = false
                             status = "正在生成导出…"
-                            val result = withContext(Dispatchers.Default) {
-                                var fullBase: DecodedImage? = null
-                                var fullTarget: Bitmap? = null
-                                try {
-                                    if (uri != null) fullBase = Decoder.decodeFullRes(context, uri, profile.fullResLongEdge)
-                                    if (fullBase != null) {
-                                        fullTarget = Bitmap.createBitmap(
-                                            fullBase.bitmap.width, fullBase.bitmap.height, Bitmap.Config.ARGB_8888
-                                        )
-                                        EditEngine.renderInto(fullTarget, fullBase.bitmap, params)
-                                        val out = withContext(Dispatchers.IO) {
-                                            Exporter.export(context, fullTarget, ExportFormat.JPEG, 92)
+                            val result: Pair<Uri?, String> = withContext(Dispatchers.Default) {
+                                val rawPath = img.rawCachePath
+                                if (rawPath != null) {
+                                    // 全分辨率 RAW：边解码边分带渲染，不把 196MB 线性图搬进堆
+                                    val full = EditEngine.renderLinearFile(
+                                        path = rawPath,
+                                        maxLongSide = profile.fullResLongEdge,
+                                        p = params
+                                    ) { p ->
+                                        if (p % 20 == 0 || p >= 100) {
+                                            scope.launch(Dispatchers.Main) { status = "正在生成导出… $p%" }
                                         }
-                                        val label = if (fullBase.isRaw) "ARW 预览分辨率" else "全分辨率"
-                                        out to label
-                                    } else {
-                                        val proxy = rendered ?: img.bitmap
-                                        val out = withContext(Dispatchers.IO) {
-                                            Exporter.export(context, proxy, ExportFormat.JPEG, 92)
-                                        }
-                                        out to "代理分辨率"
+                                        !exportCancelled
                                     }
-                                } finally {
-                                    fullTarget?.recycle()
-                                    fullBase?.bitmap?.recycle()
+                                    if (full == null) {
+                                        null to "RAW 导出失败"
+                                    } else {
+                                        val out = withContext(Dispatchers.IO) {
+                                            Exporter.export(context, full, ExportFormat.JPEG, 92)
+                                        }
+                                        full.recycle()
+                                        out to "全分辨率 RAW"
+                                    }
+                                } else {
+                                    var fullBase: DecodedImage? = null
+                                    var fullTarget: Bitmap? = null
+                                    try {
+                                        fullBase = srcUri?.let {
+                                            Decoder.decodeFullRes(context, it, profile.fullResLongEdge)
+                                        }
+                                        if (fullBase != null) {
+                                            fullTarget = Bitmap.createBitmap(
+                                                fullBase.bitmap.width, fullBase.bitmap.height,
+                                                Bitmap.Config.ARGB_8888
+                                            )
+                                            EditEngine.renderIntoSrgb(fullTarget, fullBase.bitmap, params)
+                                            val out = withContext(Dispatchers.IO) {
+                                                Exporter.export(context, fullTarget, ExportFormat.JPEG, 92)
+                                            }
+                                            out to "全分辨率"
+                                        } else {
+                                            val proxy = rendered ?: img.bitmap
+                                            val out = withContext(Dispatchers.IO) {
+                                                Exporter.export(context, proxy, ExportFormat.JPEG, 92)
+                                            }
+                                            out to "代理分辨率"
+                                        }
+                                    } finally {
+                                        fullTarget?.recycle()
+                                        fullBase?.bitmap?.recycle()
+                                    }
                                 }
                             }
                             val (exportedUri, label) = result
-                            status = if (exportedUri != null) "已导出（$label）：$exportedUri" else "导出失败"
-                            DebugLog.i(DebugLog.TAG_EDIT, "export", mapOf("ok" to (exportedUri != null), "tier" to label))
+                            exporting = false
+                            status = when {
+                                exportCancelled -> "已取消导出"
+                                exportedUri != null -> "已导出（$label）：$exportedUri"
+                                else -> "导出失败（$label）"
+                            }
+                            DebugLog.i(
+                                DebugLog.TAG_EDIT, "export",
+                                mapOf("ok" to (exportedUri != null), "tier" to label)
+                            )
                         }
+                    },
+                    onCancelExport = {
+                        exportCancelled = true
+                        status = "正在取消…"
                     },
                     onBack = {
                         rendered?.recycle()
                         rendered = null
+                        ArwFullDecoder.releaseCache(src.rawCachePath)
                         src.bitmap.recycle()
                         imported = null
                         srcUri = null

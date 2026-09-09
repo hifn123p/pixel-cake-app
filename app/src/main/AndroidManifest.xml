@@ -2,10 +2,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- 读取系统相册中的 JPEG / HEIF 等图片（Android 13+ 细分媒体权限） -->
-    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
-    <!-- Android 14+（API 34）：用户仅授权"部分照片"时的访问权限 -->
-    <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" />
+    <!-- Photo Picker(系统选择器) 与 SAF(ACTION_OPEN_DOCUMENT) 均由系统代持访问权，
+         不需要 READ_MEDIA_IMAGES / READ_MEDIA_VISUAL_USER_SELECTED（FIX_LIST F19）。
+         不声明读取权限 = 少一项隐私面、少一次授权弹窗。 -->
 
     <application
         android:name=".PixelCakeApp"
@@ -21,20 +20,15 @@
         android:theme="@style/Theme.PixelCake">
 
         <!--
-          android:colorMode="hdr" 是广色域链路的第一环：
-          请求系统以广色域（Display P3）合成并渲染该 Activity 的窗口。
-          配合第 2 步的 RGBA16F 纹理与 EGL P3 配置，构成端到端广色域管线。
-
-          screenOrientation="fullSensor"：看照片需要跟随重力四向旋转。
-          Android 16 起系统会忽略"固定"方向的请求，但 fullSensor 走的是传感器
-          自适应分支，在手机上仍生效；此处定向忽略 lint 的 DiscouragedApi。
+          不再声明 android:colorMode="hdr"（FIX_LIST F18）：管线是 8-bit sRGB，
+          请求系统按广色域合成窗口并不带来任何实际收益，反而名不副实。
+          等真正上 RGBA_F16 缓冲 + P3 输出时再打开。
         -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:theme="@style/Theme.PixelCake"
             android:windowSoftInputMode="adjustResize"
-            android:colorMode="hdr"
             android:screenOrientation="fullSensor"
             tools:ignore="DiscouragedApi"
             android:configChanges="colorMode|screenSize|smallestScreenSize|screenLayout|orientation|density|uiMode">

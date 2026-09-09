@@ -1,9 +1,6 @@
 package com.hifn.pixelcake.ui.home
 
-import android.Manifest
-import android.content.pm.PackageManager
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -38,27 +35,16 @@ import com.hifn.pixelcake.ui.theme.Ok
 import com.hifn.pixelcake.ui.theme.Warn
 
 /**
- * 第 1 步的落地页 + P1a 导入入口。
+ * 首页：设备能力实测面板 + 编辑链路入口。
  *
- * 不是 Hello World —— 而是设备能力实测面板；并作为编辑链路的起点。
- * M0b 的 ARW 内嵌预览已并入「打开 ARW 文件」入口（进编辑器以预览图呈现，P1b 才开放全量修图）。
+ * ARW 走「打开 ARW 文件」入口：内嵌 JPEG 只作秒开占位，
+ * 真正的修图源是 LibRaw 解出的 16-bit 线性母版（P1b 已启用，不再是"仅预览"）。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(onImportPhoto: () -> Unit, onImportArw: () -> Unit) {
     val context = LocalContext.current
     val caps = remember { context.probeCapabilities() }
-
-    var granted by remember {
-        mutableStateOf(
-            ContextCompat.checkSelfPermission(
-                context, Manifest.permission.READ_MEDIA_IMAGES
-            ) == PackageManager.PERMISSION_GRANTED
-        )
-    }
-    val launcher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted = it }
 
     var logExported by remember { mutableStateOf(false) }
 
@@ -128,25 +114,7 @@ fun HomeScreen(onImportPhoto: () -> Unit, onImportArw: () -> Unit) {
             }
 
             item {
-                SectionCard("权限") {
-                    InfoRow(
-                        "读取照片",
-                        if (granted) "已授权" else "未授权",
-                        if (granted) Ok else Warn
-                    )
-                    if (!granted) {
-                        Button(
-                            onClick = { launcher.launch(Manifest.permission.READ_MEDIA_IMAGES) },
-                            modifier = Modifier.padding(top = 12.dp)
-                        ) {
-                            Text("授权读取照片")
-                        }
-                    }
-                }
-            }
-
-            item {
-                SectionCard("导入（P1a 编辑链路）") {
+                SectionCard("导入（编辑链路）") {
                     Button(
                         onClick = onImportPhoto,
                         modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
@@ -158,7 +126,7 @@ fun HomeScreen(onImportPhoto: () -> Unit, onImportArw: () -> Unit) {
                         onClick = onImportArw,
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("打开 ARW 文件（预览，P1b 开放修图）")
+                        Text("打开 ARW 文件（16-bit 线性 RAW 修图）")
                     }
                 }
             }
@@ -181,14 +149,16 @@ fun HomeScreen(onImportPhoto: () -> Unit, onImportArw: () -> Unit) {
 
             item {
                 SectionCard("路线图") {
+                    // 与 DEV_PLAN v3.0 的 P1a/P1b 对齐；旧的 8 步版（fp16 + EGL P3 /
+                    // 16bit TIFF / MediaPipe）已被 v3.0 删除，这里是真机上看得到的信息（F16）
                     RoadmapStep(1, "工程骨架 + CI", done = true)
-                    RoadmapStep(2, "NDK + LibRaw（A7C2 ARW 解码）", done = false)
-                    RoadmapStep(3, "fp16 渲染管线 + EGL P3", done = false)
-                    RoadmapStep(4, "基础调色 GPU 化", done = false)
-                    RoadmapStep(5, "广色域输出（Ultra HDR / 16bit TIFF）", done = false)
-                    RoadmapStep(6, "3D LUT 滤镜与局部调整", done = false)
-                    RoadmapStep(7, "磨皮与液化", done = false)
-                    RoadmapStep(8, "AI 接入（MediaPipe + 自托管模型）", done = false)
+                    RoadmapStep(2, "NDK + LibRaw（A7C2 ARW 解码）", done = true)
+                    RoadmapStep(3, "16-bit 线性渲染管线（预览/导出同源）", done = true)
+                    RoadmapStep(4, "人像算子（磨皮 / 液化 / 祛瑕 / 追色）", done = false)
+                    RoadmapStep(5, "内置人像预设 ~10 套", done = false)
+                    RoadmapStep(6, "局部调整与蒙版", done = false)
+                    RoadmapStep(7, "A7C2 直连（USB PTP 拉图）", done = false)
+                    RoadmapStep(8, "AI 接入（TFLite + NNAPI）", done = false)
                 }
             }
         }

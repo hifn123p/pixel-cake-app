@@ -29,6 +29,8 @@ android {
         ndk {
             // P1b 仅面向一加15(arm64-v8a)；限单一 ABI 缩短 CI 构建并规避 x86 NDK 差异
             abiFilters += "arm64-v8a"
+            // F12：固定 NDK 版本，保证 CI 与本地构建可复现（r30 为 2026 LTS，与 CI 安装版本一致）
+            ndkVersion = "30.0.16248370"
         }
     }
 

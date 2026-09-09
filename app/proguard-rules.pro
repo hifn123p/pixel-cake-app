@@ -10,7 +10,10 @@
 -keepclasseswithmembernames class * {
     native <methods>;
 }
--keep class com.hifn.pixelcake.raw.** { *; }
+# ARW 解析与 LibRaw JNI 封装都在 com.hifn.pixelcake.arw / core.decode 下
+# （此前写的是 com.hifn.pixelcake.raw，该包并不存在，等于没生效）
+-keep class com.hifn.pixelcake.arw.** { *; }
+-keep class com.hifn.pixelcake.core.decode.RawNative { *; }
 
 # ---------- 通用 ----------
 -keepattributes *Annotation*, InnerClasses, Signature

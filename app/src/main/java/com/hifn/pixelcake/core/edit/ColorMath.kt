@@ -6,14 +6,42 @@ import kotlin.math.roundToInt
 /**
  * 纯函数像素运算（无 Android 依赖，可 JVM 单测）。
  *
- * 编辑只发生在「参数栈」[EditParams] 上，真正落像素时由 [EditEngine] 逐像素调用这里。
+ * 编辑只发生在「参数栈」[EditParams] 上，真正落像素时由 [EditEngine] 调用 [PixelProgram]。
+ * 管线的输入统一是 **16-bit 线性 sRGB**（0..65535，白点 65535）：
+ *  - ARW：LibRaw 直接输出线性数据（见 `raw_bridge.cpp`，`output_bps=16` + 线性 gamma）；
+ *  - JPEG/HEIF：先经 [SRGB8_TO_LINEAR16] 转线性，再走同一条管线。
+ * 两端同源，保证「预览所见即导出所得」。
+ *
  * 管线顺序（与 DEV_PLAN 操作栈一致）：
- *   白平衡(线性) -> 曝光(线性) -> sRGB -> 阴影/高光 -> 对比度 -> 饱和度 -> 亮度曲线 -> 内置 LUT
+ *   白平衡(线性) -> 曝光(线性) -> sRGB 编码 -> 阴影/高光 -> 对比度 -> 饱和度 -> 亮度曲线 -> 内置 LUT
  */
 object ColorMath {
-    /** srgb<->linear 固定映射，预构建一次，避免逐像素 pow（此前 2MP 渲染要 3-5 秒的主因）。 */
-    private val SRGB_TO_LINEAR_LUT = FloatArray(256) { i -> srgbToLinear(i / 255f) }
-    private val LINEAR_TO_SRGB_LUT = FloatArray(256) { i -> linearToSrgb(i / 255f) }
+
+    /** 8-bit sRGB -> 16-bit 线性。输入只有 256 种取值，精确表即可，不存在精度损失。 */
+    val SRGB8_TO_LINEAR16: IntArray = IntArray(256) { i ->
+        (srgbToLinear(i / 255f) * 65535f + 0.5f).toInt().coerceIn(0, 65535)
+    }
+
+    /**
+     * 16-bit 线性 -> sRGB 编码表，索引 = `round(线性值 * 65535)`，共 65536 项（约 256KB）。
+     *
+     * 此前只有 256 项且建在线性域均匀网格上：线性 0~1/255 已对应 sRGB 0~0.19，
+     * 暗部整段塌进第一格，必然出色带。加密到 65536 项后每格宽度 = 1/65535，
+     * 暗部台阶宽度降到原来的 1/256，肉眼不可辨（FIX_LIST F07）。
+     */
+    private val LINEAR16_TO_SRGB: FloatArray = FloatArray(65536) { i ->
+        linearToSrgb(i / 65535f)
+    }
+
+    /**
+     * 线性域查表编码为 sRGB，返回 0..1。
+     * 只在 v >= 白点时钳到 1（这是真实的高光截断，不是提前 clamp 掉可恢复的高光）。
+     */
+    fun linear16ToSrgb(v: Float): Float = when {
+        v <= 0f -> 0f
+        v >= 65535f -> 1f
+        else -> LINEAR16_TO_SRGB[(v + 0.5f).toInt()]
+    }
 
     fun srgbToLinear(c: Float): Float =
         if (c <= 0.04045f) c / 12.92f else ((c + 0.055f) / 1.055f).pow(2.4f)
@@ -22,6 +50,9 @@ object ColorMath {
         val x = if (c <= 0f) 0f else if (c >= 1f) 1f else c
         return if (x <= 0.0031308f) x * 12.92f else 1.055f * x.pow(1 / 2.4f) - 0.055f
     }
+
+    fun applyContrast(c: Float, contrast: Float): Float =
+        (c - 0.5f) * (1f + contrast) + 0.5f
 
     /** 由控制点（x,y ∈ 0..255，按 x 升序）构建 256 项亮度 LUT。 */
     fun buildLumaLut(points: List<Pair<Int, Int>>): IntArray {
@@ -37,111 +68,4 @@ object ColorMath {
         }
         return lut
     }
-
-    fun applyWhiteBalance(
-        r: Float, g: Float, b: Float,
-        temperature: Float, tint: Float
-    ): Triple<Float, Float, Float> {
-        // 色温>0 偏暖(增 R 减 B)；色调>0 偏品红(增 R/B 减 G)
-        val wr = 1f + temperature * 0.28f + tint * 0.14f
-        val wg = 1f - tint * 0.16f
-        val wb = 1f - temperature * 0.28f + tint * 0.08f
-        return Triple(r * wr, g * wg, b * wb)
-    }
-
-    fun applyContrast(c: Float, contrast: Float): Float =
-        (c - 0.5f) * (1f + contrast) + 0.5f
-
-    fun applySaturation(
-        r: Float, g: Float, b: Float, sat: Float
-    ): Triple<Float, Float, Float> {
-        val luma = 0.2126f * r + 0.7152f * g + 0.0722f * b
-        val f = 1f + sat
-        return Triple(luma + (r - luma) * f, luma + (g - luma) * f, luma + (b - luma) * f)
-    }
-
-    fun applyLumaCurve(
-        r: Float, g: Float, b: Float, lut: IntArray
-    ): Triple<Float, Float, Float> {
-        val luma = (0.2126f * r + 0.7152f * g + 0.0722f * b).coerceIn(0f, 1f)
-        val idx = (luma * 255f).toInt().coerceIn(0, 255)
-        val newLuma = lut[idx] / 255f
-        val ratio = if (luma <= 1e-4f) 1f else newLuma / luma
-        return Triple(
-            (r * ratio).coerceIn(0f, 1f),
-            (g * ratio).coerceIn(0f, 1f),
-            (b * ratio).coerceIn(0f, 1f)
-        )
-    }
-
-    fun applyBuiltinLut(
-        r: Float, g: Float, b: Float, lutId: String, intensity: Float
-    ): Triple<Float, Float, Float> {
-        val i = intensity.coerceIn(0f, 1f)
-        if (i <= 0f || lutId == "none") return Triple(r, g, b)
-        return when (lutId) {
-            "bw" -> {
-                val l = 0.2126f * r + 0.7152f * g + 0.0722f * b
-                Triple(l, l, l)
-            }
-            "warm" -> Triple(
-                (r * (1f + 0.16f * i)).coerceIn(0f, 1f),
-                g,
-                (b * (1f - 0.12f * i)).coerceIn(0f, 1f)
-            )
-            "cool" -> Triple(
-                (r * (1f - 0.12f * i)).coerceIn(0f, 1f),
-                g,
-                (b * (1f + 0.16f * i)).coerceIn(0f, 1f)
-            )
-            "film" -> {
-                val c = applyContrast((r * (1f + 0.08f * i)).coerceIn(0f, 1f), 0.16f * i)
-                val cg = applyContrast(g, 0.16f * i)
-                val cb = applyContrast((b * (1f - 0.06f * i)).coerceIn(0f, 1f), 0.16f * i)
-                val sat = applySaturation(c, cg, cb, 0.12f * i)
-                Triple(sat.first, sat.second, sat.third)
-            }
-            else -> Triple(r, g, b)
-        }
-    }
-
-    /**
-     * 单像素全管线。lut 由调用方预构建；ev(=2^exposureEv) 由调用方预计算后传入；
-     * srgb<->linear 走全局 256 项 LUT，避免逐像素 pow（性能关键）。
-     */
-    fun processPixel(r8: Int, g8: Int, b8: Int, p: EditParams, lut: IntArray, ev: Float = 2f.pow(p.exposureEv)): Triple<Int, Int, Int> {
-        var r = SRGB_TO_LINEAR_LUT[r8]
-        var g = SRGB_TO_LINEAR_LUT[g8]
-        var b = SRGB_TO_LINEAR_LUT[b8]
-        val lin = applyWhiteBalance(r, g, b, p.temperature, p.tint)
-        r = lin.first * ev
-        g = lin.second * ev
-        b = lin.third * ev
-        r = LINEAR_TO_SRGB_LUT[toIdx(r)]
-        g = LINEAR_TO_SRGB_LUT[toIdx(g)]
-        b = LINEAR_TO_SRGB_LUT[toIdx(b)]
-        val lum = 0.2126f * r + 0.7152f * g + 0.0722f * b
-        r += p.shadows * (1f - lum) * 0.5f
-        g += p.shadows * (1f - lum) * 0.5f
-        b += p.shadows * (1f - lum) * 0.5f
-        r -= p.highlights * lum * 0.5f
-        g -= p.highlights * lum * 0.5f
-        b -= p.highlights * lum * 0.5f
-        r = applyContrast(r, p.contrast)
-        g = applyContrast(g, p.contrast)
-        b = applyContrast(b, p.contrast)
-        val sat = applySaturation(r.coerceIn(0f, 1f), g.coerceIn(0f, 1f), b.coerceIn(0f, 1f), p.saturation)
-        r = sat.first; g = sat.second; b = sat.third
-        val cur = applyLumaCurve(r, g, b, lut)
-        r = cur.first; g = cur.second; b = cur.third
-        val fin = applyBuiltinLut(r, g, b, p.lutId, p.lutIntensity)
-        r = fin.first; g = fin.second; b = fin.third
-        val ri = (r.coerceIn(0f, 1f) * 255f + 0.5f).toInt()
-        val gi = (g.coerceIn(0f, 1f) * 255f + 0.5f).toInt()
-        val bi = (b.coerceIn(0f, 1f) * 255f + 0.5f).toInt()
-        return Triple(ri, gi, bi)
-    }
-
-    /** 把 [0,1] 浮点映射到 0..255 的 LUT 索引（越界夹紧）。 */
-    private fun toIdx(v: Float): Int = (v.coerceIn(0f, 1f) * 255f).roundToInt().coerceIn(0, 255)
 }

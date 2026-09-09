@@ -1,0 +1,29 @@
+像素蛋糕 PixelCake — 第三方组件许可声明 (NOTICE)
+====================================================
+
+本应用以闭源方式分发，但 native 侧**静态链接**了遵循弱 copyleft 许可的
+第三方组件。依据其许可条款，需向接收者提供相应许可文本，并保留
+「可重新链接（relink）」的能力，以便接收者能用其自行修改或重新获取的
+对应目标文件替换并重新链接本应用。
+
+1. LibRaw
+   - 许可：LGPL-2.1 OR CDDL-1.0（双许可；本项目按 CDDL-1.0 分支使用）
+   - 用途：native 侧全量 RAW 解码（app/src/main/cpp/raw_bridge.cpp 经 JNI 调用）
+   - 静态链接义务：依据 LGPL-2.1 §6，分发闭源 APK 时必须允许接收者用其
+     自行修改 / 重新获取的 LibRaw 目标文件替换并重新链接本应用。
+   - 实现方式（满足 relink 义务）：
+       * 提供与构建所用**完全一致**的 LibRaw 源码与提交，见 .gitmodules：
+           - third_party/LibRaw            @ dde798dd310f54b97e3ff7e5b07412da3310a2db (master)
+           - third_party/LibRaw-cmake      @ eb98e4325aef2ce85d2eb031c2ff18640ca616d3 (master)
+       * 保留对应 native 构建脚本：app/src/main/cpp/CMakeLists.txt
+         （静态链接 `raw` 库，关闭 LCMS2 / OpenMP / JASPER / ZLIB / JPEG 的
+          find_package，确保可复现重链）
+   - 完整许可文本：https://www.libraw.org/ 或随上游源码分发。
+
+2. 其他 LGPL 组件
+   - 部分 AndroidX / 第三方依赖以 LGPL-2.1 再分发，已在
+     app/build.gradle.kts 的 packaging.resources 中排除
+     /META-INF/{AL2.0,LGPL2.1}，其许可随依赖源码 / Maven 元数据提供。
+
+注：本声明仅覆盖 LibRaw 与 LGPL 类依赖。内置 LUT / 模型各自的 MIT / CC
+许可随资源另行标注（见 README「致谢」与资源 LICENSE / NOTICE）。

@@ -38,5 +38,7 @@ docs/archive/
 example/
 
 # ---------- 临时凭证 / CI 调试残留（绝不入库） ----------
-.ci_token.txt
-.ci_*.json
+# 覆盖所有 .ci_ 前缀产物：CI 日志抓取流程实际写出的是 .ci_ghtoken（无扩展名），
+# 此前只忽略 .ci_token.txt / .ci_*.json，PAT 有入库风险（FIX_LIST F09）。
+.ci_*
+.ci_ghtoken

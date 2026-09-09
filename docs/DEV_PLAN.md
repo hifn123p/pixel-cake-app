@@ -30,7 +30,7 @@ description: 像素蛋糕（AI 人像精修）安卓应用的唯一开发计划�
 | P1b | 🔧 | **LibRaw 全量解码已接入并启用**（子模块 `third_party/LibRaw`[master `dde798dd`] + LibRaw-cmake[`eb98e432`]，静态链接；`raw_bridge.cpp` 全量解马赛克→RGBA；`useLibRaw=true`，失败回退预览）。待做：P1b-4 人像算子（中性灰/美颜/修复/追色）、P1b-5 ~10 预设、P1b-6 统一真机测试 |
 | P1+ / P2 / P3 | ⬜ | 待启动 |
 
-> LibRaw master API 注意：已移除 `dcraw_free()`，释放产物用 `free_image()`；Kotlin `val version` 与 native `getVersion()` JVM 签名冲突，已改名 `librawVersion`（详见 §8 风险表与每日日志 2026-09-09）。
+> LibRaw master API 注意：已移除 `dcraw_free()`；`dcraw_make_mem_image()` 的返回产物必须用 `LibRaw::dcraw_clear_mem()` 释放，`free_image()` 只释放内部 `imgdata.image`、二者不可混用（见 F02 / D09）；Kotlin `val version` 与 native `getVersion()` JVM 签名冲突，已改名 `librawVersion`（详见 §8 风险表与每日日志 2026-09-09）。
 
 ## 1. 项目介绍
 
@@ -70,7 +70,7 @@ description: 像素蛋糕（AI 人像精修）安卓应用的唯一开发计划�
 | ARW **修图**（LibRaw 全量真解马赛克，16-bit） | | ✅ | | |
 | 曝光 / 曲线 / LUT | ✅ | | | |
 | 非破坏编辑栈 + 撤销重做 + 原图对比 | ✅ | | | |
-| 代理图 GPU 实时预览（RenderEffect / AGSL） | ✅ | | | |
+| 代理图实时预览（CPU 多线程逐像素 band 渲染；GPU/RenderEffect/AGSL 规划中） | ⬜ | | | |
 | 导出到相册（JPEG / PNG；HEIF 需探测） | ✅ | | | |
 | 自适应导出分辨率（按设备档位） | ✅ | | | |
 | 调试日志模块（落盘 + 导出分享） | ✅ | | | |
@@ -93,7 +93,7 @@ description: 像素蛋糕（AI 人像精修）安卓应用的唯一开发计划�
 
 ### 3.1 双轨分辨率：代理图交互 + 全分辨率导出
 编辑**只作用在参数栈**（JSON，~1KB）上，像素只在两处物化：
-- **预览**：在**代理图**（长边按设备档 1024–2048）上跑 GPU 链，保证滑块 <16ms/帧跟手；
+- **预览**：在**代理图**（长边按设备档 1024–2048）上跑 **CPU 多线程逐像素 band 渲染**（分带拉取 16-bit 线性 + PixelProgram 查表上色），保证滑块节流跟手（GPU/RenderEffect/AGSL 规划中，见 §2.1）；
 - **导出**：把同一参数栈重放到**全分辨率**位图后编码写盘。
 > 改一个滑块 = 改一个 op 参数 + 重编译预览链，**绝不重新解 RAW**。
 
@@ -101,7 +101,9 @@ description: 像素蛋糕（AI 人像精修）安卓应用的唯一开发计划�
 | 用途 | 数据源 | 实现 | 精度 |
 |---|---|---|---|
 | **打开 / 快速预览 / 相册缩略图** | ARW **内嵌全分辨率 JPEG 预览**（7008×4672） | 纯 Kotlin 解析 TIFF/IFD（tag `0x0201` PreviewImageStart / `0x0202` PreviewImageLength）取字节 → 系统 `ImageDecoder`。**零 NDK、零 LibRaw** | 8-bit，相机已烘焙（白平衡/锐化/曲线已应用） |
-| **修图** | **全量 RAW 传感器数据** | **LibRaw NDK 真解马赛克** → 16-bit 线性 → 白平衡/色调映射。`RawNative.kt` + `raw_bridge.cpp` + `third_party/libraw` 子模块 | 16-bit 线性，保留完整宽容度 |
+| **修图** | **全量 RAW 传感器数据** | **LibRaw NDK 真解马赛克** → 16-bit 线性 → 白平衡/色调映射。`RawNative.kt` + `raw_bridge.cpp` + `app/src/main/cpp/third_party/LibRaw` 子模块 | 16-bit 线性，保留完整宽容度 |
+
+> **A7C II 内嵌预览的 IFD 位置（F04/D07 实测事实）**：A7C II 的 ARW 含 3 张内嵌 JPEG 预览，最大一张（**7008×4672，约 1.9MB**）位于 **IFD 链的「第 3 个 IFD」**——需沿 TIFF `next` 指针遍历整条 IFD 链、比较各预览尺寸后择取。`ArwContainer.kt` 的 IFD 遍历即按此逻辑取最大预览；若只看首个 IFD 会拿到较小的缩略图而非全分辨率预览。
 
 > **为什么修图必须全量**：内嵌预览是相机处理过的 JPEG，白平衡与色调曲线已固化，无法重新设定白平衡、无法大范围拉回曝光/高光——**没有修图所需的编辑宽容度**。因此"全量解码"是 ARW 修图的必需项，只是不阻塞首个 APK。
 
@@ -175,13 +177,13 @@ P3   NAS Docker 化 + axum API（注意 API 37 本地网络权限）
 | `app/src/main/java/com/hifn/pixelcake/PixelCakeApp.kt` | Application | 保留，接入 Hilt |
 | `app/src/main/java/com/hifn/pixelcake/ui/home/DeviceCapabilities.kt` | **设备能力探测**（广色域/HDR/内存预算） | **保留并扩展**——自适应分辨率与 NPU 分级都依赖它 |
 | `app/src/main/java/com/hifn/pixelcake/ui/home/HomeScreen.kt` | 首页（能力面板+权限+路线图） | 保留，改路由入口 |
-| `app/src/main/java/com/hifn/pixelcake/raw/RawInfo.kt` | RAW 元数据解析 | 保留并扩展（接 LibRaw 输出） |
+| `app/src/main/java/com/hifn/pixelcake/arw/ArwContainer.kt` · `ArwFullDecoder.kt` · `ArwPreviewDecoder.kt` · `ArwPreviewExtractor.kt` | ARW 容器 / 全量解码 / 内嵌预览解析（纯 Kotlin IFD 遍历 + LibRaw 封装） | 现网真实模块（无独立 `raw/RawInfo.kt`） |
 | `app/src/main/java/com/hifn/pixelcake/ui/theme/{Color,Theme,Type}.kt` | Compose 主题 | 保留 |
-| `app/src/main/cpp/raw_bridge.cpp` | **孤儿 LibRaw JNI 实现** | **P1b 修复并接入**（当前未参与编译） |
-| `app/src/main/cpp/CMakeLists.txt`、`app/src/main/cpp/libraw/CMakeLists.txt` | native 构建脚本 | P1b 接入 `externalNativeBuild` 时启用 |
-| `third_party/libraw/` | LibRaw 子模块 | **当前为空**，P1b 需 `git submodule add` 补全 |
+| `app/src/main/cpp/raw_bridge.cpp` | LibRaw JNI 实现（`openLinear` / `readLinearRows` / `closeLinear` 分带会话） | **P1b 已接入并启用**（externalNativeBuild 编译） |
+| `app/src/main/cpp/CMakeLists.txt` | native 构建脚本（静态链接 LibRaw + LibRaw-cmake） | P1b 已启用（见 F10 / 根 `NOTICE`） |
+| `app/src/main/cpp/third_party/LibRaw`（master `dde798dd`）· `LibRaw-cmake`（`eb98e432`） | LibRaw 子模块 | **已接入并 pin**（子模块为空是本地工作树未 `submodule update`，CI 递归拉取正常） |
 | `.github/workflows/android.yml` | CI 骨架 | 强化（ktlint/detekt/单测/签名/通知条件化） |
-| `app/build.gradle.kts`、`gradle/libs.versions.toml` | 构建与版本目录 | 升 compileSdk/targetSdk 37、minSdk 36；加依赖 |
+| `app/build.gradle.kts`、`gradle/libs.versions.toml` | 构建与版本目录 | compileSdk/targetSdk **36**、minSdk 36（§0/§6.1，待 API 37 平台发布升回）；NDK 已 pin `30.0.16248370`（F12） |
 
 #### B. `pixel-cake`（Rust 修图引擎，P3 复用；算法可作端侧实现参考）
 | 路径 | 内容 | 复用方式 |
@@ -204,37 +206,40 @@ P3   NAS Docker 化 + axum API（注意 API 37 本地网络权限）
 
 ```
 com.hifn.pixelcake
-├── app/                       # PixelCakeApp(复用) · Hilt · 初始化
+├── MainActivity.kt · PixelCakeApp.kt        # 入口与 Application（已实现）
+├── arw/                                      # 【已建】ARW 解析
+│   ├── ArwContainer.kt                       #   IFD 链遍历，择最大内嵌 JPEG 预览（F04）
+│   ├── ArwFullDecoder.kt                     #   全量解码编排 + 缓存清理（F21）
+│   ├── ArwPreviewDecoder.kt                  #   内嵌预览解码（纯 Kotlin，零 NDK）
+│   └── ArwPreviewExtractor.kt                #   预览字节提取（JVM 单测覆盖）
 ├── core/
-│   ├── decode/
-│   │   ├── Decoder.kt             # 入口：按扩展名路由 JPEG / HEIF / ARW
-│   │   ├── ArwPreviewDecoder.kt   # 【新】内嵌 JPEG 预览：纯 Kotlin TIFF/IFD 解析（0x0201/0x0202）
-│   │   ├── RawNative.kt           # 【新·P1b】LibRaw JNI 封装（接 raw_bridge.cpp）
-│   │   ├── ExportResolver.kt      # 【新】按设备档位选导出/代理分辨率
-│   │   └── RawInfo.kt             # 复用并扩展
-│   ├── edit/
-│   │   ├── EditStack.kt           # 【新】有序操作栈 + apply(proxy) / apply(full)
-│   │   ├── ops/                   # ExposureOp CurvesOp LutOp AgslOp NeutralGrayOp
-│   │   │                          # BeautyOp InpaintOp ColorTransferOp
-│   │   └── mask/                  # 画笔蒙版（首版） / ML 蒙版（后置）
-│   ├── ml/                        # 【新·后置】FaceDetector / Landmarker / Segmenter（TFLite+NNAPI）
-│   ├── render/
-│   │   └── PreviewPipeline.kt     # 【新】EditStack → GPU 节点图（RenderEffect / AGSL）
-│   └── model/                     # Photo / EditOperation / Preset / Project
-├── data/
-│   ├── local/                     # Room（历史 / 预设缓存，P1 可先内存）
-│   └── preset/                    # 内置预设：参数栈 json + .cube LUT asset
+│   ├── decode/                               # 【已建】解码入口
+│   │   ├── Decoder.kt                        #   按扩展名路由 JPEG/HEIF/ARW；ARW 走 LibRaw 线性
+│   │   ├── RawNative.kt                      #   LibRaw JNI 封装（openLinear/readLinearRows/closeLinear）
+│   │   ├── LinearImage.kt                    #   【新·P1b】16-bit 线性图数据类
+│   │   ├── RawLinearSource.kt                #   【新·P1b】分带读取封装
+│   │   └── Exporter.kt                       #   导出（死代码已清，F20）
+│   ├── edit/                                 # 【已建】编辑管线
+│   │   ├── EditModel.kt                      #   编辑参数模型
+│   │   ├── ColorMath.kt                      #   线性↔sRGB 查表（processPixel 已移除，F06）
+│   │   ├── PixelProgram.kt                   #   【新·P1b】预编译 WB×曝光标量增益 + sRGB LUT
+│   │   └── EditEngine.kt                     #   分带渲染（renderIntoSrgb/renderIntoLinear/renderLinearFile）
+│   ├── ml/                                   # 【规划未建·P1+】FaceDetector/Landmarker/Segmenter
+│   ├── render/                               # 【规划未建】PreviewPipeline（GPU/RenderEffect/AGSL）
+│   └── model/                                # 【部分】EditParams 等；Photo/Preset/Project 规划中
+├── data/                                     # 【规划未建】Room 历史/预设缓存；preset/ .cube LUT
 ├── ui/
-│   ├── home/                      # 复用 HomeScreen · DeviceCapabilities
-│   ├── gallery/                   # 【新】相册 + ARW 选择
-│   ├── editor/                    # 【新】画布 + 工具轨 + 调整/美型/滤镜面板
-│   └── export/                    # 【新】导出对话框（格式/质量/分辨率）
-├── diag/
-│   └── DebugLog.kt                # 【新·必须随首包】结构化日志落盘 + 导出分享
-└── util/
+│   ├── home/                                 # 【已建】HomeScreen · DeviceCapabilities · ResolutionProfile
+│   ├── theme/                                # 【已建】Color/Theme/Type
+│   ├── editor/EditorScreen.kt                # 【已建】画布 + 滑块节流（F08）
+│   ├── gallery/                              # 【规划未建】相册 + ARW 选择
+│   └── export/                               # 【规划未建】导出对话框
+├── diag/DebugLog.kt                          # 【已建·必须随首包】结构化日志落盘 + 导出分享
+└── util/                                     # 【规划未建】
 ```
+> 注：**已建** = 当前仓库真实存在并可编译的模块；**规划未建** = v3.0 路线图中尚未落地的部分（编辑栈 EditStack/ops、ML 蒙版、GPU 预览、Room、相册/导出 UI、Hilt 依赖注入等）。Hilt / Room / Coil / Navigation / ktlint / detekt 截至本版**均未引入**——避免「逼代码去凑计划」，故按现状登记（D04）。
 
-**依赖补充**：Hilt / Room / Coil / Navigation / TFLite（后置）/ ktlint + detekt / ONNX-RT-Mobile（后置）。
+**依赖现状**：截至本版仅引入 `androidx.core-ktx` / `activity-compose` / `lifecycle-runtime-ktx` / Compose BOM(Material3) / JUnit(测试)。Hilt · Room · Coil · Navigation · TFLite · ktlint · detekt · ONNX-RT 均**未引入**（规划中，引入前需本地验证）。
 
 ### 5.3 复用 vs 自研 决策表
 | 能力 | 决策 | 理由 |
@@ -256,8 +261,8 @@ com.hifn.pixelcake
 | 项 | 值 |
 |---|---|
 | minSdk | **36（Android 16）** |
-| targetSdk / compileSdk | **37（Android 17，2026-06-16 稳定）** |
-| Kotlin / AGP | 2.2.21 / 8.13.2（随 API 37 兼容性校验） |
+| targetSdk / compileSdk | **36（Android 16；CI runner 镜像尚未发布 `platforms;android-37`，待官方发布后升 37，代码已预留非致命安装尝试）** |
+| Kotlin / AGP | 2.2.21 / 8.13.2（随 API 36 对齐） |
 | 构建 | JDK 17，AGSL 需 31+（已满足） |
 | 分发注意 | minSdk 36 是硬门槛（仅 Android 16+ 可装）；将来扩用户面可下调（无 API>31 强依赖） |
 
@@ -274,7 +279,9 @@ com.hifn.pixelcake
 | 低 <6GB | cap long-edge 4096 或走代理图，UI 提示 |
 | 代理图长边 | 旗舰 2048 / 中端 1536 / 低 1024 |
 
-### 6.3 targetSdk 37 需注意的变更（新风险）
+> **F05 内存重算（按 P1b 分带管线）**：全分辨率 **16-bit 线性**结果（7008×4672×3×2B ≈ **196MB**）始终留在 **native 侧**（`raw_bridge.cpp` 会话内），Kotlin 每次只 `readLinearRows` 拉 **BAND_ROWS=32** 行（≈32×7008×3×2B ≈ **1.3MB**）上色后写入目标 Bitmap。因此 Kotlin 侧峰值 ≈ 单张 8-bit 目标 Bitmap（**131MB**）+ 极小分带缓冲，**不再**同时持有 196MB+131MB+131MB 多份中间缓冲，33MP 导出峰值从 ~500MB+ 降到 ~130MB 量级，未开 `largeHeap` 也可在 ≥8GB 机型安全导出（F05）。
+>
+### 6.3 升级到 targetSdk 37 时需注意的变更（前瞻）
 1. ≥600dp 大屏**强制自由方向** → 勿硬锁 `orientation`。
 2. **`ACCESS_LOCAL_NETWORK` 变运行时权限** → **直接影响 P3 手机连 NAS / 局域网发现**。
 3. `System.load()` 加载的 native 库**必须只读** → 影响 LibRaw / ONNX-RT 动态库加载。
@@ -284,7 +291,7 @@ com.hifn.pixelcake
 
 ## 7. 交付与调试
 
-- **CI**：强化 `android.yml` —— ktlint/detekt 必过、unit tests 必过、`assembleRelease` 签名（`KEYSTORE_BASE64` secret），compileSdk/targetSdk 37。
+- **CI**：强化 `android.yml` —— **unit tests 必过**（`testDebugUnitTest`）+ **Android Lint 拦门**（`lintDebug`，去掉 `continue-on-error`）；`assembleRelease` 签名（`KEYSTORE_BASE64` secret）；compileSdk/targetSdk 36。ktlint/detekt 待本地验证后引入（当前未启用，避免无本地构建下盲开导致 CI 误红）。
 - **通知（条件化）**：签名 APK 一律作 workflow artifact（保留 90 天）+ 构建摘要通知；**仅当配置了 `FIREBASE_APP_ID` 等 secret 才额外走 Firebase App Distribution**（自动邮件 + 一键安装）。首包不依赖外部账号配置。
 - **调试日志模块**（`diag/DebugLog.kt`，必须与首包同时就位）：
   - 落盘 `files/debug/log_<session>.txt`（环形，单文件 ~2MB 滚动）；
@@ -302,7 +309,7 @@ com.hifn.pixelcake
 | 风险 | 阶段 | 等级 | 缓解 |
 |---|---|---|---|
 | LibRaw 接入（NDK + 子模块 + ILCE-7CM2 机型配置） | P1b | **高** | 先在 P1a 只做 JPEG/HEIF 修图、ARW 仅预览；P1b 再接入；CI 编译耗时需评估 |
-| `third_party/libraw` 子模块为空 | P1b | 中 | `git submodule add` 官方 LibRaw，确认版本含 A7C II |
+| `app/src/main/cpp/third_party/LibRaw` 子模块为空 | P1b | 中 | `git submodule add` 官方 LibRaw，确认版本含 A7C II |
 | 相机 API / liveview 可用性 | P2 | 中 | 先 USB PTP 拉图 PoC；liveview（ScalarWebAPI）待验证，不行则退回"拍完拉图" |
 | ONNX → TFLite 模型转换 | P1+ | 中 | 后置，先用画笔蒙版 |
 | 端侧 GPEN 设备分化 | P1+ | 中 | 设备分级；弱机转 P3 |
@@ -310,3 +317,4 @@ com.hifn.pixelcake
 | targetSdk 37 破坏性变更 | 全 | 中 | 见 §6.3 逐项验证 |
 | minSdk 36 分发面窄 | 全 | 低 | 自用阶段无碍；将来下调成本低 |
 | LUT 许可 | P1b | 低 | 只用 MIT/CC 可再分发源，保留 LICENSE/NOTICE；DNG/XMP 不用 |
+| LibRaw 静态链接合规（LGPL-2.1/CDDL-1.0） | P1b | 中 | 闭源 APK 静态链接触发 LGPL「可重新链接」义务；仓库根 `NOTICE` 已附许可与子模块 pin（`dde798dd`/`eb98e432`），分发前需复核 relink 可行性并提供对应 native 构建脚本（F10） |

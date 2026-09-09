@@ -32,7 +32,6 @@ class PixelCakeApp : Application() {
                     append(" availMem=").append(caps.availMemMiB).append("MiB")
                     append(" wideColorGamut=").append(caps.wideColorGamut)
                     append(" tier=").append(profile.tier)
-                    append(" bitmap=").append(profile.bitmapConfig)
                     append(" fullRes=").append(profile.fullResLongEdge)
                     append(" proxy=").append(profile.proxyLongEdge)
                 }

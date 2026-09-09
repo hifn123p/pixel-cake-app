@@ -33,23 +33,9 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      # compileSdk 37（Android 17）平台不一定预装在 runner 上，显式安装；
-      # build-tools 用 runner 自带的最新版本即可。
-      - name: Install Android SDK platform (API 36)
-        run: |
-          yes | sdkmanager --licenses >/dev/null 2>&1 || true
-          sdkmanager --update >/dev/null 2>&1 || true
-          # 主用 API 36（runner 仓库已发布）；待官方发布 API 37 平台后可改回 37
-          sdkmanager "platforms;android-36"
-          # 非致命：若 API 37 平台已发布则一并安装（便于以后切换）
-          sdkmanager --channel=3 "platforms;android-37" >/dev/null 2>&1 || true
-          # AGP 8.13 需要 build-tools（已装则跳过）；非致命，缺失时由 AGP 自动补全
-          sdkmanager "build-tools;35.0.0" || true
-          # P1b：安装 NDK 与 CMake（查询仓库可用的最新 NDK，避免硬编码版本在镜像缺失时失败）
-          NDK_VER=$(sdkmanager --list 2>/dev/null | grep -oE 'ndk;[0-9.]+' | sed 's/ndk;//' | sort -V | tail -1)
-          echo "Installing NDK $NDK_VER"
-          sdkmanager "ndk;$NDK_VER"
-          sdkmanager "cmake;3.22.1"
+      # F14：抽出的公共安装步骤（SDK/NDK/CMake），三 job 复用同一 composite action
+      - name: Install toolchain (SDK / NDK / CMake)
+        uses: ./.github/actions/setup-android-toolchain
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -60,19 +46,35 @@ jobs:
       - name: Assemble debug APK
         run: ./gradlew assembleDebug --stacktrace
 
+      # F11：CI 质量闸门——本地 JVM 单测（ColorMathTest / ArwPreviewExtractorTest）必过
+      - name: Run unit tests
+        run: ./gradlew testDebugUnitTest --stacktrace
+
       - name: Upload debug APK
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: pixelcake-debug-${{ github.sha }}
           path: app/build/outputs/apk/debug/*.apk
           retention-days: 90
 
-  # 第 1 步不因 lint 阻断 CI，仅产出报告供查看
+      # F13：构建摘要（项目硬要求：Action 之后通知我）
+      - name: Build summary
+        if: always()
+        run: |
+          {
+            echo "## 🍰 PixelCake CI 构建摘要"
+            echo "- commit: \`${{ github.sha }}\`"
+            echo "- 触发: ${{ github.event_name }} @ \`${{ github.ref }}\`"
+            echo "- 变体: debug（assembleDebug + testDebugUnitTest）"
+            echo "- APK: app/build/outputs/apk/debug/*.apk（保留 90 天）"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # F15：lint 取消 continue-on-error，成为真实拦门（Android Lint，非 ktlint/detekt）
   lint:
-    name: Lint
+    name: Lint (Android Lint)
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    continue-on-error: true
 
     steps:
       - name: Checkout
@@ -89,21 +91,8 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install Android SDK platform (API 36)
-        run: |
-          yes | sdkmanager --licenses >/dev/null 2>&1 || true
-          sdkmanager --update >/dev/null 2>&1 || true
-          # 主用 API 36（runner 仓库已发布）；待官方发布 API 37 平台后可改回 37
-          sdkmanager "platforms;android-36"
-          # 非致命：若 API 37 平台已发布则一并安装（便于以后切换）
-          sdkmanager --channel=3 "platforms;android-37" >/dev/null 2>&1 || true
-          # AGP 8.13 需要 build-tools（已装则跳过）；非致命，缺失时由 AGP 自动补全
-          sdkmanager "build-tools;35.0.0" || true
-          # P1b：安装 NDK 与 CMake（查询仓库可用的最新 NDK，避免硬编码版本在镜像缺失时失败）
-          NDK_VER=$(sdkmanager --list 2>/dev/null | grep -oE 'ndk;[0-9.]+' | sed 's/ndk;//' | sort -V | tail -1)
-          echo "Installing NDK $NDK_VER"
-          sdkmanager "ndk;$NDK_VER"
-          sdkmanager "cmake;3.22.1"
+      - name: Install toolchain (SDK / NDK / CMake)
+        uses: ./.github/actions/setup-android-toolchain
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -135,11 +124,12 @@ jobs:
         id: check
         run: echo "has=${{ secrets.KEYSTORE_BASE64 != '' }}" >> "$GITHUB_OUTPUT"
 
+  # F15：release 依赖 build（含单测闸门）+ lint，任一失败不出签名包
   release:
     name: Signed Release
     runs-on: ubuntu-latest
     timeout-minutes: 40
-    needs: [build, check-signing]
+    needs: [build, lint, check-signing]
     if: needs.check-signing.outputs.has-keystore == 'true'
 
     steps:
@@ -157,21 +147,8 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install Android SDK platform (API 36)
-        run: |
-          yes | sdkmanager --licenses >/dev/null 2>&1 || true
-          sdkmanager --update >/dev/null 2>&1 || true
-          # 主用 API 36（runner 仓库已发布）；待官方发布 API 37 平台后可改回 37
-          sdkmanager "platforms;android-36"
-          # 非致命：若 API 37 平台已发布则一并安装（便于以后切换）
-          sdkmanager --channel=3 "platforms;android-37" >/dev/null 2>&1 || true
-          # AGP 8.13 需要 build-tools（已装则跳过）；非致命，缺失时由 AGP 自动补全
-          sdkmanager "build-tools;35.0.0" || true
-          # P1b：安装 NDK 与 CMake（查询仓库可用的最新 NDK，避免硬编码版本在镜像缺失时失败）
-          NDK_VER=$(sdkmanager --list 2>/dev/null | grep -oE 'ndk;[0-9.]+' | sed 's/ndk;//' | sort -V | tail -1)
-          echo "Installing NDK $NDK_VER"
-          sdkmanager "ndk;$NDK_VER"
-          sdkmanager "cmake;3.22.1"
+      - name: Install toolchain (SDK / NDK / CMake)
+        uses: ./.github/actions/setup-android-toolchain
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4

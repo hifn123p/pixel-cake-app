@@ -1,0 +1,19 @@
+name: Setup Android Toolchain
+description: Install Android SDK platform (API 36), pinned NDK, and CMake for PixelCake CI
+runs:
+  using: composite
+  steps:
+    - name: Install Android SDK / NDK / CMake
+      shell: bash
+      run: |
+        yes | sdkmanager --licenses >/dev/null 2>&1 || true
+        sdkmanager --update >/dev/null 2>&1 || true
+        # 主用 API 36（runner 仓库已发布）；待官方发布 API 37 平台后可改回 37
+        sdkmanager "platforms;android-36"
+        # 非致命：若 API 37 平台已发布则一并安装（便于以后切换）
+        sdkmanager --channel=3 "platforms;android-37" >/dev/null 2>&1 || true
+        # AGP 8.13 需要 build-tools（已装则跳过）；非致命，缺失时由 AGP 自动补全
+        sdkmanager "build-tools;35.0.0" || true
+        # F12：固定 NDK 版本（r30 为 2026 LTS），与 app/build.gradle.kts ndkVersion 一致
+        sdkmanager "ndk;30.0.16248370"
+        sdkmanager "cmake;3.22.1"

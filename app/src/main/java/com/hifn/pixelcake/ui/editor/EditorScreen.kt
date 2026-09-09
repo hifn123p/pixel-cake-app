@@ -47,10 +47,13 @@ fun EditorScreen(
     canUndo: Boolean,
     canRedo: Boolean,
     status: String,
+    exporting: Boolean = false,
     onParamChange: (EditParams) -> Unit,
+    onParamCommit: () -> Unit = {},
     onUndo: () -> Unit,
     onRedo: () -> Unit,
     onExport: () -> Unit,
+    onCancelExport: () -> Unit = {},
     onBack: () -> Unit
 ) {
     var showOriginal by remember { mutableStateOf(false) }
@@ -107,19 +110,26 @@ fun EditorScreen(
         Spacer(Modifier.height(8.dp))
 
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
-            AdjustSlider("曝光", params.exposureEv, -2f, 2f, 0.1f) { onParamChange(params.copy(exposureEv = it)) }
-            AdjustSlider("对比度", params.contrast, -1f, 1f, 0.05f) { onParamChange(params.copy(contrast = it)) }
-            AdjustSlider("饱和度", params.saturation, -1f, 1f, 0.05f) { onParamChange(params.copy(saturation = it)) }
-            AdjustSlider("色温", params.temperature, -1f, 1f, 0.05f) { onParamChange(params.copy(temperature = it)) }
-            AdjustSlider("色调", params.tint, -1f, 1f, 0.05f) { onParamChange(params.copy(tint = it)) }
-            AdjustSlider("阴影", params.shadows, -1f, 1f, 0.05f) { onParamChange(params.copy(shadows = it)) }
-            AdjustSlider("高光", params.highlights, -1f, 1f, 0.05f) { onParamChange(params.copy(highlights = it)) }
-            AdjustSlider("LUT 强度", params.lutIntensity, 0f, 1f, 0.05f) { onParamChange(params.copy(lutIntensity = it)) }
-            LutSelector(params.lutId) { onParamChange(params.copy(lutId = it)) }
+            AdjustSlider("曝光", params.exposureEv, -2f, 2f, 0.1f, { onParamChange(params.copy(exposureEv = it)) }, onParamCommit)
+            AdjustSlider("对比度", params.contrast, -1f, 1f, 0.05f, { onParamChange(params.copy(contrast = it)) }, onParamCommit)
+            AdjustSlider("饱和度", params.saturation, -1f, 1f, 0.05f, { onParamChange(params.copy(saturation = it)) }, onParamCommit)
+            AdjustSlider("色温", params.temperature, -1f, 1f, 0.05f, { onParamChange(params.copy(temperature = it)) }, onParamCommit)
+            AdjustSlider("色调", params.tint, -1f, 1f, 0.05f, { onParamChange(params.copy(tint = it)) }, onParamCommit)
+            AdjustSlider("阴影", params.shadows, -1f, 1f, 0.05f, { onParamChange(params.copy(shadows = it)) }, onParamCommit)
+            AdjustSlider("高光", params.highlights, -1f, 1f, 0.05f, { onParamChange(params.copy(highlights = it)) }, onParamCommit)
+            AdjustSlider("LUT 强度", params.lutIntensity, 0f, 1f, 0.05f, { onParamChange(params.copy(lutIntensity = it)) }, onParamCommit)
+            LutSelector(params.lutId) {
+                onParamChange(params.copy(lutId = it))
+                onParamCommit()
+            }
         }
 
         Spacer(Modifier.height(8.dp))
-        Button(onClick = onExport, Modifier.fillMaxWidth()) { Text("导出到相册") }
+        if (exporting) {
+            Button(onClick = onCancelExport, Modifier.fillMaxWidth()) { Text("取消导出") }
+        } else {
+            Button(onClick = onExport, Modifier.fillMaxWidth()) { Text("导出到相册") }
+        }
         if (status.isNotEmpty()) {
             Spacer(Modifier.height(4.dp))
             Text(status, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -134,7 +144,8 @@ private fun AdjustSlider(
     min: Float,
     max: Float,
     step: Float,
-    onValueChange: (Float) -> Unit
+    onValueChange: (Float) -> Unit,
+    onValueChangeFinished: () -> Unit
 ) {
     Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -144,7 +155,9 @@ private fun AdjustSlider(
         Slider(
             value = value,
             onValueChange = { v -> onValueChange(round(v / step) * step) },
-            valueRange = min..max
+            valueRange = min..max,
+            // F08：只在松手时提交一次撤销点，否则一次拖动会往历史里塞几十条
+            onValueChangeFinished = onValueChangeFinished
         )
     }
 }

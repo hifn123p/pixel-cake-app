@@ -52,8 +52,12 @@ object ArwPreviewDecoder {
     }
 
     /**
-     * 解码 ARW 内嵌预览为 Bitmap。
-     * @param maxEdge 目标最长边(px)，按设备 proxy 档位传入；仅用于下采样，预览本身仅 1616px。
+     * 解码 ARW 内嵌预览为 Bitmap，**只作为秒开占位图**（修图源是 LibRaw 的线性母版）。
+     * @param maxEdge 目标最长边(px)，按设备 proxy 档位传入。
+     *
+     * 注：A7C II 的 ARW 里挂了三张内嵌 JPEG（1616×1080 / 160×120 / **7008×4672**），
+     * F04 之后 [ArwContainer] 会沿 IFD 链收齐并按体积取最大的那张，
+     * 所以这里拿到的已经是全分辨率预览，不再是 1616px。
      */
     suspend fun decodePreview(
         context: Context,

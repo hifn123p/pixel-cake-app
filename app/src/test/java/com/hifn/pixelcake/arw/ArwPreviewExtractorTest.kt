@@ -82,4 +82,28 @@ class ArwPreviewExtractorTest {
         val src = ByteArrayArwSource(bytes)
         assertNull(ArwContainer.previewJpegRange(src))
     }
+
+    /**
+     * F04 回归：主 IFD 链上挂了多张内嵌 JPEG（实测 1616×1080 / 160×120 / 7008×4672），
+     * 旧实现「查到第一个就返回」只会拿到最小那张；新实现应沿链收齐、取体积最大者。
+     * 这里用合成 TIFF 验证：IFD0→IFD1→IFD2 链，三张预览长度 7 / 9 / 11，断言返回最大(11)那张。
+     */
+    @Test
+    fun previewChain_picksLargest() {
+        val jpegA = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0x01, 0x02, 0x03, 0xFF.toByte(), 0xD9.toByte())        // len 7
+        val jpegB = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0x01, 0x02, 0x03, 0x04, 0xFF.toByte(), 0xD9.toByte(), 0x05.toByte()) // len 9
+        val jpegC = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0x01, 0x02, 0x03, 0x04, 0x05, 0xFF.toByte(), 0xD9.toByte(), 0x06.toByte(), 0x07.toByte()) // len 11
+
+        // 每个 IFD 含 (0x0201 offset, 0x0202 length, 0x014A next/SubIFD)；next 指向下一个 IFD。
+        // ifd0 @8 (42B) → ifd1 @50 (42B) → ifd2 @92 (30B)，三张预览依次排在 122 / 129 / 138。
+        val ifd0 = u16le(3) + entry(0x0201, 4, 1, 122) + entry(0x0202, 4, 1, 7)  + entry(0x014A, 4, 1, 50) + u32le(50)
+        val ifd1 = u16le(3) + entry(0x0201, 4, 1, 129) + entry(0x0202, 4, 1, 9)  + entry(0x014A, 4, 1, 92) + u32le(92)
+        val ifd2 = u16le(2) + entry(0x0201, 4, 1, 138) + entry(0x0202, 4, 1, 11) + u32le(0)
+        val bytes = byteArrayOf(0x49, 0x49) + u16le(42) + u32le(8) + ifd0 + ifd1 + ifd2 + jpegA + jpegB + jpegC
+        val src = ByteArrayArwSource(bytes)
+        val range = ArwContainer.previewJpegRange(src)!!
+        // 最大预览是 jpegC（len 11，落在 138..148）
+        assertEquals(138L, range.first)
+        assertEquals(148L, range.last)
+    }
 }

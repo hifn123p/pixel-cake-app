@@ -38,7 +38,7 @@
 | 🖼 导入 | 相册 Photo Picker；JPEG / HEIF 原生解码；**ARW 支持** |
 | ⚡ ARW 快速预览 | 解析 ARW 内嵌的全分辨率 JPEG 预览（7008×4672），**纯 Kotlin 零 NDK**，秒开 |
 | 🎚 调色 | 曝光 / 曲线 / LUT，非破坏编辑栈，可撤销重做、原图对比 |
-| 🚀 实时预览 | 代理图 + GPU 链（RenderEffect / AGSL），滑块拖动 <16ms/帧 |
+| 🚀 实时预览 | 代理图 + CPU 多线程逐像素 band 渲染（分带拉取 16-bit 线性 + PixelProgram 上色）；GPU/RenderEffect/AGSL 规划中 |
 | 💾 导出 | 写回相册（JPEG / PNG；HEIF 视设备编码器），按设备档位自适应分辨率 |
 | 🐞 调试日志 | 内置结构化日志，可导出分享——无本地构建环境下的唯一联调回路 |
 | 📷 ARW 全量修图 | LibRaw NDK 真解马赛克 → 16-bit 线性（P1b-1/2/3 已接入并启用；人像算子 / 预设见 P1b-4/5） |
@@ -57,7 +57,7 @@
 **客户端（主）**
 - Kotlin 2.2.21 · Jetpack Compose + Material3 · AGP 8.13.2 · JDK 17
 - Hilt · Room · Coil · Navigation · Coroutines
-- GPU 实时预览：RenderEffect / **AGSL**
+- 预览渲染：当前为 **CPU 多线程逐像素 band 渲染**（分带拉取 + 查表上色）；GPU/RenderEffect/AGSL 为后续规划
 - 端侧推理（后置）：TensorFlow Lite + **NNAPI** delegate（NNAPI → GPU → CPU 降级）
 - RAW：LibRaw（NDK / JNI）+ 纯 Kotlin TIFF/IFD 解析
 
@@ -87,11 +87,11 @@ com.hifn.pixelcake
 
 | 来源 | 复用内容（路径） |
 |---|---|
-| `pixel-cake-android` | `ui/home/DeviceCapabilities.kt`（设备探测）· `ui/home/HomeScreen.kt` · `raw/RawInfo.kt` · `MainActivity.kt` · `ui/theme/` · `cpp/raw_bridge.cpp`（LibRaw JNI，已接入）· `.github/workflows/android.yml` |
+| `pixel-cake-android` | `ui/home/DeviceCapabilities.kt`（设备探测）· `ui/home/HomeScreen.kt` · `arw/ArwContainer.kt` · `MainActivity.kt` · `ui/theme/` · `cpp/raw_bridge.cpp`（LibRaw JNI，已接入）· `.github/workflows/android.yml` |
 | `pixel-cake`（Rust） | `engine/src/retouch/{neutral_gray,beauty,color_transfer,inpaint,enhance}.rs` · `engine/src/detect/{face,landmark,segment}.rs` · `engine/src/raw.rs` · `engine/src/color/lut.rs` · `crates/scheduler`（P3 任务队列） |
 
 - **复用**：Compose 基建、设备探测、CI 骨架、LibRaw、Rust 修图算法（P3）
-- **自研**：非破坏编辑栈、GPU 预览链、ARW 内嵌预览解析、LUT 应用、预设系统、调试日志
+- **自研**：非破坏编辑栈、预览渲染（当前 CPU band）、ARW 内嵌预览解析、LUT 应用、预设系统、调试日志
 
 ### 核心原理
 
@@ -134,7 +134,7 @@ com.hifn.pixelcake
 git push origin main        # 推送后 GitHub Actions 自动接管
 ```
 
-`.github/workflows/android.yml` 会执行：ktlint/detekt → unit tests → `assembleRelease`（`KEYSTORE_BASE64` 签名）→ 产物与通知。
+`.github/workflows/android.yml` 会执行：unit tests（`testDebugUnitTest`）→ Android Lint（`lintDebug` 拦门）→ `assembleRelease`（`KEYSTORE_BASE64` 签名）→ 产物与通知。ktlint/detekt 待本地验证后引入。
 
 - **子模块**：LibRaw 经 git 子模块引入，CI 用 `actions/checkout` 递归拉取；本机首次构建前执行 `git submodule update --init --recursive`（走 SSH 可避开代理证书问题）。
 - **通知策略**：签名 APK 一律作 workflow artifact（保留 90 天）；配置 `FIREBASE_APP_ID` 等 secret 后才额外走 Firebase App Distribution（邮件 + 一键安装）。
@@ -171,4 +171,4 @@ App 内置调试日志（`diag/DebugLog.kt`）：
 
 ## 许可
 
-尚未确定（TBD）。内置第三方 LUT / 模型将单独标注许可并保留 NOTICE。
+App 主体许可待定（TBD）；内置静态链接的 LibRaw（LGPL-2.1/CDDL-1.0）许可与「可重新链接」义务见仓库根 `NOTICE`。内置第三方 LUT / 模型将单独标注许可并保留 NOTICE。
