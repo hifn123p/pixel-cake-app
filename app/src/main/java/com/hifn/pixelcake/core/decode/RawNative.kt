@@ -22,5 +22,6 @@ object RawNative {
      */
     external fun decodeFull(path: String, maxLongSide: Int): RawImage?
 
-    val version: String get() = getVersion()
+    /** LibRaw 版本串（getVersion() 的便捷访问器；改名以避开与 native getVersion 的 JVM 签名冲突）。 */
+    val librawVersion: String get() = getVersion()
 }
