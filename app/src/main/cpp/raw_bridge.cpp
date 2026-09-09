@@ -57,7 +57,7 @@ Java_com_hifn_pixelcake_core_decode_RawNative_decodeFull(
     env->ReleaseStringUTFChars(jpath, path);
     if (!image || err != LIBRAW_SUCCESS) {
         LOGE("decodeFull: dcraw_make_mem_image failed err=%d", err);
-        if (image) rawProcessor.dcraw_free();
+        if (image) rawProcessor.free_image();
         return nullptr;
     }
 
@@ -66,7 +66,7 @@ Java_com_hifn_pixelcake_core_decode_RawNative_decodeFull(
     int colors = (int)image->colors;  // 标准 8bit 输出 col=3 (RGB)
     if (w <= 0 || h <= 0 || colors < 3) {
         LOGE("decodeFull: bad processed image w=%d h=%d colors=%d", w, h, colors);
-        rawProcessor.dcraw_free();
+        rawProcessor.free_image();
         return nullptr;
     }
 
@@ -87,12 +87,12 @@ Java_com_hifn_pixelcake_core_decode_RawNative_decodeFull(
     jbyteArray out = env->NewByteArray((jsize)rgbaSize);
     if (!out) {
         LOGE("decodeFull: NewByteArray OOM size=%zu", rgbaSize);
-        rawProcessor.dcraw_free();
+        rawProcessor.free_image();
         return nullptr;
     }
     jbyte* outBuf = env->GetByteArrayElements(out, nullptr);
     if (!outBuf) {
-        rawProcessor.dcraw_free();
+        rawProcessor.free_image();
         return nullptr;
     }
 
@@ -141,7 +141,7 @@ Java_com_hifn_pixelcake_core_decode_RawNative_decodeFull(
     }
 
     env->ReleaseByteArrayElements(out, outBuf, 0);
-    rawProcessor.dcraw_free();
+    rawProcessor.free_image();
 
     // 构造 RawImage(width, height, pixels)
     jclass cls = env->FindClass("com/hifn/pixelcake/core/decode/RawImage");
