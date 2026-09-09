@@ -9,7 +9,6 @@ plugins {
 android {
     namespace = "com.hifn.pixelcake"
     compileSdk = libs.versions.compileSdk.get().toInt()
-    ndkVersion = "27.0.12077973"
 
     defaultConfig {
         applicationId = "com.hifn.pixelcake"

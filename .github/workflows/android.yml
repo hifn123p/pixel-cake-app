@@ -45,8 +45,11 @@ jobs:
           sdkmanager --channel=3 "platforms;android-37" >/dev/null 2>&1 || true
           # AGP 8.13 需要 build-tools（已装则跳过）；非致命，缺失时由 AGP 自动补全
           sdkmanager "build-tools;35.0.0" || true
-          # P1b：安装 NDK 供 externalNativeBuild 使用（与 app/build.gradle.kts 的 ndkVersion 一致）
-          sdkmanager "ndk;27.0.12077973" || true
+          # P1b：安装 NDK 与 CMake（查询仓库可用的最新 NDK，避免硬编码版本在镜像缺失时失败）
+          NDK_VER=$(sdkmanager --list 2>/dev/null | grep -oE 'ndk;[0-9.]+' | sed 's/ndk;//' | sort -V | tail -1)
+          echo "Installing NDK $NDK_VER"
+          sdkmanager "ndk;$NDK_VER"
+          sdkmanager "cmake;3.22.1"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -96,8 +99,11 @@ jobs:
           sdkmanager --channel=3 "platforms;android-37" >/dev/null 2>&1 || true
           # AGP 8.13 需要 build-tools（已装则跳过）；非致命，缺失时由 AGP 自动补全
           sdkmanager "build-tools;35.0.0" || true
-          # P1b：安装 NDK 供 externalNativeBuild 使用（与 app/build.gradle.kts 的 ndkVersion 一致）
-          sdkmanager "ndk;27.0.12077973" || true
+          # P1b：安装 NDK 与 CMake（查询仓库可用的最新 NDK，避免硬编码版本在镜像缺失时失败）
+          NDK_VER=$(sdkmanager --list 2>/dev/null | grep -oE 'ndk;[0-9.]+' | sed 's/ndk;//' | sort -V | tail -1)
+          echo "Installing NDK $NDK_VER"
+          sdkmanager "ndk;$NDK_VER"
+          sdkmanager "cmake;3.22.1"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -161,8 +167,11 @@ jobs:
           sdkmanager --channel=3 "platforms;android-37" >/dev/null 2>&1 || true
           # AGP 8.13 需要 build-tools（已装则跳过）；非致命，缺失时由 AGP 自动补全
           sdkmanager "build-tools;35.0.0" || true
-          # P1b：安装 NDK 供 externalNativeBuild 使用（与 app/build.gradle.kts 的 ndkVersion 一致）
-          sdkmanager "ndk;27.0.12077973" || true
+          # P1b：安装 NDK 与 CMake（查询仓库可用的最新 NDK，避免硬编码版本在镜像缺失时失败）
+          NDK_VER=$(sdkmanager --list 2>/dev/null | grep -oE 'ndk;[0-9.]+' | sed 's/ndk;//' | sort -V | tail -1)
+          echo "Installing NDK $NDK_VER"
+          sdkmanager "ndk;$NDK_VER"
+          sdkmanager "cmake;3.22.1"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
