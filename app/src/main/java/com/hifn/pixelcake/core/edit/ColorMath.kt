@@ -11,6 +11,9 @@ import kotlin.math.roundToInt
  *   白平衡(线性) -> 曝光(线性) -> sRGB -> 阴影/高光 -> 对比度 -> 饱和度 -> 亮度曲线 -> 内置 LUT
  */
 object ColorMath {
+    /** srgb<->linear 固定映射，预构建一次，避免逐像素 pow（此前 2MP 渲染要 3-5 秒的主因）。 */
+    private val SRGB_TO_LINEAR_LUT = FloatArray(256) { i -> srgbToLinear(i / 255f) }
+    private val LINEAR_TO_SRGB_LUT = FloatArray(256) { i -> linearToSrgb(i / 255f) }
 
     fun srgbToLinear(c: Float): Float =
         if (c <= 0.04045f) c / 12.92f else ((c + 0.055f) / 1.055f).pow(2.4f)
@@ -102,19 +105,21 @@ object ColorMath {
         }
     }
 
-    /** 单像素全管线。lut 由调用方预构建，避免逐像素重建。 */
-    fun processPixel(r8: Int, g8: Int, b8: Int, p: EditParams, lut: IntArray): Triple<Int, Int, Int> {
-        var r = r8 / 255f
-        var g = g8 / 255f
-        var b = b8 / 255f
-        val lin = applyWhiteBalance(srgbToLinear(r), srgbToLinear(g), srgbToLinear(b), p.temperature, p.tint)
-        val ev = 2f.pow(p.exposureEv)
-        val lr = lin.first * ev
-        val lg = lin.second * ev
-        val lb = lin.third * ev
-        r = linearToSrgb(lr)
-        g = linearToSrgb(lg)
-        b = linearToSrgb(lb)
+    /**
+     * 单像素全管线。lut 由调用方预构建；ev(=2^exposureEv) 由调用方预计算后传入；
+     * srgb<->linear 走全局 256 项 LUT，避免逐像素 pow（性能关键）。
+     */
+    fun processPixel(r8: Int, g8: Int, b8: Int, p: EditParams, lut: IntArray, ev: Float = 2f.pow(p.exposureEv)): Triple<Int, Int, Int> {
+        var r = SRGB_TO_LINEAR_LUT[r8]
+        var g = SRGB_TO_LINEAR_LUT[g8]
+        var b = SRGB_TO_LINEAR_LUT[b8]
+        val lin = applyWhiteBalance(r, g, b, p.temperature, p.tint)
+        r = lin.first * ev
+        g = lin.second * ev
+        b = lin.third * ev
+        r = LINEAR_TO_SRGB_LUT[toIdx(r)]
+        g = LINEAR_TO_SRGB_LUT[toIdx(g)]
+        b = LINEAR_TO_SRGB_LUT[toIdx(b)]
         val lum = 0.2126f * r + 0.7152f * g + 0.0722f * b
         r += p.shadows * (1f - lum) * 0.5f
         g += p.shadows * (1f - lum) * 0.5f
@@ -136,4 +141,7 @@ object ColorMath {
         val bi = (b.coerceIn(0f, 1f) * 255f + 0.5f).toInt()
         return Triple(ri, gi, bi)
     }
+
+    /** 把 [0,1] 浮点映射到 0..255 的 LUT 索引（越界夹紧）。 */
+    private fun toIdx(v: Float): Int = (v.coerceIn(0f, 1f) * 255f).roundToInt().coerceIn(0, 255)
 }
