@@ -16,7 +16,7 @@ class NeutralGrayTest {
         for (i in px.indices) {
             seed = (seed * 1103515245 + 12345) and 0x7fffffff
             val n = ((seed % 80) - 40)
-            val v = (128 + n).coerceIn(0, 255)
+            val v = (128 + n).coerceIn(0, 255).toInt()
             px[i] = 0xff000000.toInt() or (v shl 16) or (v shl 8) or v
         }
         val before = variance(px)
