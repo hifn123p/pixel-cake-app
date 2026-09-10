@@ -4,7 +4,6 @@ import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
-import java.util.concurrent.atomic.AtomicBoolean
 import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.enableEdgeToEdge
@@ -27,9 +26,16 @@ import com.hifn.pixelcake.core.decode.DecodedImage
 import com.hifn.pixelcake.core.decode.Decoder
 import com.hifn.pixelcake.core.decode.Exporter
 import com.hifn.pixelcake.core.decode.ExportFormat
+import com.hifn.pixelcake.core.edit.BrushStroke
 import com.hifn.pixelcake.core.edit.EditEngine
 import com.hifn.pixelcake.core.edit.EditHistory
 import com.hifn.pixelcake.core.edit.EditParams
+import com.hifn.pixelcake.core.edit.InpaintStroke
+import com.hifn.pixelcake.core.edit.NeutralGrayParams
+import com.hifn.pixelcake.core.edit.RasterMask
+import com.hifn.pixelcake.core.edit.RetouchState
+import com.hifn.pixelcake.core.edit.preset.Presets
+import com.hifn.pixelcake.core.edit.retouch.RetouchLayer
 import com.hifn.pixelcake.diag.DebugLog
 import com.hifn.pixelcake.ui.editor.EditorScreen
 import com.hifn.pixelcake.ui.home.HomeScreen
@@ -46,6 +52,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.math.min
 
 /** 滑块拖动时的重渲节流窗口（FIX_LIST F08）。16ms ≈ 一帧，肉眼无感但能挡掉绝大多数中间值。 */
 private const val RENDER_THROTTLE_MS = 16L
@@ -84,18 +92,32 @@ private fun AppRoot() {
     val renderMutex = remember { Mutex() }
     var renderStamp by remember { mutableStateOf(0) }
 
-    // 参数或导入变化 -> 异步把参数栈重渲到代理图（复用目标位图，避免每帧重分配）。
-    // 用 snapshotFlow + conflate + collectLatest 做节流与取消：
-    // 拖动过程中只保留最新一帧待渲，旧帧直接丢弃（FIX_LIST F08）。
+    // P1b-4：人像精修状态（tonal 的 EditParams 之外的附加层）
+    var retouch by remember { mutableStateOf(RetouchState()) }
+    var retouchTool by remember { mutableStateOf("none") }
+    var brushRadius by remember { mutableStateOf(0.04f) }
+    var brushStrokes by remember { mutableStateOf(emptyList<Pair<Float, Float>>()) }
+    var inpaintRadius by remember { mutableStateOf(0.01f) }
+    var inpaintStrokes by remember { mutableStateOf(emptyList<Pair<Float, Float>>()) }
+
+    // 参数 / retouch / 蒙版变化 -> 异步把参数栈 + retouch 重渲到代理图。
+    // 用 snapshotFlow + conflate + collectLatest 做节流与取消（FIX_LIST F08）。
     LaunchedEffect(imported) {
         val src = imported ?: return@LaunchedEffect
-        snapshotFlow { params }
+        snapshotFlow { listOf(params, retouch, brushStrokes, inpaintStrokes) }
             .conflate()
-            .collectLatest { p ->
+            .collectLatest {
                 delay(RENDER_THROTTLE_MS)
                 // 取当前这次重渲对应的协程 job：新参数到来时 collectLatest 会取消它，
                 // 渲染器据此在下一个分带边界退出（真正的协作取消，FIX_LIST F08 修复）。
                 val renderJob = currentCoroutineContext().job
+                // 在主线程捕获最新状态，避免在 Dispatchers.Default 内跨线程读快照状态
+                val p = params
+                val rt = retouch
+                val strokes = brushStrokes
+                val radius = brushRadius
+                val inpStrokes = inpaintStrokes
+                val inpRadius = inpaintRadius
                 val w = src.linear?.width ?: src.bitmap.width
                 val h = src.linear?.height ?: src.bitmap.height
                 val target = renderMutex.withLock {
@@ -105,11 +127,17 @@ private fun AppRoot() {
                     } else existing
                     withContext(Dispatchers.Default) {
                         val linear = src.linear
+                        val mask = buildSkinMask(w, h, strokes, radius)
+                        val renderRetouch = buildRenderRetouch(rt, w, h, inpStrokes, inpRadius)
                         if (linear != null) {
-                            // 协作取消：renderJob 被 collectLatest 取消后，这里会在下一带边界退出
-                            EditEngine.renderIntoLinear(bmp, linear, p) { !renderJob.isActive }
+                            // 协作取消：renderJob 被 collectLatest 取消后，这里会在下一带边界退出。
+                            // 注意：renderIntoLinear 内部已在物化目标 Bitmap 上跑过 retouch 整图 pass，
+                            // 这里**不能**再调 RetouchLayer.apply，否则 RAW 预览会重复叠加（与导出不一致）。
+                            EditEngine.renderIntoLinear(bmp, linear, p, renderRetouch, mask) { !renderJob.isActive }
                         } else {
                             EditEngine.renderIntoSrgb(bmp, src.bitmap, p)
+                            // 8-bit sRGB 路径的 renderIntoSrgb 不含 retouch，需在此补一趟整图 pass。
+                            RetouchLayer.apply(bmp, renderRetouch, mask)
                         }
                     }
                     bmp
@@ -137,6 +165,11 @@ private fun AppRoot() {
                 srcUri = uri
                 history.reset()
                 params = EditParams()
+                retouch = RetouchState()
+                brushStrokes = emptyList()
+                retouchTool = "none"
+                inpaintStrokes = emptyList()
+                inpaintRadius = 0.01f
                 status = if (dec.linear != null) "RAW 已按 16-bit 线性管线载入" else ""
                 screen = "editor"
                 DebugLog.i(
@@ -167,6 +200,12 @@ private fun AppRoot() {
                     rendered = rendered,
                     renderVersion = renderStamp,
                     params = params,
+                    retouch = retouch,
+                    retouchTool = retouchTool,
+                    brushRadius = brushRadius,
+                    inpaintRadius = inpaintRadius,
+                    inpaintCount = inpaintStrokes.size,
+                    presets = Presets.ALL,
                     canUndo = history.canUndo,
                     canRedo = history.canRedo,
                     status = status,
@@ -176,11 +215,29 @@ private fun AppRoot() {
                         params = it
                     },
                     onParamCommit = { history.push(params) },
+                    onRetouchChange = { retouch = it },
+                    onToolChange = { retouchTool = it },
+                    onBrushStroke = { nx, ny -> brushStrokes = brushStrokes + (nx to ny) },
+                    onBrushRadiusChange = { brushRadius = it },
+                    onInpaintStroke = { nx, ny -> inpaintStrokes = inpaintStrokes + (nx to ny) },
+                    onInpaintRadiusChange = { inpaintRadius = it },
+                    onClearMask = { brushStrokes = emptyList() },
+                    onClearInpaint = { inpaintStrokes = emptyList() },
+                    onPreset = { p ->
+                        params = p.params
+                        retouch = p.retouch
+                    },
                     onUndo = { if (history.undo()) params = history.current },
                     onRedo = { if (history.redo()) params = history.current },
                     onExport = {
                         scope.launch {
                             val img = imported ?: return@launch
+                            // 在主线程捕获 retouch/mask 状态，避免跨线程读快照状态
+                            val rt = retouch
+                            val strokes = brushStrokes
+                            val radius = brushRadius
+                            val inpStrokes = inpaintStrokes
+                            val inpRadius = inpaintRadius
                             exporting = true
                             exportCancelled.set(false)
                             status = "正在生成导出…"
@@ -188,10 +245,15 @@ private fun AppRoot() {
                                 val rawPath = img.rawCachePath
                                 if (rawPath != null) {
                                     // 全分辨率 RAW：边解码边分带渲染，不把 196MB 线性图搬进堆
+                                    val (ew, eh) = fitLongEdge(img.width, img.height, profile.fullResLongEdge)
+                                    val mask = buildSkinMask(ew, eh, strokes, radius)
+                                    val renderRetouch = buildRenderRetouch(rt, ew, eh, inpStrokes, inpRadius)
                                     val full = EditEngine.renderLinearFile(
                                         path = rawPath,
                                         maxLongSide = profile.fullResLongEdge,
-                                        p = params
+                                        p = params,
+                                        retouch = renderRetouch,
+                                        mask = mask
                                     ) { p ->
                                         if (p % 20 == 0 || p >= 100) {
                                             scope.launch(Dispatchers.Main) { status = "正在生成导出… $p%" }
@@ -220,6 +282,12 @@ private fun AppRoot() {
                                                 Bitmap.Config.ARGB_8888
                                             )
                                             EditEngine.renderIntoSrgb(fullTarget, fullBase.bitmap, params)
+                                            // tonal 之后在已物化目标 Bitmap 上跑 retouch 整图 pass
+                                            val fw = fullBase.bitmap.width
+                                            val fh = fullBase.bitmap.height
+                                            val fmask = buildSkinMask(fw, fh, strokes, radius)
+                                            val fretouch = buildRenderRetouch(rt, fw, fh, inpStrokes, inpRadius)
+                                            RetouchLayer.apply(fullTarget, fretouch, fmask)
                                             val out = withContext(Dispatchers.IO) {
                                                 Exporter.export(context, fullTarget, ExportFormat.JPEG, 92)
                                             }
@@ -261,6 +329,11 @@ private fun AppRoot() {
                         src.bitmap.recycle()
                         imported = null
                         srcUri = null
+                        retouch = RetouchState()
+                        brushStrokes = emptyList()
+                        retouchTool = "none"
+                        inpaintStrokes = emptyList()
+                        inpaintRadius = 0.01f
                         renderStamp = 0
                         screen = "home"
                     }
@@ -274,4 +347,44 @@ private fun AppRoot() {
             onImportArw = { arwLauncher.launch(arrayOf("*/*")) }
         )
     }
+}
+
+/** 由画笔描迹（归一化坐标 + 归一化半径）构建皮肤蒙版，尺寸对齐目标图 (w,h)。 */
+private fun buildSkinMask(w: Int, h: Int, strokes: List<Pair<Float, Float>>, radiusNorm: Float): RasterMask? {
+    if (strokes.isEmpty() || w <= 0 || h <= 0) return null
+    val minDim = min(w, h)
+    val r = (radiusNorm * minDim).toInt().coerceAtLeast(1)
+    val bs = strokes.map { (nx, ny) -> BrushStroke((nx * w).toInt(), (ny * h).toInt(), r) }
+    return RasterMask.fromStrokes(w, h, bs)
+}
+
+/** 把 UI 的 RetouchState 换算为渲染态：磨皮半径按短边比例 → 像素半径；UI 归一化祛瑕点 → 像素描迹。
+ *  beauty / colorTransfer 已是分辨率无关参数，直接透传，保证预览/导出所见即所得。 */
+private fun buildRenderRetouch(
+    rt: RetouchState,
+    w: Int,
+    h: Int,
+    inpaintStrokes: List<Pair<Float, Float>> = emptyList(),
+    inpaintRadiusNorm: Float = 0.01f
+): RetouchState {
+    val minDim = min(w, h)
+    val inpaint = inpaintStrokes.map { (nx, ny) ->
+        val r = (inpaintRadiusNorm * minDim).toInt().coerceAtLeast(1)
+        InpaintStroke((nx * w).toInt(), (ny * h).toInt(), r)
+    }
+    return rt.copy(
+        neutralGray = NeutralGrayParams(
+            strength = rt.neutralGray.strength,
+            radiusPx = (rt.neutralGray.radiusNorm * minDim).toInt().coerceAtLeast(1),
+            threshold = rt.neutralGray.threshold
+        ),
+        inpaint = inpaint
+    )
+}
+
+/** 按长边上限计算全分辨率目标尺寸（与 RawLinearSource 解码尺寸同口径）。 */
+private fun fitLongEdge(srcW: Int, srcH: Int, longEdge: Int): Pair<Int, Int> {
+    if (srcW <= 0 || srcH <= 0) return longEdge to longEdge
+    return if (srcW >= srcH) longEdge to (srcH * longEdge / srcW)
+    else (srcW * longEdge / srcH) to longEdge
 }

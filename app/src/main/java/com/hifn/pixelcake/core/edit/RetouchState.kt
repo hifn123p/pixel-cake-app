@@ -8,7 +8,9 @@ package com.hifn.pixelcake.core.edit
 data class NeutralGrayParams(
     val strength: Float = 0f,
     val radiusPx: Int = 4,
-    val threshold: Int = 24
+    val threshold: Int = 24,
+    /** 模糊半径（占图像短边比例，分辨率无关，保证预览/导出所见即所得）。渲染时换算为 radiusPx。 */
+    val radiusNorm: Float = 0.01f
 )
 
 data class BeautyParams(

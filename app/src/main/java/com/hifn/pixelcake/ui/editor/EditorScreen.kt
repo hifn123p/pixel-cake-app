@@ -2,6 +2,7 @@ package com.hifn.pixelcake.ui.editor
 
 import android.graphics.Bitmap
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -30,13 +31,20 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.hifn.pixelcake.core.edit.EditParams
+import com.hifn.pixelcake.core.edit.RetouchState
 import kotlin.math.round
 
 /**
- * 编辑界面（P1a 最小可用链路）。
- * 所有状态由上层 AppRoot 持有，这里只负责呈现与回调：滑块拖动 -> onParamChange(params.copy(...))。
+ * 编辑界面（P1a 最小可用链路 + P1b 人像精修）。
+ * 所有状态由上层 AppRoot 持有，这里只负责呈现与回调：滑块拖动 -> onParamChange(...)/onRetouchChange(...)。
+ *
+ * 预览图支持两种指针交互：
+ *  - 非画笔模式：按住查看原图（FIX_LIST 原功能）；
+ *  - 画笔模式：在图上拖动涂抹皮肤区域，坐标归一化 [0..1] 经 onBrushStroke 上报，由上层构建蒙版。
  */
 @Composable
 fun EditorScreen(
@@ -44,12 +52,27 @@ fun EditorScreen(
     rendered: Bitmap?,
     renderVersion: Int,
     params: EditParams,
+    retouch: RetouchState,
+    retouchTool: String,
+    brushRadius: Float,
+    inpaintRadius: Float,
+    inpaintCount: Int,
+    presets: List<Preset>,
     canUndo: Boolean,
     canRedo: Boolean,
     status: String,
     exporting: Boolean = false,
     onParamChange: (EditParams) -> Unit,
     onParamCommit: () -> Unit = {},
+    onRetouchChange: (RetouchState) -> Unit,
+    onToolChange: (String) -> Unit,
+    onBrushStroke: (Float, Float) -> Unit,
+    onBrushRadiusChange: (Float) -> Unit,
+    onInpaintStroke: (Float, Float) -> Unit,
+    onInpaintRadiusChange: (Float) -> Unit,
+    onClearMask: () -> Unit,
+    onClearInpaint: () -> Unit,
+    onPreset: (Preset) -> Unit,
     onUndo: () -> Unit,
     onRedo: () -> Unit,
     onExport: () -> Unit,
@@ -57,6 +80,8 @@ fun EditorScreen(
     onBack: () -> Unit
 ) {
     var showOriginal by remember { mutableStateOf(false) }
+    // 预览图实测尺寸，用于把指针坐标归一化（与显示缩放/letterbox 解耦）。
+    var previewSize by remember { mutableStateOf(IntSize.Zero) }
     // renderVersion 每次重渲自增，确保本可组合项重组并重绘当前(已被原位修改的)Bitmap。
     val display: ImageBitmap? = run {
         val _v = renderVersion
@@ -80,14 +105,31 @@ fun EditorScreen(
         Spacer(Modifier.height(8.dp))
 
         Box(
-            Modifier.fillMaxWidth().height(300.dp).padding(4.dp),
+            Modifier.fillMaxWidth().height(300.dp).padding(4.dp).onSizeChanged { previewSize = it },
             contentAlignment = Alignment.Center
         ) {
             if (display != null) {
-                Image(
-                    bitmap = display,
-                    contentDescription = "编辑预览",
-                    modifier = Modifier.fillMaxSize().pointerInput(Unit) {
+                val modifier = when (retouchTool) {
+                    "skin" -> Modifier.fillMaxSize().pointerInput(Unit) {
+                        detectDragGestures { change, _ ->
+                            change.consume()
+                            val sx = previewSize.width.toFloat().coerceAtLeast(1f)
+                            val sy = previewSize.height.toFloat().coerceAtLeast(1f)
+                            val nx = (change.position.x / sx).coerceIn(0f, 1f)
+                            val ny = (change.position.y / sy).coerceIn(0f, 1f)
+                            onBrushStroke(nx, ny)
+                        }
+                    }
+                    "blemish" -> Modifier.fillMaxSize().pointerInput(Unit) {
+                        detectTapGestures { offset ->
+                            val sx = previewSize.width.toFloat().coerceAtLeast(1f)
+                            val sy = previewSize.height.toFloat().coerceAtLeast(1f)
+                            val nx = (offset.x / sx).coerceIn(0f, 1f)
+                            val ny = (offset.y / sy).coerceIn(0f, 1f)
+                            onInpaintStroke(nx, ny)
+                        }
+                    }
+                    else -> Modifier.fillMaxSize().pointerInput(Unit) {
                         detectTapGestures(
                             onPress = {
                                 showOriginal = true
@@ -96,13 +138,18 @@ fun EditorScreen(
                             }
                         )
                     }
-                )
+                }
+                Image(bitmap = display, contentDescription = "编辑预览", modifier = modifier)
             } else {
                 Text("渲染中…", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         Text(
-            if (showOriginal) "（查看原图）" else "（按住图片查看原图）",
+            when (retouchTool) {
+                "skin" -> "（皮肤画笔：在图上拖动涂抹磨皮/液化作用区）"
+                "blemish" -> "（祛瑕：点击脏点/瑕疵位置）"
+                else -> "（按住图片查看原图）"
+            },
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -122,6 +169,66 @@ fun EditorScreen(
                 onParamChange(params.copy(lutId = it))
                 onParamCommit()
             }
+
+            // ---- 人像精修（P1b-4 / P1b-6，全算子 UI + 预设）----
+            Spacer(Modifier.height(8.dp))
+            Text("人像精修", style = MaterialTheme.typography.titleSmall)
+
+            // 预设（参数栈，P1b-6）
+            PresetRow(presets, onPreset)
+
+            // 工具选择：关闭 / 皮肤 / 祛瑕
+            Spacer(Modifier.height(8.dp))
+            Text("工具", style = MaterialTheme.typography.bodyMedium)
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                listOf("none" to "关闭", "skin" to "皮肤", "blemish" to "祛瑕").forEach { (id, name) ->
+                    FilterChip(
+                        selected = retouchTool == id,
+                        onClick = { onToolChange(id) },
+                        label = { Text(name) }
+                    )
+                }
+            }
+
+            // 皮肤画笔作用区
+            if (retouchTool == "skin") {
+                AdjustSlider("磨皮强度", retouch.neutralGray.strength, 0f, 1f, 0.05f,
+                    { onRetouchChange(retouch.copy(neutralGray = retouch.neutralGray.copy(strength = it))) }, {})
+                AdjustSlider("磨皮半径", retouch.neutralGray.radiusNorm, 0.002f, 0.05f, 0.002f,
+                    { onRetouchChange(retouch.copy(neutralGray = retouch.neutralGray.copy(radiusNorm = it))) }, {})
+                AdjustSlider("笔刷大小", brushRadius, 0.005f, 0.15f, 0.005f, onBrushRadiusChange, {})
+                Button(onClick = onClearMask, Modifier.fillMaxWidth()) { Text("清除皮肤蒙版") }
+            }
+
+            // 祛瑕（瑕疵点）
+            if (retouchTool == "blemish") {
+                AdjustSlider("瑕疵点半径", inpaintRadius, 0.002f, 0.04f, 0.002f, onInpaintRadiusChange, {})
+                Text("已标记瑕疵点：$inpaintCount", style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Button(onClick = onClearInpaint, Modifier.fillMaxWidth()) { Text("清除瑕疵点") }
+            }
+
+            // 美型液化（始终可用；需先涂皮肤蒙版才有作用域）
+            Spacer(Modifier.height(8.dp))
+            Text("美型", style = MaterialTheme.typography.bodyMedium)
+            AdjustSlider("瘦脸", retouch.beauty.slimFace, 0f, 1f, 0.05f,
+                { onRetouchChange(retouch.copy(beauty = retouch.beauty.copy(slimFace = it))) }, {})
+            AdjustSlider("收下颌", retouch.beauty.slimJaw, 0f, 1f, 0.05f,
+                { onRetouchChange(retouch.copy(beauty = retouch.beauty.copy(slimJaw = it))) }, {})
+            AdjustSlider("大眼", retouch.beauty.eyeEnlarge, 0f, 1f, 0.05f,
+                { onRetouchChange(retouch.copy(beauty = retouch.beauty.copy(eyeEnlarge = it))) }, {})
+
+            // 追色（全局色彩风格）
+            Spacer(Modifier.height(8.dp))
+            ColorTransferRow(
+                selected = retouch.colorTransfer.refId,
+                intensity = retouch.colorTransfer.intensity,
+                onSelect = { onRetouchChange(retouch.copy(colorTransfer = retouch.colorTransfer.copy(refId = it))) },
+                onIntensity = { onRetouchChange(retouch.copy(colorTransfer = retouch.colorTransfer.copy(intensity = it))) }
+            )
         }
 
         Spacer(Modifier.height(8.dp))
