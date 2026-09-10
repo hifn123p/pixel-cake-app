@@ -34,6 +34,7 @@ import com.hifn.pixelcake.core.edit.InpaintStroke
 import com.hifn.pixelcake.core.edit.NeutralGrayParams
 import com.hifn.pixelcake.core.edit.RasterMask
 import com.hifn.pixelcake.core.edit.RetouchState
+import com.hifn.pixelcake.core.edit.preset.Preset
 import com.hifn.pixelcake.core.edit.preset.Presets
 import com.hifn.pixelcake.core.edit.retouch.RetouchLayer
 import com.hifn.pixelcake.diag.DebugLog

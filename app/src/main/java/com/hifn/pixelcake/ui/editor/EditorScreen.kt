@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.hifn.pixelcake.core.edit.EditParams
 import com.hifn.pixelcake.core.edit.RetouchState
+import com.hifn.pixelcake.core.edit.preset.Preset
 import kotlin.math.round
 
 /**
@@ -284,6 +285,54 @@ private fun LutSelector(selected: String, onSelect: (String) -> Unit) {
                     label = { Text(name) }
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun PresetRow(presets: List<Preset>, onPreset: (Preset) -> Unit) {
+    Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+        Text("预设（参数栈）", style = MaterialTheme.typography.bodyMedium)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            presets.forEach { p ->
+                FilterChip(
+                    selected = false,
+                    onClick = { onPreset(p) },
+                    label = { Text(p.name) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ColorTransferRow(
+    selected: String,
+    intensity: Float,
+    onSelect: (String) -> Unit,
+    onIntensity: (Float) -> Unit
+) {
+    val options = listOf(
+        "none" to "无",
+        "portra" to "波特拉",
+        "fuji" to "富士",
+        "retro" to "复古",
+        "morandi" to "莫兰迪",
+        "jp" to "日系"
+    )
+    Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+        Text("追色风格", style = MaterialTheme.typography.bodyMedium)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            options.forEach { (id, name) ->
+                FilterChip(
+                    selected = selected == id,
+                    onClick = { onSelect(id) },
+                    label = { Text(name) }
+                )
+            }
+        }
+        if (selected != "none") {
+            AdjustSlider("追色强度", intensity, 0f, 1f, 0.05f, onIntensity, {})
         }
     }
 }
