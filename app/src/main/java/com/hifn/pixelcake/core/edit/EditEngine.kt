@@ -3,22 +3,25 @@ package com.hifn.pixelcake.core.edit
 import android.graphics.Bitmap
 import com.hifn.pixelcake.core.decode.LinearImage
 import com.hifn.pixelcake.core.decode.RawLinearSource
+import com.hifn.pixelcake.core.edit.retouch.RetouchLayer
 import com.hifn.pixelcake.diag.DebugLog
 import java.util.concurrent.Executors
 
 /**
- * 把 [EditParams] 应用到位图上。
+ * 把 [EditParams]（+ retouch 层）应用到位图上。
  *
  * 三条入口共用同一条像素管线（[PixelProgram]），只是底图来源不同：
  *  - [renderIntoSrgb]        ：底图是 8-bit sRGB 位图（JPEG/HEIF，或 ARW 的秒开占位图）；
  *  - [renderIntoLinear]      ：底图是 [LinearImage]（ARW 的 16-bit 线性母版，滑块实时预览走这条）；
  *  - [renderLinearFile]      ：导出专用，全分辨率 RAW 边解码边分带渲染，不落 JVM 堆。
  *
- * 内存与性能（FIX_LIST F05/F06/F08）：
+ * 内存与性能（FIX_LIST F05/F06/F08；P1b-4 `docs/P1b_DESIGN.md` §2）：
  *  - 一律**分带**处理：一次只持有 `BAND_ROWS` 行的源/目标缓冲，
  *    不再出现「整幅 IntArray + jbyteArray + Bitmap」同时在世的 500MB 峰值；
  *  - 带内按 CPU 核心切片并行，每帧只构建一次 [PixelProgram]，逐像素零装箱；
- *  - 带与带之间检查取消回调，滑块连续拖动时可协作取消，不再排队积压。
+ *  - 带与带之间检查取消回调，滑块连续拖动时可协作取消，不再排队积压；
+ *  - tonal 渲染完成后，若传入 [RetouchState] 则在已物化的目标 Bitmap 上跑 retouch 整图 pass
+ *    （磨皮/液化/祛瑕/追色），复用目标 Bitmap，不额外搬 16-bit 母版。
  */
 object EditEngine {
 
@@ -70,7 +73,9 @@ object EditEngine {
         target: Bitmap,
         base: LinearImage,
         p: EditParams,
-        isCancelled: () -> Boolean = { false }
+        isCancelled: () -> Boolean = { false },
+        retouch: RetouchState? = null,
+        mask: RetouchMask? = null
     ): Boolean {
         val w = base.width
         val h = base.height
@@ -100,6 +105,7 @@ object EditEngine {
             target.setPixels(band, 0, w, 0, y, w, rows)
             y += rows
         }
+        if (retouch != null) RetouchLayer.apply(target, retouch, mask)
         return true
     }
 
@@ -113,7 +119,9 @@ object EditEngine {
         path: String,
         maxLongSide: Int,
         p: EditParams,
-        onProgress: (Int) -> Boolean = { true }
+        onProgress: (Int) -> Boolean = { true },
+        retouch: RetouchState? = null,
+        mask: RetouchMask? = null
     ): Bitmap? {
         val src = RawLinearSource.open(path, maxLongSide) ?: return null
         return try {
@@ -146,6 +154,7 @@ object EditEngine {
                 ok = onProgress(y * 100 / h)
             }
             if (ok) {
+                if (retouch != null) RetouchLayer.apply(target, retouch, mask)
                 DebugLog.i(DebugLog.TAG_EDIT, "export linear ok", mapOf("w" to w, "h" to h))
                 target
             } else {

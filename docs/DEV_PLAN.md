@@ -27,7 +27,7 @@ description: 像素蛋糕（AI 人像精修）安卓应用的唯一开发计划�
 | M0a | ✅ | SDK 升 36 + CI 出首个可装 APK + DebugLog 模块 |
 | M0b | ✅ | ARW 内嵌 JPEG 预览解码（纯 Kotlin TIFF/IFD，零 NDK） |
 | P1a | ✅ | 最小编辑链路 → 首个真机可测 APK（导入/曝光·曲线·LUT/导出/日志） |
-| P1b | 🔧 | **LibRaw 全量解码已接入并启用**（子模块 `third_party/LibRaw`[master `dde798dd`] + LibRaw-cmake[`eb98e432`]，静态链接；`raw_bridge.cpp` 全量解马赛克→RGBA；`useLibRaw=true`，失败回退预览）。待做：P1b-4 人像算子（中性灰/美颜/修复/追色）、P1b-5 ~10 预设、P1b-6 统一真机测试 |
+| P1b | 🔧 | **LibRaw 全量解码已接入并启用**（子模块 `third_party/LibRaw`[master `dde798dd`] + LibRaw-cmake[`eb98e432`]，静态链接；`raw_bridge.cpp` 全量解马赛克→RGBA；`useLibRaw=true`，失败回退预览）。待做：P1b-4 人像算子（中性灰/美颜/修复/追色）、P1b-5 ~10 预设、P1b-6 统一真机测试。**（2026-09-10 起按 `docs/P1b_DESIGN.md` 落地：Phase 1-2 RetouchState/Mask/RetouchLayer/中性灰磨皮已实现，待 CI 验证；Phase 3-7 待续）** |
 | P1+ / P2 / P3 | ⬜ | 待启动 |
 
 > LibRaw master API 注意：已移除 `dcraw_free()`；`dcraw_make_mem_image()` 的返回产物必须用 `LibRaw::dcraw_clear_mem()` 释放，`free_image()` 只释放内部 `imgdata.image`、二者不可混用（见 F02 / D09）；Kotlin `val version` 与 native `getVersion()` JVM 签名冲突，已改名 `librawVersion`（详见 §8 风险表与每日日志 2026-09-09）。
