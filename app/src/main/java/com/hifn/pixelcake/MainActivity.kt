@@ -30,6 +30,7 @@ import com.hifn.pixelcake.core.edit.BrushStroke
 import com.hifn.pixelcake.core.edit.EditEngine
 import com.hifn.pixelcake.core.edit.EditHistory
 import com.hifn.pixelcake.core.edit.EditParams
+import com.hifn.pixelcake.core.edit.EditSnapshot
 import com.hifn.pixelcake.core.edit.InpaintStroke
 import com.hifn.pixelcake.core.edit.NeutralGrayParams
 import com.hifn.pixelcake.core.edit.RasterMask
@@ -58,6 +59,12 @@ import kotlin.math.min
 
 /** 滑块拖动时的重渲节流窗口（FIX_LIST F08）。16ms ≈ 一帧，肉眼无感但能挡掉绝大多数中间值。 */
 private const val RENDER_THROTTLE_MS = 16L
+
+/** 皮肤画笔两描迹的最小归一化距离平方（避免一次拖动塞入成百上千条描迹，拖慢蒙版重建）。 */
+private const val MIN_STROKE_DIST2 = 0.008f * 0.008f
+
+/** 蒙版描迹条数上限（为 `RasterMask.fromStrokes` 的 O(n·r²) 重建耗时设上界）。 */
+private const val MAX_BRUSH_STROKES = 3000
 
 class MainActivity : ComponentActivity() {
 
@@ -89,6 +96,7 @@ private fun AppRoot() {
     var rendered by remember { mutableStateOf<Bitmap?>(null) }
     var status by remember { mutableStateOf("") }
     var exporting by remember { mutableStateOf(false) }
+    var loading by remember { mutableStateOf(false) }
     val exportCancelled = remember { AtomicBoolean(false) }
     val renderMutex = remember { Mutex() }
     var renderStamp by remember { mutableStateOf(0) }
@@ -100,6 +108,8 @@ private fun AppRoot() {
     var brushStrokes by remember { mutableStateOf(emptyList<Pair<Float, Float>>()) }
     var inpaintRadius by remember { mutableStateOf(0.01f) }
     var inpaintStrokes by remember { mutableStateOf(emptyList<Pair<Float, Float>>()) }
+    // 当前生效的预设 id（用于 UI 高亮；用户手动改动任一参数即清空）
+    var activePresetId by remember { mutableStateOf("none") }
 
     // 参数 / retouch / 蒙版变化 -> 异步把参数栈 + retouch 重渲到代理图。
     // 用 snapshotFlow + conflate + collectLatest 做节流与取消（FIX_LIST F08）。
@@ -157,7 +167,10 @@ private fun AppRoot() {
     val openInEditor: (Uri) -> Unit = { uri ->
         DebugLog.i(DebugLog.TAG_IMPORT, "pick", mapOf("uri" to uri.toString()))
         scope.launch {
+            loading = true
+            status = "正在解码…"
             val dec = runCatching { Decoder.decodeToProxy(context, uri, profile.proxyLongEdge) }.getOrNull()
+            loading = false
             if (dec == null) {
                 status = "无法解码该文件"
                 DebugLog.w(DebugLog.TAG_DECODE, "decode failed", mapOf("uri" to uri.toString()))
@@ -171,6 +184,7 @@ private fun AppRoot() {
                 retouchTool = "none"
                 inpaintStrokes = emptyList()
                 inpaintRadius = 0.01f
+                activePresetId = "none"
                 status = if (dec.linear != null) "RAW 已按 16-bit 线性管线载入" else ""
                 screen = "editor"
                 DebugLog.i(
@@ -207,6 +221,7 @@ private fun AppRoot() {
                     inpaintRadius = inpaintRadius,
                     inpaintCount = inpaintStrokes.size,
                     presets = Presets.ALL,
+                    activePresetId = activePresetId,
                     canUndo = history.canUndo,
                     canRedo = history.canRedo,
                     status = status,
@@ -214,22 +229,59 @@ private fun AppRoot() {
                     onParamChange = {
                         // F08：拖动过程中只更新参数，不进撤销栈
                         params = it
+                        if (activePresetId != "none") activePresetId = "none"
                     },
-                    onParamCommit = { history.push(params) },
-                    onRetouchChange = { retouch = it },
+                    onParamCommit = { history.push(EditSnapshot(params, retouch)) },
+                    onRetouchChange = {
+                        retouch = it
+                        if (activePresetId != "none") activePresetId = "none"
+                    },
+                    onRetouchCommit = { history.push(EditSnapshot(params, retouch)) },
                     onToolChange = { retouchTool = it },
-                    onBrushStroke = { nx, ny -> brushStrokes = brushStrokes + (nx to ny) },
+                    onBrushStroke = { nx, ny ->
+                        // 节流：与上一描迹太近则忽略；并设条数上限，防蒙版重建爆炸。
+                        val last = brushStrokes.lastOrNull()
+                        val far = last == null ||
+                            (nx - last.first) * (nx - last.first) + (ny - last.second) * (ny - last.second) >= MIN_STROKE_DIST2
+                        if (far && brushStrokes.size < MAX_BRUSH_STROKES) {
+                            brushStrokes = brushStrokes + (nx to ny)
+                        }
+                    },
                     onBrushRadiusChange = { brushRadius = it },
-                    onInpaintStroke = { nx, ny -> inpaintStrokes = inpaintStrokes + (nx to ny) },
+                    onInpaintStroke = { nx, ny ->
+                        if (inpaintStrokes.size < MAX_BRUSH_STROKES) inpaintStrokes = inpaintStrokes + (nx to ny)
+                    },
                     onInpaintRadiusChange = { inpaintRadius = it },
                     onClearMask = { brushStrokes = emptyList() },
                     onClearInpaint = { inpaintStrokes = emptyList() },
                     onPreset = { p ->
                         params = p.params
                         retouch = p.retouch
+                        activePresetId = p.id
+                        history.push(EditSnapshot(params, retouch))
                     },
-                    onUndo = { if (history.undo()) params = history.current },
-                    onRedo = { if (history.redo()) params = history.current },
+                    onReset = {
+                        params = EditParams()
+                        retouch = RetouchState()
+                        brushStrokes = emptyList()
+                        inpaintStrokes = emptyList()
+                        activePresetId = "none"
+                        history.push(EditSnapshot(params, retouch))
+                    },
+                    onUndo = {
+                        if (history.undo()) {
+                            params = history.current.params
+                            retouch = history.current.retouch
+                            activePresetId = "none"
+                        }
+                    },
+                    onRedo = {
+                        if (history.redo()) {
+                            params = history.current.params
+                            retouch = history.current.retouch
+                            activePresetId = "none"
+                        }
+                    },
                     onExport = {
                         scope.launch {
                             val img = imported ?: return@launch
@@ -335,6 +387,7 @@ private fun AppRoot() {
                         retouchTool = "none"
                         inpaintStrokes = emptyList()
                         inpaintRadius = 0.01f
+                        activePresetId = "none"
                         renderStamp = 0
                         screen = "home"
                     }
@@ -345,7 +398,9 @@ private fun AppRoot() {
         }
         else -> HomeScreen(
             onImportPhoto = { photoLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
-            onImportArw = { arwLauncher.launch(arrayOf("*/*")) }
+            onImportArw = { arwLauncher.launch(arrayOf("*/*")) },
+            loading = loading,
+            message = status
         )
     }
 }

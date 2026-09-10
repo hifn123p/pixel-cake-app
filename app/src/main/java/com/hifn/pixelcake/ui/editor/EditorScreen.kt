@@ -41,11 +41,13 @@ import kotlin.math.round
 
 /**
  * 编辑界面（P1a 最小可用链路 + P1b 人像精修）。
- * 所有状态由上层 AppRoot 持有，这里只负责呈现与回调：滑块拖动 -> onParamChange(...)/onRetouchChange(...)。
+ * 所有状态由上层 AppRoot 持有，这里只负责呈现与回调：滑块拖动 -> onParamChange(...)/onRetouchChange(...)，
+ * 松手/选择类动作 -> onParamCommit()/onRetouchCommit() 入撤销栈。
  *
- * 预览图支持两种指针交互：
- *  - 非画笔模式：按住查看原图（FIX_LIST 原功能）；
- *  - 画笔模式：在图上拖动涂抹皮肤区域，坐标归一化 [0..1] 经 onBrushStroke 上报，由上层构建蒙版。
+ * 预览图支持三种指针交互（由 [retouchTool] 决定）：
+ *  - "none"   ：按住图片查看原图（原图对比）；
+ *  - "skin"   ：拖动涂抹皮肤作用区（磨皮/液化蒙版），坐标归一化 [0..1] 经 onBrushStroke 上报；
+ *  - "blemish"：点击脏点位置，追加祛瑕描迹，经 onInpaintStroke 上报。
  */
 @Composable
 fun EditorScreen(
@@ -59,6 +61,7 @@ fun EditorScreen(
     inpaintRadius: Float,
     inpaintCount: Int,
     presets: List<Preset>,
+    activePresetId: String,
     canUndo: Boolean,
     canRedo: Boolean,
     status: String,
@@ -66,6 +69,7 @@ fun EditorScreen(
     onParamChange: (EditParams) -> Unit,
     onParamCommit: () -> Unit = {},
     onRetouchChange: (RetouchState) -> Unit,
+    onRetouchCommit: () -> Unit = {},
     onToolChange: (String) -> Unit,
     onBrushStroke: (Float, Float) -> Unit,
     onBrushRadiusChange: (Float) -> Unit,
@@ -74,6 +78,7 @@ fun EditorScreen(
     onClearMask: () -> Unit,
     onClearInpaint: () -> Unit,
     onPreset: (Preset) -> Unit,
+    onReset: () -> Unit,
     onUndo: () -> Unit,
     onRedo: () -> Unit,
     onExport: () -> Unit,
@@ -100,6 +105,7 @@ fun EditorScreen(
             Row {
                 TextButton(onClick = onUndo, enabled = canUndo) { Text("撤销") }
                 TextButton(onClick = onRedo, enabled = canRedo) { Text("重做") }
+                TextButton(onClick = onReset) { Text("重置") }
             }
         }
 
@@ -158,25 +164,11 @@ fun EditorScreen(
         Spacer(Modifier.height(8.dp))
 
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
-            AdjustSlider("曝光", params.exposureEv, -2f, 2f, 0.1f, { onParamChange(params.copy(exposureEv = it)) }, onParamCommit)
-            AdjustSlider("对比度", params.contrast, -1f, 1f, 0.05f, { onParamChange(params.copy(contrast = it)) }, onParamCommit)
-            AdjustSlider("饱和度", params.saturation, -1f, 1f, 0.05f, { onParamChange(params.copy(saturation = it)) }, onParamCommit)
-            AdjustSlider("色温", params.temperature, -1f, 1f, 0.05f, { onParamChange(params.copy(temperature = it)) }, onParamCommit)
-            AdjustSlider("色调", params.tint, -1f, 1f, 0.05f, { onParamChange(params.copy(tint = it)) }, onParamCommit)
-            AdjustSlider("阴影", params.shadows, -1f, 1f, 0.05f, { onParamChange(params.copy(shadows = it)) }, onParamCommit)
-            AdjustSlider("高光", params.highlights, -1f, 1f, 0.05f, { onParamChange(params.copy(highlights = it)) }, onParamCommit)
-            AdjustSlider("LUT 强度", params.lutIntensity, 0f, 1f, 0.05f, { onParamChange(params.copy(lutIntensity = it)) }, onParamCommit)
-            LutSelector(params.lutId) {
-                onParamChange(params.copy(lutId = it))
-                onParamCommit()
-            }
-
             // ---- 人像精修（P1b-4 / P1b-6，全算子 UI + 预设）----
-            Spacer(Modifier.height(8.dp))
             Text("人像精修", style = MaterialTheme.typography.titleSmall)
 
-            // 预设（参数栈，P1b-6）
-            PresetRow(presets, onPreset)
+            // 预设（参数栈，P1b-6）：高亮当前生效预设
+            PresetRow(presets, activePresetId, onPreset)
 
             // 工具选择：关闭 / 皮肤 / 祛瑕
             Spacer(Modifier.height(8.dp))
@@ -197,9 +189,9 @@ fun EditorScreen(
             // 皮肤画笔作用区
             if (retouchTool == "skin") {
                 AdjustSlider("磨皮强度", retouch.neutralGray.strength, 0f, 1f, 0.05f,
-                    { onRetouchChange(retouch.copy(neutralGray = retouch.neutralGray.copy(strength = it))) }, {})
+                    { onRetouchChange(retouch.copy(neutralGray = retouch.neutralGray.copy(strength = it))) }, onRetouchCommit)
                 AdjustSlider("磨皮半径", retouch.neutralGray.radiusNorm, 0.002f, 0.05f, 0.002f,
-                    { onRetouchChange(retouch.copy(neutralGray = retouch.neutralGray.copy(radiusNorm = it))) }, {})
+                    { onRetouchChange(retouch.copy(neutralGray = retouch.neutralGray.copy(radiusNorm = it))) }, onRetouchCommit)
                 AdjustSlider("笔刷大小", brushRadius, 0.005f, 0.15f, 0.005f, onBrushRadiusChange, {})
                 Button(onClick = onClearMask, Modifier.fillMaxWidth()) { Text("清除皮肤蒙版") }
             }
@@ -216,11 +208,11 @@ fun EditorScreen(
             Spacer(Modifier.height(8.dp))
             Text("美型", style = MaterialTheme.typography.bodyMedium)
             AdjustSlider("瘦脸", retouch.beauty.slimFace, 0f, 1f, 0.05f,
-                { onRetouchChange(retouch.copy(beauty = retouch.beauty.copy(slimFace = it))) }, {})
+                { onRetouchChange(retouch.copy(beauty = retouch.beauty.copy(slimFace = it))) }, onRetouchCommit)
             AdjustSlider("收下颌", retouch.beauty.slimJaw, 0f, 1f, 0.05f,
-                { onRetouchChange(retouch.copy(beauty = retouch.beauty.copy(slimJaw = it))) }, {})
+                { onRetouchChange(retouch.copy(beauty = retouch.beauty.copy(slimJaw = it))) }, onRetouchCommit)
             AdjustSlider("大眼", retouch.beauty.eyeEnlarge, 0f, 1f, 0.05f,
-                { onRetouchChange(retouch.copy(beauty = retouch.beauty.copy(eyeEnlarge = it))) }, {})
+                { onRetouchChange(retouch.copy(beauty = retouch.beauty.copy(eyeEnlarge = it))) }, onRetouchCommit)
 
             // 追色（全局色彩风格）
             Spacer(Modifier.height(8.dp))
@@ -228,8 +220,25 @@ fun EditorScreen(
                 selected = retouch.colorTransfer.refId,
                 intensity = retouch.colorTransfer.intensity,
                 onSelect = { onRetouchChange(retouch.copy(colorTransfer = retouch.colorTransfer.copy(refId = it))) },
-                onIntensity = { onRetouchChange(retouch.copy(colorTransfer = retouch.colorTransfer.copy(intensity = it))) }
+                onIntensity = { onRetouchChange(retouch.copy(colorTransfer = retouch.colorTransfer.copy(intensity = it))) },
+                onCommit = onRetouchCommit
             )
+
+            // ---- 基础调色（tonal，点态管线）----
+            Spacer(Modifier.height(8.dp))
+            Text("基础调色", style = MaterialTheme.typography.titleSmall)
+            AdjustSlider("曝光", params.exposureEv, -2f, 2f, 0.1f, { onParamChange(params.copy(exposureEv = it)) }, onParamCommit)
+            AdjustSlider("对比度", params.contrast, -1f, 1f, 0.05f, { onParamChange(params.copy(contrast = it)) }, onParamCommit)
+            AdjustSlider("饱和度", params.saturation, -1f, 1f, 0.05f, { onParamChange(params.copy(saturation = it)) }, onParamCommit)
+            AdjustSlider("色温", params.temperature, -1f, 1f, 0.05f, { onParamChange(params.copy(temperature = it)) }, onParamCommit)
+            AdjustSlider("色调", params.tint, -1f, 1f, 0.05f, { onParamChange(params.copy(tint = it)) }, onParamCommit)
+            AdjustSlider("阴影", params.shadows, -1f, 1f, 0.05f, { onParamChange(params.copy(shadows = it)) }, onParamCommit)
+            AdjustSlider("高光", params.highlights, -1f, 1f, 0.05f, { onParamChange(params.copy(highlights = it)) }, onParamCommit)
+            AdjustSlider("LUT 强度", params.lutIntensity, 0f, 1f, 0.05f, { onParamChange(params.copy(lutIntensity = it)) }, onParamCommit)
+            LutSelector(params.lutId) {
+                onParamChange(params.copy(lutId = it))
+                onParamCommit()
+            }
         }
 
         Spacer(Modifier.height(8.dp))
@@ -290,13 +299,13 @@ private fun LutSelector(selected: String, onSelect: (String) -> Unit) {
 }
 
 @Composable
-private fun PresetRow(presets: List<Preset>, onPreset: (Preset) -> Unit) {
+private fun PresetRow(presets: List<Preset>, selectedId: String, onPreset: (Preset) -> Unit) {
     Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
         Text("预设（参数栈）", style = MaterialTheme.typography.bodyMedium)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             presets.forEach { p ->
                 FilterChip(
-                    selected = false,
+                    selected = selectedId == p.id,
                     onClick = { onPreset(p) },
                     label = { Text(p.name) }
                 )
@@ -310,7 +319,8 @@ private fun ColorTransferRow(
     selected: String,
     intensity: Float,
     onSelect: (String) -> Unit,
-    onIntensity: (Float) -> Unit
+    onIntensity: (Float) -> Unit,
+    onCommit: () -> Unit
 ) {
     val options = listOf(
         "none" to "无",
@@ -326,13 +336,13 @@ private fun ColorTransferRow(
             options.forEach { (id, name) ->
                 FilterChip(
                     selected = selected == id,
-                    onClick = { onSelect(id) },
+                    onClick = { onSelect(id); onCommit() },
                     label = { Text(name) }
                 )
             }
         }
         if (selected != "none") {
-            AdjustSlider("追色强度", intensity, 0f, 1f, 0.05f, onIntensity, {})
+            AdjustSlider("追色强度", intensity, 0f, 1f, 0.05f, onIntensity, onCommit)
         }
     }
 }

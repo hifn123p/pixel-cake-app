@@ -8,8 +8,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
@@ -22,6 +24,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -37,10 +40,18 @@ import com.hifn.pixelcake.ui.theme.Warn
  *
  * ARW 走「打开 ARW 文件」入口：内嵌 JPEG 只作秒开占位，
  * 真正的修图源是 LibRaw 解出的 16-bit 线性母版（P1b 已启用，不再是"仅预览"）。
+ *
+ * @param loading 正在解码（33MP ARW 的代理线性解码耗时可见，给出进度反馈，避免"点了没反应"）。
+ * @param message 状态消息（解码失败提示 / 载入结果），为空则不显示。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(onImportPhoto: () -> Unit, onImportArw: () -> Unit) {
+fun HomeScreen(
+    onImportPhoto: () -> Unit,
+    onImportArw: () -> Unit,
+    loading: Boolean = false,
+    message: String = ""
+) {
     val context = LocalContext.current
     val caps = remember { context.probeCapabilities() }
 
@@ -65,11 +76,11 @@ fun HomeScreen(onImportPhoto: () -> Unit, onImportArw: () -> Unit) {
             item {
                 Column(modifier = Modifier.padding(vertical = 8.dp)) {
                     Text(
-                        "本地 RAW 调色 · 广色域管线",
+                        "本地 RAW 调色 · 人像精修",
                         style = MaterialTheme.typography.displaySmall
                     )
                     Text(
-                        "第 1 步：工程骨架与 CI。以下为设备能力实测，用于验证技术方案假设。",
+                        "P1 已完成：ARW 全量修图 · 磨皮/液化/祛瑕/追色 · 预设 · 画笔蒙版。下一步：A7C2 直连（P2）。",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 4.dp)
@@ -115,6 +126,7 @@ fun HomeScreen(onImportPhoto: () -> Unit, onImportArw: () -> Unit) {
                 SectionCard("导入（编辑链路）") {
                     Button(
                         onClick = onImportPhoto,
+                        enabled = !loading,
                         modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
                     ) {
                         Text("导入照片（JPEG / HEIF）")
@@ -122,11 +134,41 @@ fun HomeScreen(onImportPhoto: () -> Unit, onImportArw: () -> Unit) {
                     Spacer(Modifier.height(8.dp))
                     Button(
                         onClick = onImportArw,
+                        enabled = !loading,
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text("打开 ARW 文件（16-bit 线性 RAW 修图）")
                     }
+                    if (loading) {
+                        Spacer(Modifier.height(12.dp))
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp
+                            )
+                            Text(
+                                message.ifEmpty { "正在解码…" },
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    } else if (message.isNotEmpty()) {
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            message,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
+            }
+
+            item {
+                // P2 PoC-1：相机 USB 直连检测（免权限枚举；真机插上 A7C2 后点按验证）
+                CameraPanel()
             }
 
             item {
@@ -147,14 +189,13 @@ fun HomeScreen(onImportPhoto: () -> Unit, onImportArw: () -> Unit) {
 
             item {
                 SectionCard("路线图") {
-                    // 与 DEV_PLAN v3.0 的 P1a/P1b 对齐；旧的 8 步版（fp16 + EGL P3 /
-                    // 16bit TIFF / MediaPipe）已被 v3.0 删除，这里是真机上看得到的信息（F16）
+                    // 与 DEV_PLAN v3.0 对齐：P1（含 P1b 人像精修）已完成；P2 直连为下一步
                     RoadmapStep(1, "工程骨架 + CI", done = true)
                     RoadmapStep(2, "NDK + LibRaw（A7C2 ARW 解码）", done = true)
                     RoadmapStep(3, "16-bit 线性渲染管线（预览/导出同源）", done = true)
-                    RoadmapStep(4, "人像算子（磨皮 / 液化 / 祛瑕 / 追色）", done = false)
-                    RoadmapStep(5, "内置人像预设 ~10 套", done = false)
-                    RoadmapStep(6, "局部调整与蒙版", done = false)
+                    RoadmapStep(4, "人像算子（磨皮 / 液化 / 祛瑕 / 追色）", done = true)
+                    RoadmapStep(5, "内置人像预设 10 套", done = true)
+                    RoadmapStep(6, "局部调整与画笔蒙版", done = true)
                     RoadmapStep(7, "A7C2 直连（USB PTP 拉图）", done = false)
                     RoadmapStep(8, "AI 接入（TFLite + NNAPI）", done = false)
                 }

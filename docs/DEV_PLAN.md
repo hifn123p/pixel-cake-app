@@ -2,7 +2,7 @@
 title: 像素蛋糕 App — 开发计划（唯一有效文档 v3.0）
 status: active
 created: 2026-09-05
-updated: 2026-09-09
+updated: 2026-09-11
 project: D:\AI_Project
 replaces: [PLAN.md, FEASIBILITY_REPORT.md, P1_MVP_DESIGN.md, PLAN_REVIEW.md]
 description: 像素蛋糕（AI 人像精修）安卓应用的唯一开发计划：项目介绍、功能、核心原理、技术路线、代码架构（复用清单含具体路径 / 新开发模块）、设备要求、交付调试与风险。旧规划文档已归档至 docs/archive/。
@@ -27,8 +27,9 @@ description: 像素蛋糕（AI 人像精修）安卓应用的唯一开发计划�
 | M0a | ✅ | SDK 升 36 + CI 出首个可装 APK + DebugLog 模块 |
 | M0b | ✅ | ARW 内嵌 JPEG 预览解码（纯 Kotlin TIFF/IFD，零 NDK） |
 | P1a | ✅ | 最小编辑链路 → 首个真机可测 APK（导入/曝光·曲线·LUT/导出/日志） |
-| P1b | 🔧 | **LibRaw 全量解码已接入并启用**（子模块 `third_party/LibRaw`[master `dde798dd`] + LibRaw-cmake[`eb98e432`]，静态链接；`raw_bridge.cpp` 全量解马赛克→RGBA；`useLibRaw=true`，失败回退预览）。**2026-09-10 批次（待 CI）**：Phase 1-2 磨皮引擎 + 编辑器 RetouchState/画笔蒙版已落；本次补齐 **P1b-4 四算子全量实现**——NeutralGray（Phase 2 试点）/ Beauty（液化）/ Inpaint（祛瑕）/ ColorTransfer（追色）均落 `core/edit/retouch/`，由 `RetouchLayer` 单趟 getPixels 按「磨皮→液化→祛瑕→追色」编排；**retouch 整图 pass 现已接到 RAW 与 JPEG/HEIF 的预览 + 全分辨率导出四条路径**（复用目标 Bitmap，符合 F05）。编辑器补齐：工具选择（皮肤/祛瑕）、美型三滑块、追色风格 + 强度、参数栈预设（P1b-6，`core/edit/preset/Presets.kt`：原图/日系/胶片/复古/莫兰迪/奶油肌）。新增单测 BeautyTest/InpaintTest/ColorTransferTest/PresetsTest。**待做**：P1b-6 统一真机测试、P1b-5 ~10 预设扩量、P1+ ML 蒙版。 |
-| P1+ / P2 / P3 | ⬜ | 待启动 |
+| P1b | ✅ | **LibRaw 全量解码**（子模块 `third_party/LibRaw`[master `dde798dd`] + LibRaw-cmake[`eb98e432`]，静态链接；`raw_bridge.cpp` 全量解马赛克→RGBA；`useLibRaw=true`，失败回退预览）。**人像算子全量落地**：NeutralGray / Beauty / Inpaint / ColorTransfer 均落 `core/edit/retouch/`，由 `RetouchLayer` 单趟 getPixels 按「磨皮→液化→祛瑕→追色」编排；retouch 整图 pass 已接到 RAW 与 JPEG/HEIF 的预览 + 全分辨率导出四条路径（复用目标 Bitmap，符合 F05）。编辑器：工具选择（皮肤/祛瑕）、美型三滑块、追色风格+强度、**10 套参数栈预设**（`core/edit/preset/Presets.kt`）。**2026-09-11 批次**：撤销/重做升级为 `EditSnapshot`（tonal + retouch 同步回退）、画笔描迹节流+条数上限、打开大图加载进度反馈、「重置全部」+ 预设选中态。单测：NeutralGray / Beauty / Inpaint / ColorTransfer / RasterMask / Presets / EditHistory。**剩**：P1b-6 真机统一测试（用户侧 A7C2 实拍验收）。 |
+| P1+ / F03② | ⬜ | **P1+** ML 自动蒙版（SCRFD / 2DFAN4 / BiSeNet → TFLite + NNAPI）待启动（`RetouchMask` 接口已预留，接入 UI 零改动）。**F03②**「代理秒进」的感知延迟已用「打开即显解码进度 + 预览本就走 `halfSize` 代理」缓解；「后台母版无缝切换」为可选画质优化，后置。 |
+| P2 / P3 | 🔧 / 🔜 | **P2**（进行中）：A7C2 USB 直连 —— 设计稿 `docs/P2_DESIGN.md`；**PoC-1 USB 检测已落地**（`camera/CameraProbe` + `camera/UsbCameraScanner` + 首页 `CameraPanel`：免权限枚举设备 + Sony VID/接口类→USB 模式识别 + `CAMERA` 日志 + 纯 JVM 单测）。后续 PoC-2→4：权限 → PTP 会话 → 枚举/拉图 → **复用 P1 管线套预设**（`Presets.ALL` 已就绪）。**P3**：NAS Docker 化 Rust 引擎。 |
 
 > LibRaw master API 注意：已移除 `dcraw_free()`；`dcraw_make_mem_image()` 的返回产物必须用 `LibRaw::dcraw_clear_mem()` 释放，`free_image()` 只释放内部 `imgdata.image`、二者不可混用（见 F02 / D09）；Kotlin `val version` 与 native `getVersion()` JVM 签名冲突，已改名 `librawVersion`（详见 §8 风险表与每日日志 2026-09-09）。
 

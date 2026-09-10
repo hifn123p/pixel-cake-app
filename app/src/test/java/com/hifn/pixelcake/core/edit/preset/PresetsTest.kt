@@ -5,8 +5,13 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** 预设数据完整性：id 唯一，且引用的追色风格必须真实存在。 */
+/** 预设数据完整性：数量、id 唯一，且引用的追色风格必须真实存在。 */
 class PresetsTest {
+
+    @Test
+    fun hasTenBuiltins() {
+        assertEquals("P1b 规格为 ~10 套内置预设", 10, Presets.ALL.size)
+    }
 
     @Test
     fun idsAreUnique() {
@@ -26,8 +31,13 @@ class PresetsTest {
     }
 
     @Test
-    fun hasExpectedBuiltins() {
+    fun noneIsFirstAndExpectedIdsPresent() {
+        assertEquals("首项应为原图(none)", "none", Presets.ALL.first().id)
         val ids = Presets.ALL.map { it.id }.toSet()
-        assertTrue(ids.containsAll(listOf("none", "jp", "film", "retro", "morandi", "creamy")))
+        assertTrue(
+            ids.containsAll(
+                listOf("none", "jp", "film", "retro", "morandi", "creamy", "portra", "bw", "cool", "warm")
+            )
+        )
     }
 }

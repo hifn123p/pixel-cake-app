@@ -15,6 +15,9 @@ import com.hifn.pixelcake.core.edit.RetouchState
  *
  * 当前以内置 Kotlin 数据表实现（零 Android 资源 IO，纯 JVM 可测）；后续若需用户自定义 /
  * 外部分发的 `.cube` 滤镜，再外置为 `assets/preset/` 下的 JSON 预设（接口不变）。
+ *
+ * 共 10 套：原图 / 日系 / 胶片 / 复古 / 莫兰迪 / 奶油肌 / 波特拉 / 黑白 / 冷调 / 暖调。
+ * `none`（原图）恒为首项，作为「无预设」兜底与手动调整的复位目标。
  */
 data class Preset(
     val id: String,
@@ -54,6 +57,26 @@ object Presets {
                 beauty = BeautyParams(slimFace = 0.2f),
                 colorTransfer = ColorTransferParams(refId = "portra", intensity = 0.3f)
             )
+        ),
+        Preset(
+            id = "portra", name = "波特拉",
+            params = EditParams(contrast = 0.05f, saturation = 0.08f, temperature = 0.08f),
+            retouch = RetouchState(colorTransfer = ColorTransferParams(refId = "portra", intensity = 0.55f))
+        ),
+        Preset(
+            id = "bw", name = "黑白",
+            params = EditParams(saturation = 0f, lutId = "bw", lutIntensity = 1f),
+            retouch = RetouchState()
+        ),
+        Preset(
+            id = "cool", name = "冷调",
+            params = EditParams(temperature = -0.15f, lutId = "cool", lutIntensity = 0.8f),
+            retouch = RetouchState(colorTransfer = ColorTransferParams(refId = "fuji", intensity = 0.4f))
+        ),
+        Preset(
+            id = "warm", name = "暖调",
+            params = EditParams(temperature = 0.15f, lutId = "warm", lutIntensity = 0.8f),
+            retouch = RetouchState(colorTransfer = ColorTransferParams(refId = "retro", intensity = 0.35f))
         )
     )
 

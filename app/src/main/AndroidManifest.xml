@@ -6,6 +6,10 @@
          不需要 READ_MEDIA_IMAGES / READ_MEDIA_VISUAL_USER_SELECTED（FIX_LIST F19）。
          不声明读取权限 = 少一项隐私面、少一次授权弹窗。 -->
 
+    <!-- P2（相机直连）：声明 USB 宿主能力。required=false —— 非 USB 场景（相册导入/编辑）不受影响，
+         也不会因此限制在无 USB 宿主的设备上安装。 -->
+    <uses-feature android:name="android.hardware.usb.host" android:required="false" />
+
     <application
         android:name=".PixelCakeApp"
         android:allowBackup="true"
