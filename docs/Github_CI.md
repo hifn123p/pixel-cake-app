@@ -2,79 +2,31 @@
 
 > 由 push 触发的工作流运行结果整理。本文件每次 CI 后**覆盖重写**（前一次报告已清空）。
 > 生成时间：2026-09-10（本地）
-> 关联提交：`6d5f4e389ac723806cbe59138eafc1d3d1539709`
-> 运行链接：<https://github.com/hifn123p/pixel-cake-app/actions/runs/34485237118>
+> 关联提交：`e68ac15e8b495d6075ab129dddbc29b2db496545`
+> 运行链接：<https://github.com/hifn123p/pixel-cake-app/actions/runs/34486614190>
 
-## 结论：❌ 失败（failure）—— 单测编译错误（主代码已通过）
+## 结论：✅ 成功（success）—— retouch 整改 + 单测类型修复全部通过
 
-push 到 `main` 触发 `Android CI`。本轮为 retouch 参数顺序修正（commit `6d5f4e3`，对应 run `34485237118`）。
-**好消息**：主代码 `MainActivity.kt` 与 `EditEngine.kt` 已编译通过（`compileDebugKotlin` ✅、`Lint` ✅）。
-**坏消息**：`Build Debug APK` 的 `:app:compileDebugUnitTestKotlin` 任务因单测 `NeutralGrayTest.kt` 的类型不匹配而失败，
-导致未产出 APK、单测未执行。
+push 到 `main` 触发 `Android CI`。本轮为单测 `NeutralGrayTest.kt` 的 `Long`→`Int` 类型修复（commit `e68ac15`，对应 run `34486614190`）。
+前一轮（run `34485237118`）主代码已绿、仅单测编译因 `v: Long` 与 `or`/`shl` 的 `Int` 运算冲突失败；本轮加上 `.toInt()` 后**单测编译通过**，
+全链路打通：Build 编译 → 单测执行 → Lint 全部转绿，并上传 debug APK。
 
 ## 任务（Job）总览
 
 | Job | 结论 | 说明 |
 |---|---|---|
-| Build Debug APK | ❌ failure | `:app:compileDebugUnitTestKotlin` 编译单测失败 → 未上传 APK |
+| Build Debug APK | ✅ success | `compileDebugKotlin` + `testDebugUnitTest` 全过 → 上传 debug APK |
 | Lint (Android Lint) | ✅ success | `Run lint`（lintDebug）通过 |
 | Check signing secrets | ✅ success | 探测 `KEYSTORE_BASE64` 是否存在 |
 | Signed Release | ⏭ skipped | 未配置 `KEYSTORE_BASE64` secret |
 
-> 主代码已绿（Lint + compileDebugKotlin 均过）；本轮仅卡在单测编译。修一处 `.toInt()` 即可重新全绿。
+> 本轮产出 APK artifact（Build 成功上传）；release 因无签名 secret 跳过。retouch 局部调整功能至此端到端可编译、可测、可 lint。
 
-## 失败详情
+## 本轮关键修复
 
-- **失败任务**：`:app:compileDebugUnitTestKotlin`
-- **出错文件**：`app/src/test/java/com/hifn/pixelcake/core/edit/retouch/NeutralGrayTest.kt`
-- **报错（节选）**：
-
-```
-e: .../NeutralGrayTest.kt:20:44 Argument type mismatch: actual type is 'Long', but 'Int' was expected.
-e: .../NeutralGrayTest.kt:20:58 Argument type mismatch: actual type is 'Long', but 'Int' was expected.
-e: .../NeutralGrayTest.kt:20:70 Argument type mismatch: actual type is 'Long', but 'Int' was expected.
-> Task :app:compileDebugUnitTestKotlin FAILED
-```
-
-- **出错行**：
-
-```kotlin
-// NeutralGrayTest.kt:15-20
-var seed = 12345L                       // Long
-for (i in px.indices) {
-    seed = (seed * 1103515245 + 12345) and 0x7fffffff   // Long
-    val n = ((seed % 80) - 40)          // Long
-    val v = (128 + n).coerceIn(0, 255)  // Long（128 + n 为 Long，coerceIn 推断为 Long）
-    px[i] = 0xff000000.toInt() or (v shl 16) or (v shl 8) or v
-    //                              ↑ v 是 Long，而 Int.or / Int.shl 要求 Int → 类型不符
-}
-```
-
-## 根因分析（Kotlin 整数类型推断）
-
-`seed` 声明为 `Long`（`12345L`），后续 `n`、`v` 全部推断为 `Long`。
-`or` / `shl` 是 `Int` 的中缀扩展（`infix fun Int.or(other: Int)` / `infix fun Int.shl(bitCount: Int)`），
-要求操作数为 `Int`。`v: Long` 与它混用触发 `Argument type mismatch: actual type is 'Long', but 'Int' was expected`。
-
-注意：第 36 行 `preservesHardEdge` 里的 `v = if (x < w / 2) 20 else 220` 是 `Int` 字面量，未受影响——只有
-`smoothsFlatNoisyRegion` 里这段 LCG 噪声生成因 `seed = 12345L` 整条链变成了 `Long`。
-
-## 修复方案（最小改动，仅改 `NeutralGrayTest.kt` 一行）
-
-把 `v` 显式转成 `Int`（`.coerceIn(0, 255)` 结果域本就在 0–255，转 Int 安全）：
-
-```kotlin
-// NeutralGrayTest.kt:19 —— 加 .toInt()
-val v = (128 + n).coerceIn(0, 255).toInt()
-```
-
-或在第 18 行把 `n` 转 Int（二选一即可）：
-
-```kotlin
-val n = ((seed % 80) - 40).toInt()
-```
-
-其余代码（`or` / `shl` / `0xff000000.toInt()`）保持不变，全部按 `Int` 运算。
+- **文件**：`app/src/test/java/com/hifn/pixelcake/core/edit/retouch/NeutralGrayTest.kt`
+- **改动**：第 19 行 `val v = (128 + n).coerceIn(0, 255)` → `val v = (128 + n).coerceIn(0, 255).toInt()`
+- **原因**：`seed = 12345L`（`Long`）使 `n` / `v` 整条链推断为 `Long`；`or` / `shl` 是 `Int` 中缀运算，要求 `Int`。`.toInt()` 把 0–255 域安全转回 `Int`，消除类型不匹配。
 
 ## 历史回归记录
 
@@ -84,14 +36,14 @@ val n = ((seed % 80) - 40).toInt()
 | `34430484406` | `71f9737` | ❌ failure | 编译 MainActivity.kt:97 缺 import |
 | `34433386106` | `610f85f` | ✅ success | 无 |
 | `34481989723` | `9c67297` | ❌ failure | 编译 MainActivity.kt:110/195 尾随 lambda 绑错参数（retouch 接入） |
-| `34485237118` | `6d5f4e3` | ❌ failure | 单测 NeutralGrayTest.kt:20 `Long`/`Int` 类型不匹配 |
+| `34485237118` | `6d5f4e3` | ❌ failure | 单测 NeutralGrayTest.kt:19/20 `Long`/`Int` 类型不匹配 |
+| `34486614190` | `e68ac15` | ✅ success | 无（单测 `.toInt()` 修复后全绿） |
 
 ## 后续步骤
 
-1. 按上面方案改 `NeutralGrayTest.kt` 第 19 行（加 `.toInt()`）或第 18 行。
-2. **全量推送**本地修改 → 触发新一轮 CI。
-3. 预期：单测编译通过 → 单测全绿 → Build 上传 debug APK；Lint 已稳定转绿；release 仍因无 keystore 跳过。
-4. 新一轮结果继续覆盖写入本文件。
+1. 真机（一加15）下载本轮 debug APK 验证 retouch 局部调整功能运行是否正常（已预留调试日志）。
+2. 如有新修改，按固定流程 **全量推送** → 触发 CI → 结果覆盖写入本文件再推送。
+3. 如需发布签名 Release，需在仓库 Secrets 配置 `KEYSTORE_BASE64`（及别名/密码），否则 release job 持续跳过。
 
 ---
-*本报告由 push 后 GitHub Actions 运行结果自动整理；本轮 retouch 参数顺序修正后主代码已绿，仅余单测一处 Long/Int 类型不匹配。*
+*本报告由 push 后 GitHub Actions 运行结果自动整理；retouch 整改链路（run 34481989723 → 34485237118 → 34486614190）历经两处编译/类型问题，本轮全绿。*
