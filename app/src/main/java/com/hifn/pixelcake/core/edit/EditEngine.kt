@@ -22,6 +22,9 @@ import java.util.concurrent.Executors
  *  - 带与带之间检查取消回调，滑块连续拖动时可协作取消，不再排队积压；
  *  - tonal 渲染完成后，若传入 [RetouchState] 则在已物化的目标 Bitmap 上跑 retouch 整图 pass
  *    （磨皮/液化/祛瑕/追色），复用目标 Bitmap，不额外搬 16-bit 母版。
+ *
+ * **参数顺序约定**：`retouch` / `mask` 放在**取消/进度 lambda 之前**，使尾随 lambda 永远绑定到
+ * `isCancelled` / `onProgress`（避免 Kotlin 尾随 lambda 误绑末尾参数的编译错误，见 CI run `34481989723`）。
  */
 object EditEngine {
 
@@ -73,9 +76,9 @@ object EditEngine {
         target: Bitmap,
         base: LinearImage,
         p: EditParams,
-        isCancelled: () -> Boolean = { false },
         retouch: RetouchState? = null,
-        mask: RetouchMask? = null
+        mask: RetouchMask? = null,
+        isCancelled: () -> Boolean = { false }
     ): Boolean {
         val w = base.width
         val h = base.height
@@ -119,9 +122,9 @@ object EditEngine {
         path: String,
         maxLongSide: Int,
         p: EditParams,
-        onProgress: (Int) -> Boolean = { true },
         retouch: RetouchState? = null,
-        mask: RetouchMask? = null
+        mask: RetouchMask? = null,
+        onProgress: (Int) -> Boolean = { true }
     ): Bitmap? {
         val src = RawLinearSource.open(path, maxLongSide) ?: return null
         return try {
