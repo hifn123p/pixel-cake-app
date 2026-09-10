@@ -14,7 +14,7 @@ import com.hifn.pixelcake.core.edit.RetouchState
  * `colorTransfer.refId`），统一调性体验。
  *
  * 当前以内置 Kotlin 数据表实现（零 Android 资源 IO，纯 JVM 可测）；后续若需用户自定义 /
- * 外部分发的 `.cube` 滤镜，再外置为 `assets/preset/*.json`（接口不变）。
+ * 外部分发的 `.cube` 滤镜，再外置为 `assets/preset/` 下的 JSON 预设（接口不变）。
  */
 data class Preset(
     val id: String,
