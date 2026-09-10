@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import java.util.concurrent.atomic.AtomicBoolean
 import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.enableEdgeToEdge
@@ -36,10 +37,10 @@ import com.hifn.pixelcake.ui.home.probeCapabilities
 import com.hifn.pixelcake.ui.home.resolutionProfile
 import com.hifn.pixelcake.ui.theme.PixelCakeTheme
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.conflate
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -78,7 +79,7 @@ private fun AppRoot() {
     var rendered by remember { mutableStateOf<Bitmap?>(null) }
     var status by remember { mutableStateOf("") }
     var exporting by remember { mutableStateOf(false) }
-    var exportCancelled by remember { mutableStateOf(false) }
+    val exportCancelled = remember { AtomicBoolean(false) }
     val renderMutex = remember { Mutex() }
     var renderStamp by remember { mutableStateOf(0) }
 
@@ -91,6 +92,9 @@ private fun AppRoot() {
             .conflate()
             .collectLatest { p ->
                 delay(RENDER_THROTTLE_MS)
+                // 取当前这次重渲对应的协程 job：新参数到来时 collectLatest 会取消它，
+                // 渲染器据此在下一个分带边界退出（真正的协作取消，FIX_LIST F08 修复）。
+                val renderJob = currentCoroutineContext().job
                 val w = src.linear?.width ?: src.bitmap.width
                 val h = src.linear?.height ?: src.bitmap.height
                 val target = renderMutex.withLock {
@@ -101,8 +105,8 @@ private fun AppRoot() {
                     withContext(Dispatchers.Default) {
                         val linear = src.linear
                         if (linear != null) {
-                            // 协作取消：collectLatest 取消协程后，这里会在下一带边界退出
-                            EditEngine.renderIntoLinear(bmp, linear, p) { !isActive }
+                            // 协作取消：renderJob 被 collectLatest 取消后，这里会在下一带边界退出
+                            EditEngine.renderIntoLinear(bmp, linear, p) { !renderJob.isActive }
                         } else {
                             EditEngine.renderIntoSrgb(bmp, src.bitmap, p)
                         }
@@ -177,7 +181,7 @@ private fun AppRoot() {
                         scope.launch {
                             val img = imported ?: return@launch
                             exporting = true
-                            exportCancelled = false
+                            exportCancelled.set(false)
                             status = "正在生成导出…"
                             val result: Pair<Uri?, String> = withContext(Dispatchers.Default) {
                                 val rawPath = img.rawCachePath
@@ -191,7 +195,7 @@ private fun AppRoot() {
                                         if (p % 20 == 0 || p >= 100) {
                                             scope.launch(Dispatchers.Main) { status = "正在生成导出… $p%" }
                                         }
-                                        !exportCancelled
+                                        !exportCancelled.get()
                                     }
                                     if (full == null) {
                                         null to "RAW 导出失败"
@@ -235,7 +239,7 @@ private fun AppRoot() {
                             val (exportedUri, label) = result
                             exporting = false
                             status = when {
-                                exportCancelled -> "已取消导出"
+                                exportCancelled.get() -> "已取消导出"
                                 exportedUri != null -> "已导出（$label）：$exportedUri"
                                 else -> "导出失败（$label）"
                             }
@@ -246,7 +250,7 @@ private fun AppRoot() {
                         }
                     },
                     onCancelExport = {
-                        exportCancelled = true
+                        exportCancelled.set(true)
                         status = "正在取消…"
                     },
                     onBack = {

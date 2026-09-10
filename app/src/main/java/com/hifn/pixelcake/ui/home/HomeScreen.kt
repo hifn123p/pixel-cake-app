@@ -1,6 +1,5 @@
 package com.hifn.pixelcake.ui.home
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -28,7 +27,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
 import com.hifn.pixelcake.diag.DebugLog
 import com.hifn.pixelcake.ui.theme.Bad
 import com.hifn.pixelcake.ui.theme.Ok

@@ -24,9 +24,11 @@ object RawNative {
      *
      * @param path        ARW 文件路径（LibRaw 需文件系统路径，调用方负责先把 Uri 落到临时文件）。
      * @param maxLongSide 目标长边上限（像素）；<=0 表示不缩放、输出全分辨率。
+     * @param halfSize    true 时交 LibRaw 以 half_size=1 + user_qual=0 快速解（代理预览用：
+     *                    解码量约 1/4、速度更快，质量足以预览）；false 为全质量（导出母版用）。
      * @return native 句柄；0 表示失败。**必须**由 [closeLinear] 释放。
      */
-    external fun openLinear(path: String, maxLongSide: Int): Long
+    external fun openLinear(path: String, maxLongSide: Int, halfSize: Boolean = false): Long
 
     /** 返回 [width, height, colors, bits]；句柄非法返回 null。 */
     external fun linearDims(handle: Long): IntArray?

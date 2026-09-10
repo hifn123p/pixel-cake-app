@@ -68,7 +68,7 @@ object ArwFullDecoder {
      */
     suspend fun decodeLinearProxy(path: String, longEdge: Int): LinearImage? =
         withContext(Dispatchers.IO) {
-            val src = RawLinearSource.open(path, longEdge)
+            val src = RawLinearSource.open(path, longEdge, halfSize = true)
             if (src == null) {
                 DebugLog.e(DebugLog.TAG_DECODE, "arw linear proxy: open failed", mapOf("path" to path))
                 return@withContext null

@@ -39,13 +39,20 @@ object ArwContainer {
         var ifdOffset = readU32(header, 4, littleEndian).toLong()
         var hops = 0
 
-        // 主 IFD 链：IFD0 -> next -> next ...，逐个收集预览候选并展开各自的 SubIFD
-        while (ifdOffset > 0 && hops < MAX_IFD_CHAIN && visited.add(ifdOffset)) {
+        // 主 IFD 链：IFD0 -> next -> next ...，逐个收集预览候选并展开各自的 SubIFD。
+        // 关键：主链是否继续只由 next 指针决定（受 MAX_IFD_CHAIN 防环），
+        // visited 只用于 SubIFD 去重，绝不因「某 IFD 此前被当 SubIFD 访问过」而提前退出主链。
+        // F04 回归修复：原实现把 visited.add(ifdOffset) 写进 while 条件，导致 SubIFD 与 next
+        // 指向同一偏移时主链直接退出，漏掉挂着全分辨率预览的后续 IFD。
+        while (ifdOffset > 0 && hops < MAX_IFD_CHAIN) {
             hops++
+            val firstTouch = visited.add(ifdOffset)
             findPreviewInIfd(source, ifdOffset, littleEndian)?.let { candidates.add(it) }
-            for (sub in readSubIfdOffsets(source, ifdOffset, littleEndian)) {
-                if (visited.add(sub)) {
-                    findPreviewInIfd(source, sub, littleEndian)?.let { candidates.add(it) }
+            if (firstTouch) {
+                for (sub in readSubIfdOffsets(source, ifdOffset, littleEndian)) {
+                    if (visited.add(sub)) {
+                        findPreviewInIfd(source, sub, littleEndian)?.let { candidates.add(it) }
+                    }
                 }
             }
             ifdOffset = readNextIfdOffset(source, ifdOffset, littleEndian)

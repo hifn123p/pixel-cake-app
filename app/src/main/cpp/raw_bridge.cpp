@@ -61,7 +61,7 @@ Java_com_hifn_pixelcake_core_decode_RawNative_getVersion(JNIEnv* env, jclass /*c
 
 extern "C" JNIEXPORT jlong JNICALL
 Java_com_hifn_pixelcake_core_decode_RawNative_openLinear(
-        JNIEnv* env, jclass /*clazz*/, jstring jpath, jint jmaxLongSide) {
+        JNIEnv* env, jclass /*clazz*/, jstring jpath, jint jmaxLongSide, jboolean jhalfSize) {
 
     const char* path = env->GetStringUTFChars(jpath, nullptr);
     if (!path) return 0;
@@ -92,9 +92,11 @@ Java_com_hifn_pixelcake_core_decode_RawNative_openLinear(
     rp->imgdata.params.no_auto_bright  = 1;     // 关闭自动亮度：曝光基准不随画面内容漂移
     rp->imgdata.params.gamm[0]         = 1.0f;  // 线性 gamma（curve[i] == i）
     rp->imgdata.params.gamm[1]         = 1.0f;
-    rp->imgdata.params.user_qual       = 3;     // 3 = AHD 高质量解马赛克
+    // F03 ①：代理预览走快速解（half_size=1 + user_qual=0，解码量约 1/4、更快），
+    // 导出母版走全质量（AHD）。half_size 同时把输出分辨率减半，Kotlin 侧 readLinearRows 再按 maxLongSide 重采样。
+    rp->imgdata.params.user_qual       = jhalfSize ? 0 : 3;   // 0=线性(超像素) / 3=AHD 高质量
     rp->imgdata.params.output_tiff     = 0;
-    rp->imgdata.params.half_size       = 0;
+    rp->imgdata.params.half_size       = jhalfSize ? 1 : 0;
 
     ret = rp->unpack();
     if (ret != LIBRAW_SUCCESS) {

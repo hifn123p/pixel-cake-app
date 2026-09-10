@@ -143,7 +143,7 @@ SCRFD(人脸) / 2DFAN4(关键点) / BiSeNet(分割) 经 **TFLite + NNAPI delegat
 ## 4. 技术路线
 
 ```
-M0a  SDK 升 minSdk36 / target37 / compile37 + CI 出首个可装 APK
+M0a  SDK 升 minSdk36 / target36 / compile36 + CI 出首个可装 APK
       目标：先跑通「编码 → push → Action → 拿 APK → 真机装 → 日志回传」闭环
 M0b  ARW 内嵌预览解码（纯 Kotlin TIFF/IFD，零 NDK）  ← 只服务「打开/预览」
 ──────────────────────────────────────────────────────
@@ -292,6 +292,7 @@ com.hifn.pixelcake
 ## 7. 交付与调试
 
 - **CI**：强化 `android.yml` —— **unit tests 必过**（`testDebugUnitTest`）+ **Android Lint 拦门**（`lintDebug`，去掉 `continue-on-error`）；`assembleRelease` 签名（`KEYSTORE_BASE64` secret）；compileSdk/targetSdk 36。ktlint/detekt 待本地验证后引入（当前未启用，避免无本地构建下盲开导致 CI 误红）。
+- **本批次（2026-09-10 复审）已落地**：① **F04** 回归修复——`ArwContainer.previewJpegRange` 主 IFD 链不再因 SubIFD 与 next 指向同一偏移而提前退出，能取到挂在链尾的全分辨率预览（7008×4672）；单测 `previewChain_picksLargest` 通过。② **F03 ①** 代理预览走 LibRaw `half_size=1 + user_qual=0` 快速解（`openLinear(halfSize=true)`），解码量约 1/4；导出母版仍全质量。③ **F08** 协作取消修复——`collectLatest` 内取 `currentCoroutineContext().job`，渲染器在分带边界真正退出（此前 `{!isActive}` 恒 false）。④ **4.3** 导出取消标志改 `AtomicBoolean`（原 `mutableStateOf` 跨线程读无语义保证）。⑤ **4.4.1** 删 `HomeScreen` 未使用导入（`AnimatedVisibility`/`ContextCompat`）。*未做*：F03 ② 两段式渐进占位交付（架构改动，留待单独批次）。
 - **通知（条件化）**：签名 APK 一律作 workflow artifact（保留 90 天）+ 构建摘要通知；**仅当配置了 `FIREBASE_APP_ID` 等 secret 才额外走 Firebase App Distribution**（自动邮件 + 一键安装）。首包不依赖外部账号配置。
 - **调试日志模块**（`diag/DebugLog.kt`，必须与首包同时就位）：
   - 落盘 `files/debug/log_<session>.txt`（环形，单文件 ~2MB 滚动）；

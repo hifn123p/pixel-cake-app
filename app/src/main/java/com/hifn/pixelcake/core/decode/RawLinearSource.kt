@@ -60,10 +60,11 @@ class RawLinearSource private constructor(
     }
 
     companion object {
-        /** 打开解码会话；失败返回 null（已打日志）。 */
-        fun open(path: String, maxLongSide: Int): RawLinearSource? {
+        /** 打开解码会话；失败返回 null（已打日志）。
+         * @param halfSize 透传给 [RawNative.openLinear]：true=代理快速解，false=全质量（默认）。 */
+        fun open(path: String, maxLongSide: Int, halfSize: Boolean = false): RawLinearSource? {
             val handle = try {
-                RawNative.openLinear(path, maxLongSide)
+                RawNative.openLinear(path, maxLongSide, halfSize)
             } catch (t: Throwable) {
                 DebugLog.e(
                     DebugLog.TAG_DECODE, "raw openLinear threw",
