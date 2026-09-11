@@ -96,6 +96,8 @@ private fun AppRoot() {
     var rendered by remember { mutableStateOf<Bitmap?>(null) }
     var status by remember { mutableStateOf("") }
     var exporting by remember { mutableStateOf(false) }
+    // 导出格式（JPEG / PNG）：由编辑器里的格式选择驱动，导出两条路径（RAW / sRGB）共用同一取值。
+    var exportFormat by remember { mutableStateOf(ExportFormat.JPEG) }
     var loading by remember { mutableStateOf(false) }
     val exportCancelled = remember { AtomicBoolean(false) }
     val renderMutex = remember { Mutex() }
@@ -226,6 +228,7 @@ private fun AppRoot() {
                     canRedo = history.canRedo,
                     status = status,
                     exporting = exporting,
+                    exportFormat = exportFormat,
                     onParamChange = {
                         // F08：拖动过程中只更新参数，不进撤销栈
                         params = it
@@ -291,6 +294,8 @@ private fun AppRoot() {
                             val radius = brushRadius
                             val inpStrokes = inpaintStrokes
                             val inpRadius = inpaintRadius
+                            // 在主线程把格式取出来：Dispatchers.Default 里不应读 Compose 快照状态
+                            val fmt = exportFormat
                             exporting = true
                             exportCancelled.set(false)
                             status = "正在生成导出…"
@@ -317,7 +322,7 @@ private fun AppRoot() {
                                         null to "RAW 导出失败"
                                     } else {
                                         val out = withContext(Dispatchers.IO) {
-                                            Exporter.export(context, full, ExportFormat.JPEG, 92)
+                                            Exporter.export(context, full, fmt, 92)
                                         }
                                         full.recycle()
                                         out to "全分辨率 RAW"
@@ -342,13 +347,13 @@ private fun AppRoot() {
                                             val fretouch = buildRenderRetouch(rt, fw, fh, inpStrokes, inpRadius)
                                             RetouchLayer.apply(fullTarget, fretouch, fmask)
                                             val out = withContext(Dispatchers.IO) {
-                                                Exporter.export(context, fullTarget, ExportFormat.JPEG, 92)
+                                                Exporter.export(context, fullTarget, fmt, 92)
                                             }
                                             out to "全分辨率"
                                         } else {
                                             val proxy = rendered ?: img.bitmap
                                             val out = withContext(Dispatchers.IO) {
-                                                Exporter.export(context, proxy, ExportFormat.JPEG, 92)
+                                                Exporter.export(context, proxy, fmt, 92)
                                             }
                                             out to "代理分辨率"
                                         }
@@ -371,6 +376,7 @@ private fun AppRoot() {
                             )
                         }
                     },
+                    onExportFormatChange = { exportFormat = it },
                     onCancelExport = {
                         exportCancelled.set(true)
                         status = "正在取消…"

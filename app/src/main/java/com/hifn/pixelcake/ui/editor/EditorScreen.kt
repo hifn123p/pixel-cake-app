@@ -34,8 +34,10 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import com.hifn.pixelcake.core.decode.ExportFormat
 import com.hifn.pixelcake.core.edit.EditParams
 import com.hifn.pixelcake.core.edit.RetouchState
+import com.hifn.pixelcake.core.edit.ToneCurve
 import com.hifn.pixelcake.core.edit.preset.Preset
 import kotlin.math.round
 
@@ -48,6 +50,8 @@ import kotlin.math.round
  *  - "none"   ：按住图片查看原图（原图对比）；
  *  - "skin"   ：拖动涂抹皮肤作用区（磨皮/液化蒙版），坐标归一化 [0..1] 经 onBrushStroke 上报；
  *  - "blemish"：点击脏点位置，追加祛瑕描迹，经 onInpaintStroke 上报。
+ *
+ * @param exportFormat 导出格式（JPEG / PNG），由上层持有以便跨重组保留。
  */
 @Composable
 fun EditorScreen(
@@ -66,6 +70,7 @@ fun EditorScreen(
     canRedo: Boolean,
     status: String,
     exporting: Boolean = false,
+    exportFormat: ExportFormat = ExportFormat.JPEG,
     onParamChange: (EditParams) -> Unit,
     onParamCommit: () -> Unit = {},
     onRetouchChange: (RetouchState) -> Unit,
@@ -82,6 +87,7 @@ fun EditorScreen(
     onUndo: () -> Unit,
     onRedo: () -> Unit,
     onExport: () -> Unit,
+    onExportFormatChange: (ExportFormat) -> Unit = {},
     onCancelExport: () -> Unit = {},
     onBack: () -> Unit
 ) {
@@ -234,6 +240,14 @@ fun EditorScreen(
             AdjustSlider("色调", params.tint, -1f, 1f, 0.05f, { onParamChange(params.copy(tint = it)) }, onParamCommit)
             AdjustSlider("阴影", params.shadows, -1f, 1f, 0.05f, { onParamChange(params.copy(shadows = it)) }, onParamCommit)
             AdjustSlider("高光", params.highlights, -1f, 1f, 0.05f, { onParamChange(params.copy(highlights = it)) }, onParamCommit)
+
+            // 亮度曲线（三点锚点：黑场 / 中间调 / 白场）
+            CurveRow(
+                points = params.lumaPoints,
+                onCurve = { onParamChange(params.copy(lumaPoints = it)) },
+                onCommit = onParamCommit
+            )
+
             AdjustSlider("LUT 强度", params.lutIntensity, 0f, 1f, 0.05f, { onParamChange(params.copy(lutIntensity = it)) }, onParamCommit)
             LutSelector(params.lutId) {
                 onParamChange(params.copy(lutId = it))
@@ -242,10 +256,32 @@ fun EditorScreen(
         }
 
         Spacer(Modifier.height(8.dp))
+
+        // 导出格式（JPEG 体积小 / PNG 无损）
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("导出格式", style = MaterialTheme.typography.bodyMedium)
+            listOf(ExportFormat.JPEG to "JPEG", ExportFormat.PNG to "PNG").forEach { (fmt, name) ->
+                FilterChip(
+                    selected = exportFormat == fmt,
+                    onClick = { onExportFormatChange(fmt) },
+                    enabled = !exporting,
+                    label = { Text(name) }
+                )
+            }
+        }
+
         if (exporting) {
             Button(onClick = onCancelExport, Modifier.fillMaxWidth()) { Text("取消导出") }
         } else {
-            Button(onClick = onExport, Modifier.fillMaxWidth()) { Text("导出到相册") }
+            Button(onClick = onExport, Modifier.fillMaxWidth()) {
+                Text(
+                    if (exportFormat == ExportFormat.PNG) "导出到相册（PNG）" else "导出到相册（JPEG）"
+                )
+            }
         }
         if (status.isNotEmpty()) {
             Spacer(Modifier.height(4.dp))
@@ -262,12 +298,13 @@ private fun AdjustSlider(
     max: Float,
     step: Float,
     onValueChange: (Float) -> Unit,
-    onValueChangeFinished: () -> Unit
+    onValueChangeFinished: () -> Unit,
+    format: (Float) -> String = { "%.2f".format(it) }
 ) {
     Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(label, style = MaterialTheme.typography.bodyMedium)
-            Text("%.2f".format(value), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(format(value), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Slider(
             value = value,
@@ -275,6 +312,54 @@ private fun AdjustSlider(
             valueRange = min..max,
             // F08：只在松手时提交一次撤销点，否则一次拖动会往历史里塞几十条
             onValueChangeFinished = onValueChangeFinished
+        )
+    }
+}
+
+/**
+ * 亮度曲线：三个锚点（黑场 / 中间调 / 白场）→ `EditParams.lumaPoints`。
+ *
+ * 用锚点而非可拖拽曲线画布：锚点模型分辨率无关、和预设/序列化格式一一对应，
+ * 且不需要在 Compose 里做画布命中测试与手势仲裁。曲线非恒等时才显示「重置曲线」。
+ */
+@Composable
+private fun CurveRow(
+    points: List<Pair<Int, Int>>,
+    onCurve: (List<Pair<Int, Int>>) -> Unit,
+    onCommit: () -> Unit
+) {
+    val black = ToneCurve.black(points)
+    val mid = ToneCurve.mid(points)
+    val white = ToneCurve.white(points)
+    val intFormat: (Float) -> String = { it.toInt().toString() }
+
+    Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text("曲线（亮度）", style = MaterialTheme.typography.bodyMedium)
+            if (!ToneCurve.isIdentity(points)) {
+                TextButton(onClick = {
+                    onCurve(ToneCurve.IDENTITY)
+                    onCommit()
+                }) { Text("重置曲线") }
+            }
+        }
+        AdjustSlider(
+            "黑场", black.toFloat(),
+            ToneCurve.BLACK_RANGE.start, ToneCurve.BLACK_RANGE.endInclusive, 1f,
+            { onCurve(ToneCurve.points(black = it.toInt(), mid = mid, white = white)) },
+            onCommit, intFormat
+        )
+        AdjustSlider(
+            "中间调", mid.toFloat(),
+            ToneCurve.MID_RANGE.start, ToneCurve.MID_RANGE.endInclusive, 1f,
+            { onCurve(ToneCurve.points(black = black, mid = it.toInt(), white = white)) },
+            onCommit, intFormat
+        )
+        AdjustSlider(
+            "白场", white.toFloat(),
+            ToneCurve.WHITE_RANGE.start, ToneCurve.WHITE_RANGE.endInclusive, 1f,
+            { onCurve(ToneCurve.points(black = black, mid = mid, white = it.toInt())) },
+            onCommit, intFormat
         )
     }
 }

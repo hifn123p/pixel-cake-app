@@ -323,7 +323,7 @@ class CameraSession private constructor(
             )
         }
 
-        /** 设备描述（报告与日志共用；会话建立失败时 `CameraConnection` 也要用它）。 */
+        /** 设备描述：「厂商 型号 [VID:PID] 节点路径」，用于报告与 `CAMERA` 日志。 */
         fun describeDevice(device: UsbDevice): String =
             "${device.manufacturerName ?: "?"} ${device.productName ?: "?"} " +
                 "[${CameraProbe.hex(device.vendorId)}:${CameraProbe.hex(device.productId)}] " +

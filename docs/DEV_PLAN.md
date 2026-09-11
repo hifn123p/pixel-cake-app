@@ -26,10 +26,10 @@ description: 像素蛋糕（AI 人像精修）安卓应用的唯一开发计划�
 |---|---|---|
 | M0a | ✅ | SDK 升 36 + CI 出首个可装 APK + DebugLog 模块 |
 | M0b | ✅ | ARW 内嵌 JPEG 预览解码（纯 Kotlin TIFF/IFD，零 NDK） |
-| P1a | ✅ | 最小编辑链路 → 首个真机可测 APK（导入/曝光·曲线·LUT/导出/日志） |
+| P1a | ✅ | 最小编辑链路 → 首个真机可测 APK（导入/曝光·曲线·LUT/导出/日志）。**收尾补齐**：① 亮度**曲线** UI（黑场/中间调/白场三点锚点 → `EditParams.lumaPoints`，换算抽为 `core/edit/ToneCurve.kt` 并单测）——引擎 `PixelProgram` 早已支持、矩阵也标 ✅，但编辑器一直没有入口；② **PNG 导出**可选（`Exporter` 本就支持 JPEG/PNG，此前所有调用点硬编码 JPEG 导致 PNG 不可达）。 |
 | P1b | ✅ | **LibRaw 全量解码**（子模块 `third_party/LibRaw`[master `dde798dd`] + LibRaw-cmake[`eb98e432`]，静态链接；`raw_bridge.cpp` 全量解马赛克→RGBA；`useLibRaw=true`，失败回退预览）。**人像算子全量落地**：NeutralGray / Beauty / Inpaint / ColorTransfer 均落 `core/edit/retouch/`，由 `RetouchLayer` 单趟 getPixels 按「磨皮→液化→祛瑕→追色」编排；retouch 整图 pass 已接到 RAW 与 JPEG/HEIF 的预览 + 全分辨率导出四条路径（复用目标 Bitmap，符合 F05）。编辑器：工具选择（皮肤/祛瑕）、美型三滑块、追色风格+强度、**10 套参数栈预设**（`core/edit/preset/Presets.kt`）。**2026-09-11 批次**：撤销/重做升级为 `EditSnapshot`（tonal + retouch 同步回退）、画笔描迹节流+条数上限、打开大图加载进度反馈、「重置全部」+ 预设选中态。单测：NeutralGray / Beauty / Inpaint / ColorTransfer / RasterMask / Presets / EditHistory。**剩**：P1b-6 真机统一测试（用户侧 A7C2 实拍验收）。 |
 | P1+ / F03② | ⬜ | **P1+** ML 自动蒙版（SCRFD / 2DFAN4 / BiSeNet → TFLite + NNAPI）待启动（`RetouchMask` 接口已预留，接入 UI 零改动）。**F03②**「代理秒进」的感知延迟已用「打开即显解码进度 + 预览本就走 `halfSize` 代理」缓解；「后台母版无缝切换」为可选画质优化，后置。 |
-| P2 / P3 | ✅（待真机验收）/ 🔜 | **P2**：A7C2 USB 直连 —— 设计稿 `docs/P2_DESIGN.md`（v0.3）；**PoC-1~5 全部落地**：① 免权限 USB 枚举 + Sony VID/接口类识别（`camera/CameraProbe`、`camera/UsbCameraScanner`）；② USB 授权（`camera/UsbPermission`：`FLAG_MUTABLE` PendingIntent + 广播/系统 action 双注册 + 300ms 轮询兜底）；③ PTP 会话握手 + 设备信息 + 存储/对象枚举（`PtpProtocol`/`PtpData`/`PtpTransport`/`CameraPtpReport`）；④ **`GetObject` 256KB 分块流式下载**（`PtpTransport.downloadObject`）+ **长生命周期会话** `camera/CameraSession`（列图/拉图/批量复用，I/O 串行化于内部 Mutex）；⑤ **批量套预设导出** `camera/CameraBatch`（拉取→复用 P1 管线套 `Presets.ALL`→导出到相册，导完即删、文件边界取消、进度回调）。UI：首页 `CameraPanel` 完成 检测→握手→列图→单张导入编辑器→批量套预设，编辑器接线由 `HomeScreen.onOpenLocalFile` 打通。协议层 + 数据集解析 + 批处理纯逻辑（`CameraBatchTest`）均有 JVM 单测。**剩**：真机验收（A7C2 实插）。**P3**：NAS Docker 化 Rust 引擎。 |
+| P2 / P3 | ✅（待真机验收）/ 🔜 | **P2**：A7C2 USB 直连 —— 设计稿 `docs/P2_DESIGN.md`（v0.3）；**PoC-1~5 全部落地**：① 免权限 USB 枚举 + Sony VID/接口类识别（`camera/CameraProbe`、`camera/UsbCameraScanner`）；② USB 授权（`camera/UsbPermission`：`FLAG_MUTABLE` PendingIntent + 广播/系统 action 双注册 + 300ms 轮询兜底）；③ PTP 会话握手 + 设备信息 + 存储/对象枚举（`PtpProtocol`/`PtpData`/`PtpTransport`/`CameraPtpReport`）；④ **`GetObject` 256KB 分块流式下载**（`PtpTransport.downloadObject`）+ **长生命周期会话** `camera/CameraSession`（列图/拉图/批量复用，I/O 串行化于内部 Mutex）；⑤ **批量套预设导出** `camera/CameraBatch`（拉取→复用 P1 管线套 `Presets.ALL`→导出到相册，导完即删、文件边界取消、进度回调）。UI：首页 `CameraPanel` 完成 检测→握手→列图→单张导入编辑器→批量套预设，编辑器接线由 `HomeScreen.onOpenLocalFile` 打通；连接成功后自动产出 PoC-2/3 **体检报告**（`CameraConnection.inspect(session, steps)` 改为对**已有会话**体检，不再自开会话——既消除死代码，也省掉一次多余握手）。协议层 + 数据集解析 + 批处理纯逻辑（`CameraBatchTest`）均有 JVM 单测。**剩**：真机验收（A7C2 实插）。**P3**：NAS Docker 化 Rust 引擎。 |
 
 > LibRaw master API 注意：已移除 `dcraw_free()`；`dcraw_make_mem_image()` 的返回产物必须用 `LibRaw::dcraw_clear_mem()` 释放，`free_image()` 只释放内部 `imgdata.image`、二者不可混用（见 F02 / D09）；Kotlin `val version` 与 native `getVersion()` JVM 签名冲突，已改名 `librawVersion`（详见 §8 风险表与每日日志 2026-09-09）。
 
@@ -71,15 +71,15 @@ description: 像素蛋糕（AI 人像精修）安卓应用的唯一开发计划�
 | ARW **修图**（LibRaw 全量真解马赛克，16-bit） | | ✅ | | |
 | 曝光 / 曲线 / LUT | ✅ | | | |
 | 非破坏编辑栈 + 撤销重做 + 原图对比 | ✅ | | | |
-| 代理图实时预览（CPU 多线程逐像素 band 渲染；GPU/RenderEffect/AGSL 规划中） | ⬜ | | | |
-| 导出到相册（JPEG / PNG；HEIF 需探测） | ✅ | | | |
+| 代理图实时预览（CPU 多线程逐像素 band 渲染，分带拉取 16-bit 线性；GPU/RenderEffect/AGSL 后置） | ✅ | | | |
+| 导出到相册（JPEG / PNG 可选；HEIF 需探测） | ✅ | | | |
 | 自适应导出分辨率（按设备档位） | ✅ | | | |
 | 调试日志模块（落盘 + 导出分享） | ✅ | | | |
 | 中性灰磨皮 / 美型液化 / 祛瑕 / 追色 | | ✅ | | |
-| AGSL 局部调整 + 手动画笔蒙版 | | ✅ | | |
+| 局部调整 + 手动画笔蒙版（CPU `RasterMask` 描迹蒙版；AGSL 未采用） | | ✅ | | |
 | 内置人像预设（~10 套：参数栈 + `.cube` LUT） | | ✅ | | |
-| A7C2 直连（USB PTP 拉图）+ 预设套用 | | | ✅ | |
-| 边拍边预览（liveview，需 PoC） | | | ✅ | |
+| A7C2 直连（USB PTP 拉图 + 批量套预设导出） | | | ✅ | |
+| 边拍边预览（liveview，需 CRSDK / ScalarWebAPI PoC） | | | 后置 | |
 | NAS 目录控制 / 单张·批量后台修图 | | | | ✅ |
 | ML 自动蒙版（人脸/关键点/分割） | | 后置 | | |
 

@@ -125,3 +125,17 @@ scope: docs/DEV_PLAN.md v3.0 + 全部 52 个入库文件 + wb-issues 16 张卡
 
 > P1b-6「整阶段完成后统一真机测试」建议改为「每完成一批出一包」：无本地构建环境下唯一反馈通路是 APK + 日志，越晚测越贵。
 
+## 7. P1 收尾复审（2026-09-11）：「矩阵标 ✅ 但实际不可达」的断链
+
+> 触发：要求「把 P1 和 P2 一口气全部开发完」。本轮**不加新功能**，只审计「计划说做了、代码却到不了」的断链。
+> 结论：P1/P2 主体完整（全仓无 `TODO` / 无 stub / 无未接线回调），但存在 4 处**声明与可达性不一致**，已全部修复。
+
+| ID | 级别 | 问题 | 证据 | 修复 |
+|---|---|---|---|---|
+| R01 | **高** | `DEV_PLAN §2.1`「曝光 / 曲线 / LUT」标 P1a ✅，但**编辑器没有任何曲线入口**：`EditParams.lumaPoints` 只被 `PixelProgram` 读，全仓无写入点 → 用户永远只能得到恒等曲线 | `Grep lumaPoints` 仅命中 `EditModel.kt:15`（默认值）与 `PixelProgram.kt:18`（读取） | 新增 `core/edit/ToneCurve.kt`（黑场/中间调/白场三点锚点 ↔ 控制点，含钳位与缺锚回退）+ `ToneCurveTest`；`EditorScreen` 增 `CurveRow`（三滑块，非恒等时才显示「重置曲线」），走既有 `onParamChange/onParamCommit` 入撤销栈 |
+| R02 | 中 | `DEV_PLAN §2.1`「导出到相册（JPEG / PNG）」标 ✅，但 `Exporter` 的 PNG 分支**没有任何调用点**：3 处 `Exporter.export(...)` 全硬编码 `ExportFormat.JPEG` → PNG 不可达 | `Grep "ExportFormat.JPEG, 92"` → 3 处全为硬编码 | `EditorScreen` 增导出格式 chips（JPEG/PNG，导出按钮文案随格式变化）；`MainActivity` 持 `exportFormat`，并在进入 `Dispatchers.Default` **之前**于主线程取值（不在后台线程读 Compose 快照）。`CameraBatch` 维持 JPEG（批量体积考量，属产品决策） |
+| R03 | 低（文档） | `DEV_PLAN §2.1` 把「边拍边预览（liveview）」在 P2 列标 ✅，与 `P2_DESIGN §8 D4`「本期只评估不实现」直接矛盾 | 两文档对照 | 矩阵改为「后置」，与 P2_DESIGN 对齐 |
+| R04 | 低（死代码） | `CameraPanel` 改成长会话模型后，`CameraConnection` / `CameraPtpReport` 失去唯一主代码调用点（只剩自带单测）→ PoC-2/3 体检报告实际上不可达 | `Grep CameraConnection` 仅命中自身定义与 KDoc | `CameraConnection.connect()` → `inspect(session, steps)`：改为对**已有会话**体检，连接成功后自动产出报告（`CameraPanel:206` 已接线）。既消除死代码，又省掉一次多余握手 |
+
+> 有意不动（非遗漏）：`NeutralGrayParams.threshold` 无 UI —— 它是算子内部调参（细节保护阈值），不在计划列出的用户可见控制项内。
+

@@ -115,7 +115,7 @@ length(u32) | type(u16) | code(u16) | transactionId(u32) | payload[]
 | `camera/CameraSession.kt` | Android | **长生命周期会话**：授权→打开→OpenSession→设备/存储信息；`listPhotos` / `download` / `closeGracefully` |
 | `camera/CameraPhoto.kt` | 纯 Kotlin | `CameraPhoto` / `CameraPhotoList`（枚举结果含截断诊断）/ 照片过滤器（后缀优先，格式码兜底） |
 | `camera/CameraBatch.kt` | Android | 批量流水线：逐张 `download` → 套预设渲染 → 导出 → **导完即删**；取消只在文件边界 |
-| `camera/CameraConnection.kt` | Android | PoC-3 体检（`CameraSession` 薄封装，采样末尾对象 → 报告）；只读，用完即关 |
+| `camera/CameraConnection.kt` | Android | PoC-2/3 体检：对**已有会话**枚举各存储对象数 + 采样末尾对象 → `CameraPtpReport`（不自开会话）；只读 |
 | `camera/CameraPtpReport.kt` | 纯 Kotlin | 报告数据类 + 摘要行（用户直接回传的那份文本） |
 | `core/edit/RetouchScale.kt` | 纯 Kotlin | 归一化 retouch 参数 → 渲染态（编辑器与批处理**共用口径**，保证所见即所得） |
 | `ui/home/CameraPanel.kt` | UI | 检测 → 选择设备 → 连接（建常驻会话）→ 列图 → 单张导入 / 批量套预设 → 断开 |

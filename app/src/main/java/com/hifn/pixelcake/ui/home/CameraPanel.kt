@@ -36,6 +36,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.hifn.pixelcake.camera.CameraBatch
+import com.hifn.pixelcake.camera.CameraConnection
 import com.hifn.pixelcake.camera.CameraPhotoList
 import com.hifn.pixelcake.camera.CameraProbe
 import com.hifn.pixelcake.camera.CameraSession
@@ -199,16 +200,24 @@ fun CameraPanel(
                             is CameraSessionResult.Ok -> {
                                 val s = opened.session
                                 session = s
-                                lines = steps + "✓ 已连接：${s.deviceLabel}（${s.storagesSummary()}）"
-                                DebugLog.i(
-                                    DebugLog.TAG_CAMERA, "ptp connect ok",
-                                    mapOf("device" to s.deviceLabel, "storages" to s.storageIds.size)
-                                )
-                                // 连上即读一次列表，省去用户再点一下
-                                phase = "读取照片列表…"
+                                phase = "读取照片列表 + 协议体检…"
+                                // 连上即做一次体检（PoC-2/3 报告：各存储对象数 + 末尾样本）
+                                // 并读一次列表，省去用户再点一下。
+                                val report = CameraConnection.inspect(s, steps)
+                                lines = report.summaryLines()
                                 val list = s.listPhotos()
                                 photoList = list
                                 selected = list.photos.map { it.handle }.toSet()
+                                DebugLog.i(
+                                    DebugLog.TAG_CAMERA, "ptp connect ok",
+                                    mapOf(
+                                        "device" to s.deviceLabel,
+                                        "storages" to s.storageIds.size,
+                                        "objects" to report.handleCounts.values.sum(),
+                                        "photos" to list.photos.size,
+                                        "inspectMs" to report.elapsedMs
+                                    )
+                                )
                             }
                         }
                         busy = false
