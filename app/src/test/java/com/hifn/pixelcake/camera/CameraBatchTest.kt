@@ -42,14 +42,14 @@ class CameraBatchTest {
 
     @Test
     fun photoFilterPrefersExtensionThenFormat() {
-        assertTrue(CameraPhotoFilter.isPhoto(photo("DSC01234.ARW", PtpProtocol.FORMAT_UNDEFINED)))
-        assertTrue(CameraPhotoFilter.isPhoto(photo("DSC01234.JPG", PtpProtocol.FORMAT_UNDEFINED)))
-        assertTrue(CameraPhotoFilter.isPhoto(photo("DSC01234.HIF", PtpProtocol.FORMAT_UNDEFINED)))
+        assertTrue(CameraPhotoFilter.isPhoto(photo("DSC01234.ARW", PtpProtocol.FORMAT_UNDEFINED).info))
+        assertTrue(CameraPhotoFilter.isPhoto(photo("DSC01234.JPG", PtpProtocol.FORMAT_UNDEFINED).info))
+        assertTrue(CameraPhotoFilter.isPhoto(photo("DSC01234.HIF", PtpProtocol.FORMAT_UNDEFINED).info))
         // 非照片后缀（相机目录对象等）应被排除
-        assertFalse(CameraPhotoFilter.isPhoto(photo("MISC.TXT", PtpProtocol.FORMAT_UNDEFINED)))
+        assertFalse(CameraPhotoFilter.isPhoto(photo("MISC.TXT", PtpProtocol.FORMAT_UNDEFINED).info))
         // 无名对象：退回格式码
-        assertTrue(CameraPhotoFilter.isPhoto(photo("", PtpProtocol.FORMAT_EXIF_JPEG)))
-        assertFalse(CameraPhotoFilter.isPhoto(photo("", PtpProtocol.FORMAT_UNDEFINED)))
+        assertTrue(CameraPhotoFilter.isPhoto(photo("", PtpProtocol.FORMAT_EXIF_JPEG).info))
+        assertFalse(CameraPhotoFilter.isPhoto(photo("", PtpProtocol.FORMAT_UNDEFINED).info))
     }
 
     @Test
