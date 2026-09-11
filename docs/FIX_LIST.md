@@ -185,8 +185,14 @@ scope: docs/DEV_PLAN.md v3.0 + 全部 52 个入库文件 + wb-issues 16 张卡
 >   `slimJaw` 把源点拉到带上方、`eyeEnlarge` 把源点拉到质心下方，跨越多带；任何单趟带状原地处理都会读到
 >  已写值而失真，要精确就得保留无界 halo（等于没省）。而蒙版外 `mv==0` 恒等，故只在包围盒开缓冲是
 >  此算子唯一「既精确又有界」的口径。
+> - `RetouchLayer` **编排层自身**也流式化（这是该 pass 最后一份全幅 `px`）：不再持整幅数组，改在内部
+>   `PixelStore` 抽象（生产 `BitmapStore` / 测试 `MemStore`）上分段读写，四算子各取最省粒度 ——
+>   磨皮逐带 / 液化**源行条带**（需先算一次 `centroid`，按后向映射上界取源行区间）/ 祛瑕**小图块** /
+>   追色**多趟只读统计 + 一遍写**。抽 `PixelStore` 的另一收益：JVM 单测里 `Bitmap` 是不可用桩，
+>   抽接口后编排层才能跑「朴素整幅参照」等价性测试。
 > - 等价性由**朴素整幅参照实现**钉死（不复用被测代码）：`NeutralGrayTest.bandedMatchesFullFrame`、
->   `BeautyTest.bboxBufferMatchesFullFrame`。⚠️ 这两条是本轮新增的关键回归防线 —— 后续再动这两个算子必须让它们保持绿。
+>   `BeautyTest.bboxBufferMatchesFullFrame`、`RetouchLayerTest.*`。⚠️ 这几条是本轮新增的关键回归防线 ——
+>   后续再动这些算子/编排层必须让它们保持绿。
 >
 > **R08 的连带行为（已定案，非「行为变化」）**：编辑器改为**无描迹时显式传 `FullMask`**（作用域 = 整幅），
 > 因此「磨皮」滑杆在未涂抹画笔蒙版前**仍全局可见效果**，与 P1 旧行为一致；`null` 唯一含义 = 「不执行」，
