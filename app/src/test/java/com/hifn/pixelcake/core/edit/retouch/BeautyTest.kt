@@ -60,4 +60,41 @@ class BeautyTest {
         Beauty.apply(px, w, h, BeautyParams(slimFace = 0.5f), fullMask)
         assertEquals("质心像素不应移动", before, px[10 * w + 10])
     }
+
+    /**
+     * 方向断言（此前 `shiftsPixelsWithMask` 只断言 `diff > 0`，正是它放过了 S1「方向反了」）。
+     * 在 x=18（质心 x=10 的右侧）放一条亮线，瘦脸应把它**向质心方向（左）**移动。
+     */
+    @Test
+    fun slimFaceMovesContentTowardCentroid() {
+        val w = 21; val h = 21
+        val px = IntArray(w * h) { 0xff000000.toInt() }
+        for (y in 0 until h) px[y * w + 18] = 0xffffffff.toInt()
+        Beauty.apply(px, w, h, BeautyParams(slimFace = 0.5f), fullMask)
+
+        var brightestX = -1
+        var best = -1
+        for (x in 0 until w) {
+            val v = (px[10 * w + x] shr 16) and 0xff
+            if (v > best) { best = v; brightestX = x }
+        }
+        assertTrue("亮线应向质心（左）移动，实际在 x=$brightestX", brightestX < 18)
+    }
+
+    /** 同理：质心 y=10 下方 (y=18) 的亮线应被向上（质心方向）拉 = 收下颌。 */
+    @Test
+    fun slimJawMovesContentTowardCentroidVertically() {
+        val w = 21; val h = 21
+        val px = IntArray(w * h) { 0xff000000.toInt() }
+        for (x in 0 until w) px[18 * w + x] = 0xffffffff.toInt()
+        Beauty.apply(px, w, h, BeautyParams(slimJaw = 0.5f), fullMask)
+
+        var brightestY = -1
+        var best = -1
+        for (y in 0 until h) {
+            val v = (px[y * w + 10] shr 16) and 0xff
+            if (v > best) { best = v; brightestY = y }
+        }
+        assertTrue("亮线应向上（质心方向）移动，实际在 y=$brightestY", brightestY < 18)
+    }
 }

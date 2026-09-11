@@ -40,8 +40,11 @@ object Beauty {
                 }
                 var dx = x.toFloat()
                 var dy = y.toFloat()
-                if (params.slimFace > 0f) dx -= mv * params.slimFace * 0.3f * (x - cx)
-                if (params.slimJaw > 0f && y > cy) dy -= mv * params.slimJaw * 0.3f * (y - cy)
+                // 这里是**后向映射**（对每个输出点求其源坐标）。要让脸「变窄」，输出点必须去采
+                // 更靠外（远离质心）的源点，外侧内容才会被拉进来、整体向质心收拢。
+                // 此前误写成 `-=`（采更靠内的源点）→ 实际是「放大」，与 KDoc 的「拉向质心（瘦脸）」相反。
+                if (params.slimFace > 0f) dx += mv * params.slimFace * 0.3f * (x - cx)
+                if (params.slimJaw > 0f && y > cy) dy += mv * params.slimJaw * 0.3f * (y - cy)
                 if (params.eyeEnlarge > 0f) {
                     dx = cx + (dx - cx) * (1f - mv * params.eyeEnlarge * 0.3f)
                     dy = cy + (dy - cy) * (1f - mv * params.eyeEnlarge * 0.3f)

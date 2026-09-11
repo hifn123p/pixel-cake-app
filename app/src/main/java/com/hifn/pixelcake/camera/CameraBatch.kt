@@ -115,40 +115,67 @@ object CameraBatch {
         val items = ArrayList<ItemResult>()
         var cancelled = false
 
-        photos.forEachIndexed { index, photo ->
-            if (isCancelled()) {
-                cancelled = true
-                return@forEachIndexed
-            }
-            val name = targetName(photo)
-            val target = File(dir, name)
-            val itemStarted = System.currentTimeMillis()
+        // 整批兜底：任何未在单张层面处理的异常都不许穿出 run()——否则调用方 `scope.launch` 会
+        // 在异常处中断、`busy` 永不复位，界面永久停在「批量处理中…」。取消信号（CancellationException）
+        // 必须原样抛出，不能被兜底吞掉，否则破坏结构化并发。
+        try {
+            photos.forEachIndexed { index, photo ->
+                if (isCancelled()) {
+                    cancelled = true
+                    return@forEachIndexed
+                }
+                val name = targetName(photo)
+                val target = File(dir, name)
+                val itemStarted = System.currentTimeMillis()
 
-            onProgress(Progress(index + 1, photos.size, name, "拉取中"))
-            val outcome = session.download(photo.handle, target) { done, total ->
-                onProgress(Progress(index + 1, photos.size, name, "拉取中", done, total))
-            }
+                onProgress(Progress(index + 1, photos.size, name, "拉取中"))
+                val outcome = session.download(photo.handle, target) { done, total ->
+                    onProgress(Progress(index + 1, photos.size, name, "拉取中", done, total))
+                }
 
-            if (!outcome.ok) {
-                runCatching { target.delete() }
-                items.add(
-                    ItemResult(
-                        name, false, null,
-                        "拉取失败：${outcome.message}",
-                        System.currentTimeMillis() - itemStarted
+                if (!outcome.ok) {
+                    runCatching { target.delete() }
+                    items.add(
+                        ItemResult(
+                            name, false, null,
+                            "拉取失败：${outcome.message}",
+                            System.currentTimeMillis() - itemStarted
+                        )
                     )
-                )
-                return@forEachIndexed
-            }
+                    return@forEachIndexed
+                }
 
-            onProgress(Progress(index + 1, photos.size, name, "套预设 + 导出"))
-            val result = try {
-                processOne(context, target, photo, preset, longEdge)
-            } finally {
-                // 导完即删：批量场景峰值磁盘占用 = 一张
-                runCatching { target.delete() }
+                onProgress(Progress(index + 1, photos.size, name, "套预设 + 导出"))
+                // 单张兜底：渲染/解码可能抛 OOM（`Error` 也算），一律转成失败项记入 items，
+                // 绝不让一张毁掉整批（P2_DESIGN §D6「任何一步失败都返回带原因的报告」）。
+                val result = try {
+                    processOne(context, target, photo, preset, longEdge)
+                } catch (c: kotlinx.coroutines.CancellationException) {
+                    throw c
+                } catch (t: Throwable) {
+                    val reason = t.javaClass.simpleName +
+                        (t.message?.takeIf { it.isNotBlank() }?.let { ": $it" } ?: "")
+                    DebugLog.e(
+                        DebugLog.TAG_CAMERA, "batch item failed",
+                        mapOf("file" to name, "err" to reason)
+                    )
+                    ItemResult(name, false, null, "处理失败：$reason", 0L)
+                } finally {
+                    // 导完即删：批量场景峰值磁盘占用 = 一张
+                    runCatching { target.delete() }
+                }
+                items.add(result.copy(elapsedMs = System.currentTimeMillis() - itemStarted))
             }
-            items.add(result.copy(elapsedMs = System.currentTimeMillis() - itemStarted))
+        } catch (c: kotlinx.coroutines.CancellationException) {
+            throw c
+        } catch (t: Throwable) {
+            DebugLog.e(
+                DebugLog.TAG_CAMERA, "batch aborted",
+                mapOf("err" to (t.message ?: t.javaClass.simpleName))
+            )
+            items.add(
+                ItemResult("（批量中断）", false, null, "批量中断：${t.javaClass.simpleName}", 0L)
+            )
         }
 
         Summary(items = items, cancelled = cancelled, elapsedMs = System.currentTimeMillis() - startedAll)

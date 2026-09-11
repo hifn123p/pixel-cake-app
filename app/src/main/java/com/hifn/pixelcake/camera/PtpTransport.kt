@@ -206,18 +206,34 @@ class PtpTransport private constructor(
         // 256KiB 分块：足够摊薄每条 USB 事务的开销，又不会占用可观内存
         val chunk = ByteArray(256 * 1024)
         var done = 0L
+        var emptyReads = 0
         while (done < total) {
             val want = minOf(chunk.size.toLong(), total - done).toInt()
             val read = runCatching {
                 connection.bulkTransfer(endpointIn, chunk, 0, want, DATA_TIMEOUT_MS)
             }.getOrDefault(-1)
-            if (read <= 0) {
+            if (read < 0) {
                 return Download(
                     false, done, total, -1,
-                    "下载中断：$done/$total 字节（超时或设备已断开）",
+                    "下载中断：$done/$total 字节（Bulk 读超时或设备已断开）",
                     System.currentTimeMillis() - started
                 )
             }
+            if (read == 0) {
+                // ZLP：事务边界上的零长度包**不是**错误，与 `readFully` 同一容错策略（返回 <0 才判中断）。
+                // 下载的读次数远多于 `readFully`（35–57MB / 256KiB ≈ 200+ 次），故在成功续读后清零计数，
+                // 避免零星空包累积触顶而误判中断；只有**连续**超过 MAX_EMPTY_READS 次才放弃。
+                emptyReads += 1
+                if (emptyReads > MAX_EMPTY_READS) {
+                    return Download(
+                        false, done, total, -1,
+                        "下载中断：$done/$total 字节（连续 $emptyReads 次空包，设备可能已断开）",
+                        System.currentTimeMillis() - started
+                    )
+                }
+                continue
+            }
+            emptyReads = 0
             sink.write(chunk, 0, read)
             done += read
             onProgress(done, total)

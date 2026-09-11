@@ -139,3 +139,27 @@ scope: docs/DEV_PLAN.md v3.0 + 全部 52 个入库文件 + wb-issues 16 张卡
 
 > 有意不动（非遗漏）：`NeutralGrayParams.threshold` 无 UI —— 它是算子内部调参（细节保护阈值），不在计划列出的用户可见控制项内。
 
+## 8. 第三方审计报告核对与修复（2026-09-11）
+
+> 触发：要求「核对 `PixelCake_全面审计报告_2026-09-11.md` 是否正确」→ 逐条回到源码核验 → 用户确认「修改」。
+> 核验结论：报告**方法严谨、绝大多数条目属实**（3 严重 + 12 中 + 12 轻微，仅 2 处需修正，见下）。
+> 本轮按**最小改动**修其 P0 三项（S1/S2/S3）。
+
+### 8.1 报告需修正的两处（核验增量，非代码问题）
+
+| # | 报告原文 | 实际 | 处置 |
+|---|---|---|---|
+| C1 | S1「预设 `creamy` 开箱即触发，用户点预设脸会变宽」 | 方向 bug 属实，但 **`Beauty.apply` 需非空蒙版才生效**（`Beauty.kt:22` `val m = mask ?: return`）；蒙版来自画笔描迹，`buildSkinMask` 无描迹时返回 null，且 `RetouchScale.skinMask` 零调用（无自动蒙版）→ 实际需用户先画一笔 | 严重性下修为「需先有画笔蒙版」 |
+| C2 | M5「`Beauty`/`NeutralGray` 在 `mask==null` 时提前 return → 磨皮/液化在批量静默 no-op」 | 只有 **`Beauty`（液化）会 return**；`NeutralGray.kt:27` 是 `if (mask == null) 1f` → **磨皮在批量链路反而「全局无蒙版生效」**（连背景一起磨），不是 no-op | 事实更正；是否给批量接入自动蒙版属产品决策，本轮未动 |
+
+### 8.2 已修复（P0）
+
+| ID | 级别 | 问题 | 证据 | 修复 |
+|---|---|---|---|---|
+| R05 | **高** | S1：`Beauty` 瘦脸/收颌的**后向映射方向写反**——`dx -= k(x-cx)` 使输出点采到更靠质心的源点 ⇒ 实际是**放大**，与 KDoc「拉向质心（瘦脸/收颊）」相反 | `Beauty.kt:43-44` | 改 `dx += …` / `dy += …`（输出点采更靠外的源点 → 外侧内容被拉进来 = 收拢）；并**补方向断言单测** `slimFaceMovesContentTowardCentroid` / `slimJawMovesContentTowardCentroidVertically`（旧 `shiftsPixelsWithMask` 只断言 `diff>0`，正是它放过了本 bug；L9 同因） |
+| R06 | **高** | S2：`CameraBatch` 单张处理**只有 `finally` 没有 `catch`** → `processOne` 内的 OOM 等异常穿透 `run()`；调用方 `scope.launch` 无兜底 → `busy` 永不复位、界面永久停在「批量处理中…」，已完成项全丢 | `CameraBatch.kt:145-150`、`CameraPanel.kt:430-442` | 单张 `try/catch(Throwable)/finally`：失败转 `ItemResult(ok=false, "处理失败：…")` 记入 `items`；`run()` 整体再加一层兜底，保证 `Summary` 一定返回；`CameraPanel` 批量协程加 `try/catch/finally` 确保 `busy/phase` 必复位。三处均**原样重抛 `CancellationException`**（不吞取消信号） |
+| R07 | **高** | S3：下载路径把**空包（ZLP）当失败**——`read <= 0` 即中断，与同文件 `readFully` 的「零长度包可重试」策略矛盾；大文件（35–57MB）一次空读即整张失败，且报错文案误导为「超时或设备已断开」 | `PtpTransport.kt:214`（`readFully` 对照 `:293-309`） | 拆开 `read < 0`（超时/断开）与 `read == 0`（ZLP，重试 `MAX_EMPTY_READS` 次）；成功续读后清零计数（下载读次数远多于 `readFully`，避免零星空包累积触顶）；两类错误文案分开 |
+
+> 未做（受「无本地构建环境 / 最小改动」约束，报告 M10/L12 已登记为后续）：`CameraBatch.run()` 三语义（取消/导完即删/失败续跑）与 `PtpTransport` 的**单测**需要先抽 `PtpTransport` 接口注入 fake，属结构性重构，本轮不夹带。
+> 本轮改动**未提交**（不代 push）；CI 需用户 push 后验证。
+

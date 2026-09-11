@@ -428,26 +428,41 @@ fun CameraPanel(
                                 progress = null
                                 phase = "批量处理中…"
                                 scope.launch {
-                                    val summary = CameraBatch.run(
-                                        context = context,
-                                        session = s,
-                                        photos = chosen,
-                                        preset = preset,
-                                        longEdge = longEdge,
-                                        onProgress = { progress = it },
-                                        isCancelled = { batchCancel.get() }
-                                    )
-                                    batchLines = summary.summaryLines()
-                                    progress = null
-                                    busy = false
-                                    phase = ""
-                                    DebugLog.i(
-                                        DebugLog.TAG_CAMERA, "batch done",
-                                        mapOf(
-                                            "ok" to summary.okCount, "total" to summary.items.size,
-                                            "cancelled" to summary.cancelled, "ms" to summary.elapsedMs
+                                    // 兜底：无论批量内部如何失败，finally 都必须复位 busy/phase，
+                                    // 否则界面永久停在「批量处理中…」。取消信号原样抛出。
+                                    try {
+                                        val summary = CameraBatch.run(
+                                            context = context,
+                                            session = s,
+                                            photos = chosen,
+                                            preset = preset,
+                                            longEdge = longEdge,
+                                            onProgress = { progress = it },
+                                            isCancelled = { batchCancel.get() }
                                         )
-                                    )
+                                        batchLines = summary.summaryLines()
+                                        DebugLog.i(
+                                            DebugLog.TAG_CAMERA, "batch done",
+                                            mapOf(
+                                                "ok" to summary.okCount, "total" to summary.items.size,
+                                                "cancelled" to summary.cancelled, "ms" to summary.elapsedMs
+                                            )
+                                        )
+                                    } catch (c: kotlinx.coroutines.CancellationException) {
+                                        throw c
+                                    } catch (t: Throwable) {
+                                        DebugLog.e(
+                                            DebugLog.TAG_CAMERA, "batch crashed",
+                                            mapOf("err" to (t.message ?: t.javaClass.simpleName))
+                                        )
+                                        batchLines = listOf(
+                                            "批量异常中断：${t.javaClass.simpleName} ${t.message.orEmpty()}".trim()
+                                        )
+                                    } finally {
+                                        progress = null
+                                        busy = false
+                                        phase = ""
+                                    }
                                 }
                             },
                             enabled = !busy && chosen.isNotEmpty(),
