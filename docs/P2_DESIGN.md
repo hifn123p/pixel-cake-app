@@ -1,6 +1,6 @@
-# P2 设计稿（A7C2 直连 · 草稿 v0.1）
+# P2 设计稿（A7C2 直连 · v0.2）
 
-> 状态：**设计稿 + PoC-1 已落地**。本文为 `DEV_PLAN.md` §0/§4「P2」的细化设计。
+> 状态：**设计稿 + PoC-1/2/3 已落地**（USB 枚举 → 授权 → PTP 会话 → 存储/对象枚举）。本文为 `DEV_PLAN.md` §0/§4「P2」的细化设计。
 > P1（含 P1b 人像精修）已完成；P2 目标：Sony **A7C2（ILCE-7CM2）** 通过 USB 直连手机 →
 > **拉图 → 套预设 → 看/导出**，并评估「边拍边看」可行性。
 >
@@ -11,6 +11,8 @@
 >
 > **核心约束**：P2 是**强真机依赖**阶段——USB 枚举/PTP 会话/传输都必须插上 A7C2 才能验证，
 > 纯编译期（CI）无法覆盖。因此按 PoC 分步推进，每步都可真机验收后再进下一步。
+> 能进 CI 的部分（协议容器编解码、数据集解析、报告格式化）**全部下沉为纯 Kotlin + JVM 单测**，
+> 使真机上只剩「USB 端点与相机实际行为」这一小块不确定性。
 
 ---
 
@@ -39,9 +41,8 @@ Sony ILCE-7CM2 的机身「USB 连接」菜单一般提供：
 | **MTP** | PTP + MTP 扩展 | **可枚举/拉图**（文件名/大小/格式 + 下载），是拉图主路径 |
 | **PC Remote** | PTP（Sony 扩展） | 遥控/连拍/取景；需官方 SDK 才能安全驱动 |
 
-> ⚠️ 待真机确认（PoC-1 输出）：A7C2 各模式下的 **VID/PID 与接口类**。
-> PoC-1 的 USB 检测面板会打印 `0x054C:xxxx` 与接口类（6=StillImage / 8=MSC / 0xFF=Vendor），
-> 以此判定当前模式。**这是后续所有实现的前提**。
+> ⚠️ 待真机确认：A7C2 各模式下的 **VID/PID 与接口类**。PoC-1 面板会打印
+> `0x054C:xxxx` 与接口类（6=StillImage / 8=MSC / 0xFF=Vendor），并据此判定当前模式。
 
 ---
 
@@ -49,12 +50,10 @@ Sony ILCE-7CM2 的机身「USB 连接」菜单一般提供：
 
 | 方案 | 说明 | 优点 | 代价/风险 | 结论 |
 |---|---|---|---|---|
-| **A. 纯 Kotlin 最小 PTP/MTP 客户端** | 直接用 `UsbDeviceConnection` 的 bulk 端点跑 PTP 容器（Open/GetDeviceInfo/GetStorageIDs/GetObjectHandles/GetObjectInfo/GetObject） | 无第三方、无 NDK、无许可；与现有纯 Kotlin 风格一致；可控 | 协议实现量中等（~600–900 行）；**必须真机调试** | **推荐（PoC 主路径）** |
+| **A. 纯 Kotlin 最小 PTP/MTP 客户端** | 直接用 `UsbDeviceConnection` 的 bulk 端点跑 PTP 容器（Open/GetDeviceInfo/GetStorageIDs/GetObjectHandles/GetObjectInfo/GetObject） | 无第三方、无 NDK、无许可；与现有纯 Kotlin 风格一致；**协议层可 JVM 单测** | 协议实现量中等（~900 行）；USB 端点行为必须真机调试 | **推荐（已落地 PoC-1/2/3）** |
 | B. libmtp（NDK 静态链接） | 复用成熟 MTP 库 | 功能全（含事件） | 引入 native 依赖、构建复杂、许可核对；CI 构建变重 | 备选（若 A 的协议坑太多） |
 | C. Sony Camera Remote SDK | 官方 CRSDK（prebuilt .so + EULA） | 官方支持遥控/liveview | 需申请与许可、闭源 prebuilt、与 arm64/NDK 版本匹配；分发受限 | 仅当「边拍边看」必须时评估 |
 | D. Wi-Fi ScalarWebAPI | 相机 Wi-Fi 上的 HTTP API | 无 USB 依赖 | A7C2 支持面有限、需切换相机 Wi-Fi、Android 本地网络权限（API 37 起为运行时权限） | 后置/备选 |
-
-**推荐**：拉图走 **A（纯 Kotlin 最小 MTP）**；「边拍边看」先不做承诺，待拉图链路跑通后再评估 C/D。
 
 ---
 
@@ -78,26 +77,59 @@ Sony ILCE-7CM2 的机身「USB 连接」菜单一般提供：
 
 | 阶段 | 内容 | 依赖 | 状态 |
 |---|---|---|---|
-| **PoC-1** | USB 主机检测：枚举设备、识别 Sony VID/PID 与接口类、打印模式；UI 面板 + 日志 | 仅 USB 枚举（免权限） | ✅ **本批已落地** |
-| PoC-2 | 权限 + 打开设备 + PTP 会话握手（`OpenSession` / `GetDeviceInfo`） | 真机（授权弹窗） | ⬜ |
-| PoC-3 | 枚举存储与对象：`GetStorageIDs` → `GetObjectHandles` → `GetObjectInfo`（列出 ARW 数量/文件名） | PoC-2 | ⬜ |
-| PoC-4 | `GetObject` 下载单张 ARW 到 cache → 复用 P1 管线套预设 → 「相机直出」第一张 | PoC-3 | ⬜ |
+| **PoC-1** | USB 主机检测：枚举设备、识别 Sony VID/PID 与接口类、打印模式；UI 面板 + 日志 | 仅 USB 枚举（免权限） | ✅ |
+| **PoC-2** | 授权 + 打开设备 + 声明 PTP 接口 + `OpenSession` + `GetDeviceInfo`（读机型/固件/序列号/支持操作） | 真机（授权弹窗） | ✅ |
+| **PoC-3** | 枚举存储与对象：`GetStorageIDs` → `GetStorageInfo` → `GetObjectHandles` → `GetObjectInfo`（存储容量 + 对象数 + 末尾样本文件名） | PoC-2 | ✅ |
+| PoC-4 | `GetObject` 流式下载单张 ARW 到 cache → 复用 P1 管线套预设 → 「相机直出」第一张 | PoC-3 | ⬜ |
 | PoC-5 | 批量拉图 + 预设批处理队列（可取消、进度） | PoC-4 | ⬜ |
 | PoC-6（可选） | 边拍边看 / 遥控（评估 CRSDK 或 ScalarWebAPI） | 决策 | ⬜ |
 
 ---
 
-## 6. PoC-1 已实现（本批）
+## 6. PTP 实现要点（PoC-2/3 已落地）
 
-| 文件 | 作用 |
-|---|---|
-| `camera/CameraProbe.kt` | 纯逻辑：Sony VID 判定、接口类→USB 模式提示、`describe()` |
-| `camera/UsbCameraScanner.kt` | 只读 `UsbManager.deviceList` 枚举设备（**不需权限**）→ `List<UsbDeviceSummary>` |
-| `ui/home/CameraPanel.kt` | 首页「相机直连（P2 · PoC）」卡片：一键检测并列出设备 + 写 `CAMERA` 日志 |
-| `camera/CameraProbeTest.kt` | 纯 JVM 单测：VID 判定、模式推断、hex 格式化、描述拼接 |
+### 6.1 容器格式（为什么字节序/长度必须严格）
 
-**真机验证步骤**：USB 连接 A7C2 → 机身 USB 连接设 MTP（或 PC Remote）→ 首页点「检测 USB 设备」
-→ 应出现 `★ Sony ... [0x054C:xxxx] · PTP/MTP ...`，并在调试日志 `CAMERA` tag 看到设备明细。
+PTP over USB 一律 **little-endian**，容器 = 12 字节头 + 负载：
+
+```
+length(u32) | type(u16) | code(u16) | transactionId(u32) | payload[]
+```
+
+一次事务 **Command →（可选 Data）→ Response**。两个最容易踩的坑：
+
+1. **数据阶段是否存在，必须由操作码决定**（`OpenSession`/`CloseSession` 没有 Data）。
+   猜错会把 Response 当成 Data 读，然后卡在等待一个永远不来的负载上。
+2. **设备可能不发 Data 只回 Response**（例如不支持该操作时直接 `OperationNotSupported`）。
+   读到一个 `type=Response` 的头时，必须立刻当作响应处理，而不是继续读负载。
+
+### 6.2 文件清单
+
+| 文件 | 层次 | 作用 |
+|---|---|---|
+| `camera/PtpProtocol.kt` | 纯 Kotlin | 容器编解码、操作码/响应码/格式码常量、小端读写、可读名 |
+| `camera/PtpData.kt` | 纯 Kotlin | `PtpReader`（越界不抛异常）+ DeviceInfo/StorageInfo/ObjectInfo/StorageIDs/ObjectHandles 解析 |
+| `camera/PtpTransport.kt` | Android | 选 PTP 接口与 Bulk 端点、`claimInterface`、三阶段事务、读满/空包重试 |
+| `camera/CameraConnection.kt` | Android | 授权（广播+轮询双保险）→ 打开 → 握手 → 枚举 → 关会话；全程只读 |
+| `camera/CameraPtpReport.kt` | 纯 Kotlin | 报告数据类 + 摘要行（用户直接回传的那份文本） |
+| `ui/home/CameraPanel.kt` | UI | 检测 → 选择设备 → 连接并握手 → 展示报告 |
+
+### 6.3 授权：为什么是「广播 + 轮询」双保险
+
+`UsbManager.requestPermission` 只能靠 PendingIntent 收回结果，而：
+
+- PendingIntent **必须 `FLAG_MUTABLE`**——系统要往里填 `EXTRA_DEVICE` / `EXTRA_PERMISSION_GRANTED`；
+- 授权广播的 action 在不同 ROM 上不完全一致（自定义 action 与系统 action 都注册一遍）；
+- 极端情况下广播可能收不到。
+
+因此同时启动一个 300ms 间隔的 `hasPermission()` 轮询，**谁先到算谁**，25s 超时。
+少了这条兜底，一次「广播没送到」就会让整轮真机验证白跑。
+
+### 6.4 真机验证步骤
+
+USB 连接 A7C2 → 机身「USB 连接」设 **MTP**（或 PC Remote）→ 首页
+「1. 检测 USB 设备」→ 选中 `★ Sony ...` → 「2. 连接并握手」→ 首次弹授权框点「允许」→
+面板列出报告。若失败，导出调试日志，`CAMERA` 日志里会有每条事务与失败点。
 
 ---
 
@@ -105,23 +137,27 @@ Sony ILCE-7CM2 的机身「USB 连接」菜单一般提供：
 
 | 风险 | 等级 | 缓解 |
 |---|---|---|
+| **接口被系统 MTP 服务占用**（`claimInterface` 失败）：Android 检测到 MTP 设备后可能由 MediaProvider 先打开 | **高** | 已把 `claimInterface` 结果单独打日志；失败时报告直接给结论。备选：机身切 PC Remote（厂商接口类 0xFF，系统通常不接管） |
 | A7C2 某些模式不暴露可用的 MTP 接口 | 中 | PoC-1 先探明各模式接口类；必要时引导用户切到 MTP 模式 |
-| 自研 PTP 协议细节多、真机调试耗时 | 中 | 最小闭环（列图+拉单张）；先用 libmtp 作后备 |
-| 传输大文件（ARW 35–57MB）耗时/OOM | 中 | 流式写入缓存文件，不整段进堆；进度 + 可取消 |
+| `GetObjectHandles(0xFFFFFFFF)` 不被支持 | 中 | 已实现回退到 `associationHandle=0`（仅根层），并把「用了哪条路」写进报告 |
+| 自研 PTP 协议细节多、真机调试耗时 | 中 | 协议层/数据集解析下沉为 JVM 单测；真机只剩 USB 行为 |
+| 传输大文件（ARW 35–57MB）耗时/OOM | 中 | PoC-4 起**流式写入缓存文件**，不整段进堆；进度 + 可取消 |
 | 相机端「PC Remote」占用导致 MTP 不可用 | 中 | UI 明确提示模式切换 |
 | 边拍边看依赖官方 SDK | 高 | 不承诺；先交付「拍完拉图」，liveview 单列评估 |
 | targetSdk 37 后 `ACCESS_LOCAL_NETWORK` 运行时权限（Wi-Fi 方案） | 中 | 优先 USB；Wi-Fi 方案后置 |
 
 ---
 
-## 8. 待确认决策
+## 8. 决策记录
 
-- **D1 拉图方案**：A 纯 Kotlin 最小 MTP（推荐） / B libmtp / C Sony CRSDK。
-- **D2 相机模式**：以 **MTP** 为默认引导（推荐）/ PC Remote。
-- **D3 批处理范围**：先单张（推荐）/ 直接做批量队列。
-- **D4 边拍边看**：本期只评估不实现（推荐）/ 现在就引入 CRSDK。
-- **D5 UI 归属**：首页独立「相机」入口（推荐）/ 与「导入」合并。
+- **D1 拉图方案**：**A 纯 Kotlin 最小 MTP**（已落地）。
+- **D2 相机模式**：默认引导 **MTP**；若 `claimInterface` 被系统占用，再试 **PC Remote**。
+- **D3 批处理范围**：先单张（PoC-4），后批量队列（PoC-5）。
+- **D4 边拍边看**：本期只评估不实现。
+- **D5 UI 归属**：首页独立「相机直连」入口（已落地）。
+- **D6 失败姿态**：任何一步失败都返回**带原因的报告**并写日志，不重试、不静默——
+  真机每轮验证成本高，必须一次拿到足够信息。
 
 ---
 
-*本稿为 P2 设计 + PoC-1 落地说明；PoC-2 起（权限 + PTP 会话）需真机插上 A7C2 验证 PoC-1 结果后再推进。*
+*本稿为 P2 设计 + PoC-1/2/3 落地说明；PoC-4（`GetObject` 流式下载 + 复用 P1 管线）为下一步。*

@@ -20,6 +20,17 @@ object UsbCameraScanner {
             .sortedWith(compareBy({ it.vendorId }, { it.productId }))
     }
 
+    /**
+     * 按 `deviceName` 找回真正的 [UsbDevice]。
+     *
+     * 枚举给 UI 的是与 Android 解耦的 [UsbDeviceSummary]（便于单测），
+     * 但 PTP 连接需要能交给 `openDevice()` 的设备对象，故按名字回查一次。
+     */
+    fun find(context: Context, deviceName: String): UsbDevice? {
+        val manager = context.getSystemService(Context.USB_SERVICE) as? UsbManager ?: return null
+        return manager.deviceList[deviceName]
+    }
+
     private fun UsbDevice.toSummary(): UsbDeviceSummary {
         val classes = (0 until interfaceCount).map { getInterface(it).interfaceClass }
         return UsbDeviceSummary(

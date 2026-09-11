@@ -167,7 +167,7 @@ fun HomeScreen(
             }
 
             item {
-                // P2 PoC-1：相机 USB 直连检测（免权限枚举；真机插上 A7C2 后点按验证）
+                // P2 PoC-1/2/3：相机 USB 直连（检测 → 授权 → PTP 会话握手 → 枚举存储/对象，全程只读）
                 CameraPanel()
             }
 
