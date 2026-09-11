@@ -45,7 +45,7 @@ class PtpTransport private constructor(
                 return "${PtpProtocol.operationName(operationCode)} → 传输失败：$failure"
             }
             val dataNote = data?.let { "，data=${it.size}B" } ?: "，无数据"
-            return "${PtpProtocol.operationName(operationCode)} → $responseName()$dataNote，${elapsedMs}ms"
+            return "${PtpProtocol.operationName(operationCode)} → ${responseName()}$dataNote，${elapsedMs}ms"
         }
 
         companion object {
