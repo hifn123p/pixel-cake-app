@@ -400,7 +400,9 @@ private fun AppRoot() {
             onImportPhoto = { photoLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
             onImportArw = { arwLauncher.launch(arrayOf("*/*")) },
             loading = loading,
-            message = status
+            message = status,
+            // P2：相机直连拉取的缓存文件（file:// 于本进程内可读，ARW 由后缀路由到线性管线）
+            onOpenLocalFile = { file -> openInEditor(Uri.fromFile(file)) }
         )
     }
 }

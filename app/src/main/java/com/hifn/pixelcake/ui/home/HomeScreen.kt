@@ -34,6 +34,7 @@ import com.hifn.pixelcake.diag.DebugLog
 import com.hifn.pixelcake.ui.theme.Bad
 import com.hifn.pixelcake.ui.theme.Ok
 import com.hifn.pixelcake.ui.theme.Warn
+import java.io.File
 
 /**
  * 首页：设备能力实测面板 + 编辑链路入口。
@@ -43,6 +44,7 @@ import com.hifn.pixelcake.ui.theme.Warn
  *
  * @param loading 正在解码（33MP ARW 的代理线性解码耗时可见，给出进度反馈，避免"点了没反应"）。
  * @param message 状态消息（解码失败提示 / 载入结果），为空则不显示。
+ * @param onOpenLocalFile 相机直连拉取的本地缓存文件 → 打开编辑器（P2）。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -50,10 +52,12 @@ fun HomeScreen(
     onImportPhoto: () -> Unit,
     onImportArw: () -> Unit,
     loading: Boolean = false,
-    message: String = ""
+    message: String = "",
+    onOpenLocalFile: (File) -> Unit = {}
 ) {
     val context = LocalContext.current
     val caps = remember { context.probeCapabilities() }
+    val profile = remember(caps) { caps.resolutionProfile() }
 
     var logExported by remember { mutableStateOf(false) }
 
@@ -80,7 +84,8 @@ fun HomeScreen(
                         style = MaterialTheme.typography.displaySmall
                     )
                     Text(
-                        "P1 已完成：ARW 全量修图 · 磨皮/液化/祛瑕/追色 · 预设 · 画笔蒙版。下一步：A7C2 直连（P2）。",
+                        "P1 已完成：ARW 全量修图 · 磨皮/液化/祛瑕/追色 · 预设 · 画笔蒙版。" +
+                            "P2 已完成：A7C2 USB 直连拉图（单张进编辑器 / 批量套预设导出）。下一步：AI 接入（P3）。",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 4.dp)
@@ -167,8 +172,11 @@ fun HomeScreen(
             }
 
             item {
-                // P2 PoC-1/2/3：相机 USB 直连（检测 → 授权 → PTP 会话握手 → 枚举存储/对象，全程只读）
-                CameraPanel()
+                // P2：相机 USB 直连（检测 → 授权 → PTP 会话 → 列图 → 单张/批量拉图套预设）
+                CameraPanel(
+                    longEdge = profile.fullResLongEdge,
+                    onOpenLocalFile = onOpenLocalFile
+                )
             }
 
             item {
@@ -189,14 +197,14 @@ fun HomeScreen(
 
             item {
                 SectionCard("路线图") {
-                    // 与 DEV_PLAN v3.0 对齐：P1（含 P1b 人像精修）已完成；P2 直连为下一步
+                    // 与 DEV_PLAN 对齐：P1（含 P1b 人像精修）与 P2（A7C2 直连拉图）已完成；下一步 P1+ / P3
                     RoadmapStep(1, "工程骨架 + CI", done = true)
                     RoadmapStep(2, "NDK + LibRaw（A7C2 ARW 解码）", done = true)
                     RoadmapStep(3, "16-bit 线性渲染管线（预览/导出同源）", done = true)
                     RoadmapStep(4, "人像算子（磨皮 / 液化 / 祛瑕 / 追色）", done = true)
                     RoadmapStep(5, "内置人像预设 10 套", done = true)
                     RoadmapStep(6, "局部调整与画笔蒙版", done = true)
-                    RoadmapStep(7, "A7C2 直连（USB PTP 拉图）", done = false)
+                    RoadmapStep(7, "A7C2 直连（USB PTP 拉图 + 批量套预设）", done = true)
                     RoadmapStep(8, "AI 接入（TFLite + NNAPI）", done = false)
                 }
             }

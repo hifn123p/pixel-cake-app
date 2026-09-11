@@ -7,6 +7,7 @@ import android.hardware.usb.UsbEndpoint
 import android.hardware.usb.UsbInterface
 import android.hardware.usb.UsbManager
 import com.hifn.pixelcake.diag.DebugLog
+import java.io.OutputStream
 
 /**
  * PTP over USB 的最小传输层：把「命令 →（可选数据）→ 响应」三阶段封装成一次 [execute]。
@@ -120,6 +121,121 @@ class PtpTransport private constructor(
         responseCode = response.first.code
         logTransaction(operationCode, txId, responseCode, data, started)
         return Transaction(operationCode, txId, responseCode, data, responseHeader, null, System.currentTimeMillis() - started)
+    }
+
+    /** `GetObject` 的流式下载结果。 */
+    class Download(
+        val ok: Boolean,
+        val bytes: Long,
+        val totalBytes: Long,
+        val responseCode: Int,
+        val failure: String?,
+        val elapsedMs: Long
+    ) {
+        fun responseName(): String = PtpProtocol.responseName(responseCode)
+    }
+
+    /**
+     * 流式下载一个对象（`GetObject`）：数据分块从 Bulk IN 读出后**直接写入** [sink]。
+     *
+     * 绝不能整段读进 `ByteArray`——单张 ARW 有 35–57MB，批量场景下会立刻把堆打满。
+     *
+     * 数据阶段的容器长度必须已知（相机已在 `ObjectInfo` 报过对象大小，USB 上总能给出）；
+     * 若长度未知（0xFFFFFFFF）则直接失败——不做不可靠的猜测，让报告说清楚。
+     *
+     * 中断处理：写了一半就失败时返回 `ok = false`，调用方负责删除半成品文件。
+     * 注意**不支持中途取消**：半途停止读取会让数据流与响应错位，该会话必须废弃。
+     * 批量任务因此把「取消」放在**文件边界**上判断（见 `CameraBatch`）。
+     */
+    fun downloadObject(
+        handle: Int,
+        sink: OutputStream,
+        onProgress: (Long, Long) -> Unit = { _, _ -> }
+    ): Download {
+        val started = System.currentTimeMillis()
+        val txId = ++transactionId
+        val command = PtpProtocol.encodeCommand(PtpProtocol.OP_GET_OBJECT, listOf(handle), txId)
+
+        val sent = runCatching {
+            connection.bulkTransfer(endpointOut, command, 0, command.size, BULK_TIMEOUT_MS)
+        }.getOrDefault(-1)
+        if (sent != command.size) {
+            return Download(
+                false, 0L, 0L, -1,
+                "命令发送失败（$sent/${command.size} 字节）",
+                System.currentTimeMillis() - started
+            )
+        }
+
+        val headerBuf = ByteArray(PtpProtocol.HEADER_SIZE)
+        if (!readFully(headerBuf, 0, headerBuf.size, BULK_TIMEOUT_MS)) {
+            return Download(false, 0L, 0L, -1, "读取数据头失败", System.currentTimeMillis() - started)
+        }
+        val header = PtpProtocol.parseHeader(headerBuf)
+            ?: return Download(false, 0L, 0L, -1, "数据头非法", System.currentTimeMillis() - started)
+
+        // 设备可能不发 Data、直接回错误响应（例如对象已被相机端删除）
+        if (header.type == PtpProtocol.CONTAINER_RESPONSE) {
+            DebugLog.d(
+                DebugLog.TAG_CAMERA, "ptp get object returned response",
+                mapOf("handle" to handle, "response" to PtpProtocol.responseName(header.code))
+            )
+            return Download(
+                false, 0L, 0L, header.code,
+                "GetObject 直接返回响应：${PtpProtocol.responseName(header.code)}",
+                System.currentTimeMillis() - started
+            )
+        }
+        if (header.type != PtpProtocol.CONTAINER_DATA) {
+            return Download(
+                false, 0L, 0L, -1,
+                "期望 Data，实际 ${PtpProtocol.containerTypeName(header.type)}",
+                System.currentTimeMillis() - started
+            )
+        }
+
+        val total = header.payloadLength.toLong()
+        if (total <= 0L) {
+            return Download(
+                false, 0L, 0L, -1,
+                "对象长度未知或为空（length=${PtpProtocol.hex8(header.length)}）",
+                System.currentTimeMillis() - started
+            )
+        }
+
+        // 256KiB 分块：足够摊薄每条 USB 事务的开销，又不会占用可观内存
+        val chunk = ByteArray(256 * 1024)
+        var done = 0L
+        while (done < total) {
+            val want = minOf(chunk.size.toLong(), total - done).toInt()
+            val read = runCatching {
+                connection.bulkTransfer(endpointIn, chunk, 0, want, DATA_TIMEOUT_MS)
+            }.getOrDefault(-1)
+            if (read <= 0) {
+                return Download(
+                    false, done, total, -1,
+                    "下载中断：$done/$total 字节（超时或设备已断开）",
+                    System.currentTimeMillis() - started
+                )
+            }
+            sink.write(chunk, 0, read)
+            done += read
+            onProgress(done, total)
+        }
+        sink.flush()
+
+        val response = readContainer(PtpProtocol.OP_GET_OBJECT, txId)
+            ?: return Download(false, done, total, -1, "响应阶段读取失败", System.currentTimeMillis() - started)
+        val responseCode = response.first.code
+        logTransaction(PtpProtocol.OP_GET_OBJECT, txId, responseCode, null, started)
+        if (responseCode != PtpProtocol.RC_OK) {
+            return Download(
+                false, done, total, responseCode,
+                "GetObject 响应 ${PtpProtocol.responseName(responseCode)}",
+                System.currentTimeMillis() - started
+            )
+        }
+        return Download(true, done, total, responseCode, null, System.currentTimeMillis() - started)
     }
 
     /** 读一个完整容器（头 + 负载）。 */
