@@ -97,4 +97,83 @@ class BeautyTest {
         }
         assertTrue("亮线应向上（质心方向）移动，实际在 y=$brightestY", brightestY < 18)
     }
+
+    /**
+     * 内存纪律等价性（FIX_LIST R10）：`Beauty` 现在只在**蒙版包围盒**上开输出缓冲
+     * （整幅 `out` 已消除）。必须与「朴素整幅实现」逐位一致 —— 否则省内存省出了画质差异。
+     *
+     * 圆盘蒙版偏心放置：包围盒明显小于整幅，同时覆盖「包围盒内 mv>0 / 包围盒外恒等」两条分支。
+     */
+    @Test
+    fun bboxBufferMatchesFullFrame() {
+        val w = 64; val h = 48
+        val circle = object : RetouchMask {
+            override fun sample(px: Int, py: Int): Float {
+                val dx = px - 40; val dy = py - 14
+                return if (dx * dx + dy * dy <= 81) 1f else 0f
+            }
+            override fun resampleTo(w: Int, h: Int) = this
+        }
+        val px0 = IntArray(w * h)
+        var seed = 7L
+        for (i in px0.indices) {
+            seed = (seed * 1103515245 + 12345) and 0x7fffffff
+            val v = (seed % 256).toInt()
+            px0[i] = 0xff000000.toInt() or (v shl 16) or ((v / 2) shl 8) or (v / 3)
+        }
+        val params = BeautyParams(slimFace = 0.6f, slimJaw = 0.4f, eyeEnlarge = 0.3f)
+
+        val expected = naiveFullFrame(px0, w, h, params, circle)
+        val actual = px0.copyOf()
+        Beauty.apply(actual, w, h, params, circle)
+
+        assertTrue("包围盒缓冲结果应与整幅实现逐位一致", expected.contentEquals(actual))
+    }
+
+    // ---- 朴素整幅参照实现（独立于被测代码，仅用于钉住缓冲口径等价性） ----
+
+    private fun naiveFullFrame(src: IntArray, w: Int, h: Int, params: BeautyParams, mask: RetouchMask): IntArray {
+        var sx = 0L; var sy = 0L; var sw = 0L
+        for (y in 0 until h) for (x in 0 until w) {
+            if (mask.sample(x, y) > 0f) { sx += x; sy += y; sw += 1 }
+        }
+        val cx = (sx / sw).toFloat()
+        val cy = (sy / sw).toFloat()
+        val out = IntArray(src.size)
+        for (y in 0 until h) for (x in 0 until w) {
+            val mv = mask.sample(x, y).coerceIn(0f, 1f)
+            if (mv <= 0f) { out[y * w + x] = src[y * w + x]; continue }
+            var dx = x.toFloat(); var dy = y.toFloat()
+            if (params.slimFace > 0f) dx += mv * params.slimFace * 0.3f * (x - cx)
+            if (params.slimJaw > 0f && y > cy) dy += mv * params.slimJaw * 0.3f * (y - cy)
+            if (params.eyeEnlarge > 0f) {
+                dx = cx + (dx - cx) * (1f - mv * params.eyeEnlarge * 0.3f)
+                dy = cy + (dy - cy) * (1f - mv * params.eyeEnlarge * 0.3f)
+            }
+            out[y * w + x] = bilinear(src, w, h, dx, dy)
+        }
+        return out
+    }
+
+    private fun bilinear(px: IntArray, w: Int, h: Int, fx: Float, fy: Float): Int {
+        val x0 = fx.toInt().coerceIn(0, w - 1)
+        val y0 = fy.toInt().coerceIn(0, h - 1)
+        val x1 = (x0 + 1).coerceIn(0, w - 1)
+        val y1 = (y0 + 1).coerceIn(0, h - 1)
+        val tx = (fx - x0).coerceIn(0f, 1f)
+        val ty = (fy - y0).coerceIn(0f, 1f)
+        val a = px[y0 * w + x0]; val b = px[y0 * w + x1]
+        val c = px[y1 * w + x0]; val d = px[y1 * w + x1]
+        val lerp = { p: Int, q: Int -> (p * (1 - tx) + q * tx).toInt().coerceIn(0, 255) }
+        val tr = lerp((a shr 16) and 0xff, (b shr 16) and 0xff)
+        val tg = lerp((a shr 8) and 0xff, (b shr 8) and 0xff)
+        val tb = lerp(a and 0xff, b and 0xff)
+        val brc = lerp((c shr 16) and 0xff, (d shr 16) and 0xff)
+        val bgc = lerp((c shr 8) and 0xff, (d shr 8) and 0xff)
+        val bbc = lerp(c and 0xff, d and 0xff)
+        val rr = (tr * (1 - ty) + brc * ty).toInt().coerceIn(0, 255)
+        val gg = (tg * (1 - ty) + bgc * ty).toInt().coerceIn(0, 255)
+        val bb = (tb * (1 - ty) + bbc * ty).toInt().coerceIn(0, 255)
+        return 0xff000000.toInt() or (rr shl 16) or (gg shl 8) or bb
+    }
 }

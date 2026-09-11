@@ -9,10 +9,28 @@ import kotlin.math.sqrt
  *
  * `sample` 返回 [0..1] 作用强度；`resampleTo` 用于预览→导出时同一 Mask 按目标分辨率对齐，
  * 保证「预览所见即导出所得」。
+ *
+ * **`null` 语义（全仓统一约定，勿再各算子自行解释）**：蒙版参数为 `null` = **未圈定作用域 → 该算子不执行**，
+ * 而不是「全局生效」。皮肤类算子（`NeutralGray` 磨皮、`Beauty` 液化）都按此处理，全仓见
+ * `docs/P1b_DESIGN.md` §4。相机批量链路正是靠这条约定（`CameraBatch` 传 `mask = null`）避免把背景一起磨/形变；
+ * 代价是**批量与「未涂抹蒙版的编辑器」都不会执行皮肤类算子** —— 如需全局效果，调用方应显式传
+ * [FullMask]（或任何全幅覆盖的蒙版），而不是依赖 `null` 的隐含含义。
  */
 interface RetouchMask {
     fun sample(px: Int, py: Int): Float
     fun resampleTo(w: Int, h: Int): RetouchMask
+}
+
+/**
+ * 全幅恒强蒙版：`sample` 恒为 1，**O(1) 内存**（注意不是一整张 `FloatArray` —— 33MP 下那是 131MB）。
+ *
+ * 这是调用方表达「**未圈定局部作用域 ⇒ 作用域就是整幅**」的显式手段：
+ * 编辑器在用户没画任何画笔描迹时用它（见 `RetouchScale.skinMask`），从而保留「滑杆一拖就有可见效果」；
+ * 相机批量链路则显式传 `null`，表达「不执行」。两者都写在**调用点**，`null` 于是只有一种含义。
+ */
+object FullMask : RetouchMask {
+    override fun sample(px: Int, py: Int) = 1f
+    override fun resampleTo(w: Int, h: Int) = this
 }
 
 /** 画笔描迹（构建 skin 蒙版用）。 */

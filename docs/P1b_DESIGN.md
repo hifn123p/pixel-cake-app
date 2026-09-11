@@ -96,6 +96,17 @@ interface RetouchMask {
 ```
 - **P1 来源**：编辑器画笔（soft brush，半径 + 羽化）→ 累加到 `RasterMask`（与图同尺寸 8-bit/浮点栅格，存内存）。
 - **消费**：retouch 算子 `out = lerp(orig, op(orig), strength * mask(px,py))`。
+- **`mask == null` 语义（全仓统一，勿各算子自行解释）**：`null` = **未圈定作用域 → 该算子不执行**，
+  **不是**「全局生效」。适用于全部皮肤类算子（`NeutralGray` 磨皮、`Beauty` 液化）。
+  - 由来：相机批量链路（`CameraBatch` 显式传 `mask = null`）借此避免把背景一起磨/形变。
+  - 「要全局效果」的**正确做法**：调用方显式传**全幅蒙版**（`FullMask`，`Mask.kt`），
+    而不是依赖 `null` 的隐含含义（`null` 只有「不执行」一种解释）。
+  - 两条入口的分工：
+    - **编辑器**：无画笔描迹时 `RetouchScale.skinMask` 返回 `FullMask`（作用域 = 整幅），
+      故「磨皮」滑杆在未涂抹前**依旧全局可见效果**，与 P1 旧行为一致；`MainActivity.buildSkinMask` 直接委托 `RetouchScale`。
+    - **相机批量链路**：`CameraBatch` 显式传 `null` → **不执行磨皮/液化**，只做点态调色 + 祛瑕 + 追色。
+  - 有断言单测护栏：`NeutralGrayTest.noOpWhenMaskNull`、`BeautyTest.noOpWhenMaskNull`、
+    `RetouchScaleTest.noStrokesYieldsFullMask`。
 - **P1+ 扩展点**：`MlSkinMask` 实现同一接口（FaceDetector → skin 概率图），UI 无需改。
 
 ---

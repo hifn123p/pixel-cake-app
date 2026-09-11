@@ -46,14 +46,24 @@ object RetouchScale {
         )
     }
 
-    /** 由归一化画笔描迹构建皮肤蒙版（尺寸对齐目标图）；无描迹时返回 null（表示「不限制」）。 */
+    /**
+     * 由归一化画笔描迹构建皮肤蒙版（尺寸对齐目标图）。
+     *
+     * **无描迹时返回 [FullMask]（作用域 = 整幅），而不是 `null`。** 这是「调用方显式声明作用域」的落点：
+     * 编辑器里用户没画画笔时，磨皮/液化本就该作用于整幅（滑杆一拖就有可见效果），由**调用方**表达这个
+     * 意图；`null` 则专门留给「不执行」——相机批量链路显式传 `null`，避免把背景一起磨/形变。
+     * 语义约定见 [RetouchMask] KDoc 与 `docs/P1b_DESIGN.md` §4。
+     *
+     * 只有尺寸非法（`w/h <= 0`，无处可施加）时才返回 `null`。
+     */
     fun skinMask(
         w: Int,
         h: Int,
         strokes: List<Pair<Float, Float>>,
         radiusNorm: Float
-    ): RasterMask? {
-        if (strokes.isEmpty() || w <= 0 || h <= 0) return null
+    ): RetouchMask? {
+        if (w <= 0 || h <= 0) return null
+        if (strokes.isEmpty()) return FullMask
         val minDim = minOf(w, h)
         val radius = (radiusNorm * minDim).toInt().coerceAtLeast(1)
         val brushStrokes = strokes.map { (nx, ny) ->

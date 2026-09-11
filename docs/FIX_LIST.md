@@ -161,5 +161,35 @@ scope: docs/DEV_PLAN.md v3.0 + 全部 52 个入库文件 + wb-issues 16 张卡
 | R07 | **高** | S3：下载路径把**空包（ZLP）当失败**——`read <= 0` 即中断，与同文件 `readFully` 的「零长度包可重试」策略矛盾；大文件（35–57MB）一次空读即整张失败，且报错文案误导为「超时或设备已断开」 | `PtpTransport.kt:214`（`readFully` 对照 `:293-309`） | 拆开 `read < 0`（超时/断开）与 `read == 0`（ZLP，重试 `MAX_EMPTY_READS` 次）；成功续读后清零计数（下载读次数远多于 `readFully`，避免零星空包累积触顶）；两类错误文案分开 |
 
 > 未做（受「无本地构建环境 / 最小改动」约束，报告 M10/L12 已登记为后续）：`CameraBatch.run()` 三语义（取消/导完即删/失败续跑）与 `PtpTransport` 的**单测**需要先抽 `PtpTransport` 接口注入 fake，属结构性重构，本轮不夹带。
-> 本轮改动**未提交**（不代 push）；CI 需用户 push 后验证。
+> 状态：§8.2 的改动**已提交 `280dbfb`**，CI run `34612770955` 全绿（详见 `docs/Github_CI.md`）。
+
+## 9. 第二轮复审（2026-09-11）：N1 语义统一 + N2 文档过期
+
+> 触发：第二轮复审报告（基线 `95a868a` / 代码 `280dbfb` / run `34612770955`）—— 确认 §8 的 S1/S2/S3 修复正确、
+> C1/C2 更正成立，并提出 N1（`mask == null` 语义相反）与 N2（本文档 §8 结论过期）。本轮修这两项。
+
+| ID | 级别 | 问题 | 证据 | 修复 |
+|---|---|---|---|---|
+| R08 | **中** | N1：`mask == null` 在两个皮肤类算子间**语义相反**且设计稿未定义 → 同一预设经两条入口得到两种结果。批量链路（`mask = null`）套「奶油肌」时**磨皮对整张照片（含背景）全强度生效、瘦脸静默失效** | `NeutralGray.kt:27`（null → `1f` 全局）vs `Beauty.kt:22`（null → `return`）；`CameraBatch.kt:205` 传 `null`；`P1b_DESIGN.md:98/106/108/112` 只写 `strength*mask`，未定义 `null` | **统一为「null = 未圈定作用域 → 不执行」**（方案②）：`NeutralGray` 改 `val skin = mask ?: return`；`RetouchMask` KDoc 与 `P1b_DESIGN.md §4` 写明约定；`NeutralGrayTest` 两用例改传全幅蒙版并**新增 `noOpWhenMaskNull`** 断言；`CameraPanel` 批量区明示「磨皮/瘦脸不生效」 |
+| R09 | 低（文档） | N2：§8 结论「本轮改动未提交（不代 push）」已过期 | 本文档 §8 末行 | 更正为「已提交 `280dbfb`，CI run `34612770955` 全绿」 |
+| R10 | **高（本轮新提，已按方案 A 落地）** | retouch 全幅缓冲：全分辨率导出在 retouch pass 内同时持有 目标 Bitmap(131MB) + `RetouchLayer.px`(131MB) + `NeutralGray.boxBlur` 的 tmp/out(各 131MB) + `Beauty.out`(131MB) → 峰值 ≈524MB（JVM 堆），若计入 retouch 期间仍打开的 196MB native 线性母版 ≈720MB。**撤销了 F05 的分带内存纪律** → 全分辨率 + retouch 导出存在 OOM 风险 | `RetouchLayer.kt:31`、`NeutralGray.kt:53-59`（tmp/out 各一全幅 `IntArray`）、`Beauty.kt:33` | **已实施**：① `NeutralGray` 改**分带**（`BAND_ROWS=256` + 保留上一带 `radius` 行原始 halo），3×131MB → **≈30MB**；② `Beauty` 消除整幅 `out`，改为**只在蒙版包围盒**开缓冲（蒙版外恒等 ⇒ 原地保留），典型画笔蒙版下 131MB → 数 MB。两者各配「朴素整幅参照实现」等价性单测。**已续做（`RetouchLayer.px` 流式化）**：`RetouchLayer` 不再持有全幅 `px`，改为在 `PixelStore` 上分带/条带/小图块处理——磨皮分带 `BAND_ROWS=256`（携上一带原始 halo）、液化只处理蒙版包围盒的**源行条带**（`Beauty.apply(rowOffset,centroid)`）、祛瑕按笔画开**小图块**（`Inpaint.applyOne`，局部坐标）、追色改**两遍只读统计 + 一遍写入**（`accumulateSum/accumulateVariance/applyWithStats`，保持原求和顺序 ⇒ 位等价）。**该 pass 现只剩目标 Bitmap(131MB) 的固有工作集，整幅 `px` 已消除**；等价性由 `RetouchLayerTest`（`MemStore` vs 朴素整幅参照，6 用例）钉死 |
+
+> **R10 的归属更正**：第二轮报告把它列在「上轮未动项」，但上两轮报告（FIX_LIST 复审 + 全面审计）**都未列过这条** ——
+> 它是 P1b-4 retouch 层引入的**新增**严重项，不是旧账。
+>
+> **R10 实施口径（方案 A）**：
+> - `NeutralGray` 走**分带**：每带源缓冲 = 上一带留存的 `radius` 行原始像素（顶部 halo） + 本带核心行及其下 `radius` 行；
+>   boxBlur 只作用在子图上，核心行的窗口恒落在子图内 ⇒ 与整幅版 clamp 结果一致。**为什么必须留存原始 halo**：
+>   核心行是原位写回的，上一带写过之后顶部 halo 已非原始值，不能再当源用。
+> - `Beauty` **不能分带**，改走**包围盒**：液化是后向映射且位移随「到质心距离」线性增长 ——
+>   `slimJaw` 把源点拉到带上方、`eyeEnlarge` 把源点拉到质心下方，跨越多带；任何单趟带状原地处理都会读到
+>  已写值而失真，要精确就得保留无界 halo（等于没省）。而蒙版外 `mv==0` 恒等，故只在包围盒开缓冲是
+>  此算子唯一「既精确又有界」的口径。
+> - 等价性由**朴素整幅参照实现**钉死（不复用被测代码）：`NeutralGrayTest.bandedMatchesFullFrame`、
+>   `BeautyTest.bboxBufferMatchesFullFrame`。⚠️ 这两条是本轮新增的关键回归防线 —— 后续再动这两个算子必须让它们保持绿。
+>
+> **R08 的连带行为（已定案，非「行为变化」）**：编辑器改为**无描迹时显式传 `FullMask`**（作用域 = 整幅），
+> 因此「磨皮」滑杆在未涂抹画笔蒙版前**仍全局可见效果**，与 P1 旧行为一致；`null` 唯一含义 = 「不执行」，
+> 只由 `CameraBatch` 显式传入。落点：`Mask.kt` 新增 `object FullMask`；`RetouchScale.skinMask` 无描迹返回 `FullMask`；
+> `MainActivity.buildSkinMask` 改为委托 `RetouchScale`（顺带消除 M4 死代码）。护栏 `RetouchScaleTest.noStrokesYieldsFullMask`。
 

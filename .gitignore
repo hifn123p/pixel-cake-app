@@ -37,6 +37,12 @@ docs/archive/
 # Sony A7C II ARW 样本体积大，仅本地调试/真机验证用
 example/
 
+# ---------- 本地校验脚本残留（绝不入库） ----------
+# 括号/花括号配平等一次性自检的输出文件（约定写到 $TEMP，历史上曾落在仓库根）
+.*check.txt
+.bracecheck.txt
+.parencheck.txt
+
 # ---------- 临时凭证 / CI 调试残留（绝不入库） ----------
 # 覆盖所有 .ci_ 前缀产物：CI 日志抓取流程实际写出的是 .ci_ghtoken（无扩展名），
 # 此前只忽略 .ci_token.txt / .ci_*.json，PAT 有入库风险（FIX_LIST F09）。

@@ -400,6 +400,13 @@ fun CameraPanel(
                             fontWeight = FontWeight.SemiBold,
                             modifier = Modifier.padding(top = 8.dp)
                         )
+                        Text(
+                            "注：批量链路不提供画笔蒙版，因此「磨皮 / 瘦脸」等需要蒙版作用域的算子不会生效" +
+                                "（只应用调色、祛瑕与追色）。需要皮肤类效果请在编辑器里涂抹蒙版后单张精修导出。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 2.dp)
+                        )
                         Row(
                             modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
                                 .padding(top = 4.dp),

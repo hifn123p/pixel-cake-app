@@ -26,14 +26,14 @@ import com.hifn.pixelcake.core.decode.DecodedImage
 import com.hifn.pixelcake.core.decode.Decoder
 import com.hifn.pixelcake.core.decode.Exporter
 import com.hifn.pixelcake.core.decode.ExportFormat
-import com.hifn.pixelcake.core.edit.BrushStroke
 import com.hifn.pixelcake.core.edit.EditEngine
 import com.hifn.pixelcake.core.edit.EditHistory
 import com.hifn.pixelcake.core.edit.EditParams
 import com.hifn.pixelcake.core.edit.EditSnapshot
 import com.hifn.pixelcake.core.edit.InpaintStroke
 import com.hifn.pixelcake.core.edit.NeutralGrayParams
-import com.hifn.pixelcake.core.edit.RasterMask
+import com.hifn.pixelcake.core.edit.RetouchMask
+import com.hifn.pixelcake.core.edit.RetouchScale
 import com.hifn.pixelcake.core.edit.RetouchState
 import com.hifn.pixelcake.core.edit.preset.Preset
 import com.hifn.pixelcake.core.edit.preset.Presets
@@ -413,14 +413,15 @@ private fun AppRoot() {
     }
 }
 
-/** 由画笔描迹（归一化坐标 + 归一化半径）构建皮肤蒙版，尺寸对齐目标图 (w,h)。 */
-private fun buildSkinMask(w: Int, h: Int, strokes: List<Pair<Float, Float>>, radiusNorm: Float): RasterMask? {
-    if (strokes.isEmpty() || w <= 0 || h <= 0) return null
-    val minDim = min(w, h)
-    val r = (radiusNorm * minDim).toInt().coerceAtLeast(1)
-    val bs = strokes.map { (nx, ny) -> BrushStroke((nx * w).toInt(), (ny * h).toInt(), r) }
-    return RasterMask.fromStrokes(w, h, bs)
-}
+/**
+ * 编辑器侧的皮肤蒙版：委托 [RetouchScale.skinMask]，与相机批处理共用**同一换算口径**。
+ *
+ * 返回类型是 [RetouchMask]（可能是 [FullMask]）：**没画描迹时得到的是「作用域 = 整幅」**，不是 `null` ——
+ * 编辑器里磨皮/液化滑杆因此始终有可见效果（由**调用方**显式声明作用域）。`null` 只表示「不执行」，
+ * 专留给相机批量链路（`CameraBatch`）显式传入。
+ */
+private fun buildSkinMask(w: Int, h: Int, strokes: List<Pair<Float, Float>>, radiusNorm: Float): RetouchMask? =
+    RetouchScale.skinMask(w, h, strokes, radiusNorm)
 
 /** 把 UI 的 RetouchState 换算为渲染态：磨皮半径按短边比例 → 像素半径；UI 归一化祛瑕点 → 像素描迹。
  *  beauty / colorTransfer 已是分辨率无关参数，直接透传，保证预览/导出所见即所得。 */
