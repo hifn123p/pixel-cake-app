@@ -104,14 +104,4 @@ class FloatGridTest {
         assertEquals(1f, v, 1e-6f)
     }
 
-    @Test
-    fun maxWithTakesElementWiseMaximum() {
-        val a = FloatGrid(floatArrayOf(0f, 0.4f, 0.9f, 0.1f), 2, 2)
-        val b = FloatGrid(floatArrayOf(0.3f, 0.2f, 0.5f, 0.8f), 2, 2)
-        val m = a.maxWith(b)
-        assertEquals(0.3f, m.data[0], 0f)
-        assertEquals(0.4f, m.data[1], 0f)
-        assertEquals(0.9f, m.data[2], 0f)
-        assertEquals(0.8f, m.data[3], 0f)
-    }
 }

@@ -128,7 +128,7 @@ MediaPipe Image Segmenter 提供 4 个候选（官方页数据）：
 
 ```
 core/ml/
-├── SkinMaskModel.kt        # 接口：suspend fun infer(argb: IntArray, w: Int, h: Int): FloatGrid?
+├── SkinMaskModel.kt        # 接口：val side / val acceleratorName / fun inferProbs(argb: IntArray): FloatArray? / fun close()
 ├── LiteRtSkinMaskModel.kt  # LiteRT/CompiledModel 实现（GPU→CPU 级联；assets 读模型）
 ├── SkinMaskPostProcess.kt  # 纯函数：6 通道概率 → 皮肤概率网格（可 JVM 单测）
 ├── FloatGrid.kt            # 低分辨率浮点网格 + 双线性采样（无 Android 依赖）

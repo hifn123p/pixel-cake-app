@@ -48,20 +48,4 @@ class FloatGrid(val data: FloatArray, val w: Int, val h: Int) {
         return (top + (bot - top) * fy).coerceIn(0f, 1f)
     }
 
-    /** 逐元素取最大（用于合并两张同尺寸网格；调试/预览用）。 */
-    fun maxWith(other: FloatGrid): FloatGrid {
-        require(w == other.w && h == other.h) { "grid size mismatch" }
-        val out = FloatArray(w * h)
-        for (i in 0 until w * h) {
-            val a = data[i]
-            val b = other.data[i]
-            out[i] = if (a >= b) a else b
-        }
-        return FloatGrid(out, w, h)
-    }
-
-    companion object {
-        /** 全 0 的 `side × side` 网格。 */
-        fun zeros(side: Int): FloatGrid = FloatGrid(FloatArray(side * side), side, side)
-    }
 }

@@ -28,9 +28,6 @@ object MlMaskProvider {
     private var cacheKey: String? = null
     private var cacheMask: MlSkinMask? = null
 
-    /** 自动蒙版当前是否可用（模型已加载且未因 OOM 关闭）。 */
-    val available: Boolean get() = !disabled && model != null
-
     /** 已加载模型的加速器名（`GPU` / `CPU`）；模型未加载时为 `null`。供 UI 展示与真机验收核对。 */
     val accelerator: String? get() = model?.acceleratorName
 
