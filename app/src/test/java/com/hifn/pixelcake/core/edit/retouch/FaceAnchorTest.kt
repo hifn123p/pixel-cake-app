@@ -1,5 +1,6 @@
 package com.hifn.pixelcake.core.edit.retouch
 
+import com.hifn.pixelcake.core.edit.retouch.RetouchLayer.FaceAnchor
 import com.hifn.pixelcake.core.ml.FaceDetection
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
