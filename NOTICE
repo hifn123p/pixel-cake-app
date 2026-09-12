@@ -38,6 +38,21 @@
        * 说明：模型**原样随包**分发，未做修改；本声明即满足其署名与许可保留要求。
          （上游授权为 Apache-2.0，故不触发 LibRaw 那样的 relink 义务。）
 
+4. MediaPipe BlazeFace Sparse (Full Range) 人脸检测模型（P1p-2，Apache-2.0）
+   - 用途：端侧人脸检测（给液化提供人脸中心/眼心，见
+     `app/src/main/java/com/hifn/pixelcake/core/ml/` 的 `FaceDetector` 系与
+     `docs/P1p_DESIGN.md` §15）；同一 LiteRT 运行时（第 3 条）执行。
+   - **MediaPipe BlazeFace Sparse (Full Range)**（Apache-2.0）
+       * 随包文件：`app/src/main/assets/models/face_detection_full_range_sparse.tflite`
+       * 体积：676,746 字节
+       * SHA-256：`2c3728e6da56f21e21a320433396fb06d40d9088f2247c05e5635a688d45dfe1`
+       * 下载源：https://storage.googleapis.com/mediapipe-assets/face_detection_full_range_sparse.tflite
+       * 模型卡：https://storage.googleapis.com/mediapipe-assets/MediaPipe%20BlazeFace%20Sparse%20Model%20Card%20(Full%20Range).pdf
+       * 说明：模型**原样随包**分发，未做修改。其输入张量为 192×192×3 float32
+         （归一化 [-1,1]）、输出为 2304 个锚框的偏移与分数；anchor 生成、解码与 NMS
+         由本仓库自实现的纯 Kotlin 代码完成（参数出自 MediaPipe 的
+         `face_detection_full_range.pbtxt`），未再分发任何上游二进制。
+
 注：本声明覆盖 LibRaw、LGPL 类依赖、LiteRT 与内置的 MediaPipe 模型。内置 LUT /
 其他模型各自的 MIT / CC / Apache 许可随资源另行标注（见 README「致谢」与
 资源 LICENSE / NOTICE）。

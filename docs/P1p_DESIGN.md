@@ -26,7 +26,7 @@ description: P1+ 阶段（ML 自动蒙版）的技术选型、模型选型、分
 | **P1p-1b** | UI 接线：编辑器「自动蒙版」开关（默认开）；`RetouchScale.editorSkinMask` 合成「ML ∪ 画笔取 `max`」（关自动蒙版时等价 P1 旧口径）；预览 + 导出四条路径接入 | ✅ 已完成并 push（CI 全绿） |
 | **P1p-1c** | 真机验收（一加15）：核对日志「模型加载成功 / 是否走 GPU」、自动蒙版对皮肤的作用范围、无 OOM | ⬜ 待做 |
 | **P1p-2a** | **检测内核（纯 Kotlin）**：`FaceAnchors`（SSD anchor 生成，移植 `SsdAnchorsCalculator`）+ `FaceDetectionPostProcess`（解码 + 加权 NMS）+ `Letterbox` + `FaceDetection` 数据类 + 3 组 JVM 单测 | ✅ 已完成（本轮） |
-| **P1p-2b** | **运行时**：模型入库（`face_detection_full_range_sparse.tflite`）+ `FaceDetector` 接口 + `LiteRtFaceDetector`（LiteRT GPU→CPU 级联）+ `MlFaceProvider`（懒加载 / 每图一次缓存 / 降级 / 日志）+ `NOTICE` | ⬜ 待做 |
+| **P1p-2b** | **运行时**：模型入库（`face_detection_full_range_sparse.tflite`）+ `FaceDetector` 接口 + `LiteRtFaceDetector`（LiteRT GPU→CPU 级联）+ `MlFaceProvider`（懒加载 / 每图一次缓存 / 降级 / 日志）+ `NOTICE` | ✅ 已完成（本轮） |
 | **P1p-2c** | **接线**：检测出的脸中心/眼心喂 `Beauty` 的 `centroid`（替代「蒙版质心猜」）+ UI 回显 | ⬜ 待做 |
 
 > P1p-1a 的定位是**先验证风险最高的那一步**：`litert` 只在 Google Maven、且含 native 库，
@@ -318,8 +318,8 @@ DebugLog 新增/复用 tag：`ML`。启动快照里 dump「LiteRT 版本 / 实�
 | `core/ml/FaceDetectionPostProcess.kt` | 解码 + 加权 NMS + `largest()` | P1p-2a ✅ |
 | `core/ml/Letterbox.kt` | letterbox 几何 + 投回源图 | P1p-2a ✅ |
 | `core/ml/FaceDetection.kt` | `NormFace`（张量坐标）/ `FaceDetection`（源图坐标，含 `centerX/Y`、`eyeCenter`、`eyeRoll`） | P1p-2a ✅ |
-| `core/ml/FaceDetector.kt` + `LiteRtFaceDetector.kt` | 接口 + LiteRT 实现（GPU→CPU 级联，永不抛） | P1p-2b |
-| `core/ml/MlFaceProvider.kt` | 懒加载 + 每图一次缓存 + 降级 + 日志 | P1p-2b |
+| `core/ml/FaceDetector.kt` + `LiteRtFaceDetector.kt` | 接口 + LiteRT 实现（GPU→CPU 级联，永不抛；按张量元素个数认领 boxes/scores） | P1p-2b ✅ |
+| `core/ml/MlFaceProvider.kt` | 懒加载 + letterbox 预处理 + 每图一次缓存 + 降级 + 日志 | P1p-2b ✅ |
 
 **可测性**：`FaceAnchors` / `FaceDetectionPostProcess` / `Letterbox` 均为**纯 Kotlin 纯函数**，
 单测覆盖「锚点数量与顺序」「reverse_output_order 的取值」「加权合并的加权平均与分数保持」「letterbox 正反互逆」。
@@ -329,3 +329,11 @@ DebugLog 新增/复用 tag：`ML`。启动快照里 dump「LiteRT 版本 / 实�
 
 1. **letterbox 边框颜色**：这里按 `BORDER_ZERO` 补 **黑（归一化 −1）**。若真机发现框系统性偏移/漏检，先复核此项。
 2. **letterbox 对齐**：这里按 MediaPipe `PadRoi` 的**居中**放置（四舍五入取整）。框中心有偏移时复核。
+
+### 15.5 模型实际落地信息（已写入根 `NOTICE` 第 4 条）
+
+- 随包路径：`app/src/main/assets/models/face_detection_full_range_sparse.tflite`
+- 体积：**676,746 字节**
+- SHA-256：`2c3728e6da56f21e21a320433396fb06d40d9088f2247c05e5635a688d45dfe1`
+- 下载源：`https://storage.googleapis.com/mediapipe-assets/face_detection_full_range_sparse.tflite`
+- 许可：Apache-2.0（原样随包，未修改）；`.tflite` 已由 `noCompress` 排除压缩（与 P1p-1a 同一处配置）。
