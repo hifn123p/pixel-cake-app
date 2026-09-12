@@ -28,7 +28,7 @@ description: 像素蛋糕（AI 人像精修）安卓应用的唯一开发计划�
 | M0b | ✅ | ARW 内嵌 JPEG 预览解码（纯 Kotlin TIFF/IFD，零 NDK） |
 | P1a | ✅ | 最小编辑链路 → 首个真机可测 APK（导入/曝光·曲线·LUT/导出/日志）。**收尾补齐**：① 亮度**曲线** UI（黑场/中间调/白场三点锚点 → `EditParams.lumaPoints`，换算抽为 `core/edit/ToneCurve.kt` 并单测）——引擎 `PixelProgram` 早已支持、矩阵也标 ✅，但编辑器一直没有入口；② **PNG 导出**可选（`Exporter` 本就支持 JPEG/PNG，此前所有调用点硬编码 JPEG 导致 PNG 不可达）。 |
 | P1b | ✅ | **LibRaw 全量解码**（子模块 `third_party/LibRaw`[master `dde798dd`] + LibRaw-cmake[`eb98e432`]，静态链接；`raw_bridge.cpp` 全量解马赛克→RGBA；`useLibRaw=true`，失败回退预览）。**人像算子全量落地**：NeutralGray / Beauty / Inpaint / ColorTransfer 均落 `core/edit/retouch/`，由 `RetouchLayer` 单趟 getPixels 按「磨皮→液化→祛瑕→追色」编排；retouch 整图 pass 已接到 RAW 与 JPEG/HEIF 的预览 + 全分辨率导出四条路径（复用目标 Bitmap，符合 F05）。编辑器：工具选择（皮肤/祛瑕）、美型三滑块、追色风格+强度、**10 套参数栈预设**（`core/edit/preset/Presets.kt`）。**2026-09-11 批次**：撤销/重做升级为 `EditSnapshot`（tonal + retouch 同步回退）、画笔描迹节流+条数上限、打开大图加载进度反馈、「重置全部」+ 预设选中态。单测：NeutralGray / Beauty / Inpaint / ColorTransfer / RasterMask / Presets / EditHistory。**剩**：P1b-6 真机统一测试（用户侧 A7C2 实拍验收）。 |
-| P1+ / F03② | ⬜ | **P1+** ML 自动蒙版（SCRFD / 2DFAN4 / BiSeNet → TFLite + NNAPI）待启动（`RetouchMask` 接口已预留，接入 UI 零改动）。**F03②**「代理秒进」的感知延迟已用「打开即显解码进度 + 预览本就走 `halfSize` 代理」缓解；「后台母版无缝切换」为可选画质优化，后置。 |
+| P1+ / F03② | 🔜 | **P1+** ML 自动蒙版：设计稿 **`docs/P1p_DESIGN.md`（v0.1）已完成选型** —— 用 **LiteRT + MediaPipe `selfie_multiclass_256x256`**（Apache-2.0，6 类含 `face-skin`/`body-skin`）替代原「TFLite + NNAPI」（**NNAPI 已在 Android 15 废弃**）；待拍板 §12 四项决策后落 **P1p-1**（自动皮肤蒙版，`MlSkinMask : RetouchMask`，UI 零改动）。**F03②**「代理秒进」的感知延迟已用「打开即显解码进度 + 预览本就走 `halfSize` 代理」缓解；「后台母版无缝切换」为可选画质优化，后置。 |
 | P2 / P3 | ✅（待真机验收）/ 🔜 | **P2**：A7C2 USB 直连 —— 设计稿 `docs/P2_DESIGN.md`（v0.3）；**PoC-1~5 全部落地**：① 免权限 USB 枚举 + Sony VID/接口类识别（`camera/CameraProbe`、`camera/UsbCameraScanner`）；② USB 授权（`camera/UsbPermission`：`FLAG_MUTABLE` PendingIntent + 广播/系统 action 双注册 + 300ms 轮询兜底）；③ PTP 会话握手 + 设备信息 + 存储/对象枚举（`PtpProtocol`/`PtpData`/`PtpTransport`/`CameraPtpReport`）；④ **`GetObject` 256KB 分块流式下载**（`PtpTransport.downloadObject`）+ **长生命周期会话** `camera/CameraSession`（列图/拉图/批量复用，I/O 串行化于内部 Mutex）；⑤ **批量套预设导出** `camera/CameraBatch`（拉取→复用 P1 管线套 `Presets.ALL`→导出到相册，导完即删、文件边界取消、进度回调）。UI：首页 `CameraPanel` 完成 检测→握手→列图→单张导入编辑器→批量套预设，编辑器接线由 `HomeScreen.onOpenLocalFile` 打通；连接成功后自动产出 PoC-2/3 **体检报告**（`CameraConnection.inspect(session, steps)` 改为对**已有会话**体检，不再自开会话——既消除死代码，也省掉一次多余握手）。协议层 + 数据集解析 + 批处理纯逻辑（`CameraBatchTest`）均有 JVM 单测。**剩**：真机验收（A7C2 实插）。**P3**：NAS Docker 化 Rust 引擎。 |
 
 > LibRaw master API 注意：已移除 `dcraw_free()`；`dcraw_make_mem_image()` 的返回产物必须用 `LibRaw::dcraw_clear_mem()` 释放，`free_image()` 只释放内部 `imgdata.image`、二者不可混用（见 F02 / D09）；Kotlin `val version` 与 native `getVersion()` JVM 签名冲突，已改名 `librawVersion`（详见 §8 风险表与每日日志 2026-09-09）。
@@ -133,8 +133,15 @@ description: 像素蛋糕（AI 人像精修）安卓应用的唯一开发计划�
 - **(B) `.cube` 3D LUT**：仅取 **MIT / CC 可再分发**源（如 `shravankumar147/photo-edit-app` 的 `cinematic.cube`、`fuji_fp-100c_alt.cube`；`mv-lab/NILUT` CC4.0）。构建期转 3D LUT（33³/64³ half-float）打包为 asset，运行时 GPU 采样 + 三线性插值。
 - ⚠️ 打包前逐个核许可并保留 LICENSE/NOTICE；**社区流传的 Lightroom DNG/XMP 预设不是 `.cube`**，不可直接内置（且多为付费/来源不明）→ 一律不用。
 
-### 3.5 轻量 ML（后置增强）
-SCRFD(人脸) / 2DFAN4(关键点) / BiSeNet(分割) 经 **TFLite + NNAPI delegate**（NNAPI→GPU→CPU 降级）产出 skin/portrait 蒙版。**P1 首版后置**，先用手动画笔蒙版跑通链路，避开"ONNX→TFLite 模型转换"风险。
+### 3.5 轻量 ML（P1+；**设计稿 `docs/P1p_DESIGN.md`**）
+> **⚠️ 口径更正（2026-09-12）**：原定「TFLite + NNAPI delegate（NNAPI→GPU→CPU 降级）」**已过期** ——
+> **NNAPI 自 Android 15 起被官方废弃**（LiteRT 的 NNAPI delegate 页已重定向到迁移指南），TFLite 本体进入维护模式（只收安全/稳定性修复）。
+> 现行栈是 **LiteRT**：`com.google.ai.edge.litert:litert:2.x`，用 **`CompiledModel`** API，accelerator 走 **`GPU → CPU` 级联**（NPU 需 `BuiltinNpuAcceleratorProvider` + 厂商 delegate，列为后续可选）。
+
+**模型选型**：直接用 MediaPipe 官方 **`selfie_multiclass_256x256`**（Apache-2.0；输入 `[1,256,256,3]` RGB÷255；输出 6 类：背景/头发/`body-skin`/`face-skin`/衣服/其它）产出**皮肤蒙版**。
+**不再依赖**把 Rust 仓库 `detect/*.rs` 的 ONNX 权重转 TFLite（该转换链降级为可选后置项，规避了原「ONNX→TFLite 转换」风险）。
+
+`RetouchMask` 接口已就绪，接入 **UI 零改动**。分阶段：**P1p-1** 自动皮肤蒙版（`MlSkinMask : RetouchMask`）→ **P1p-2** 人脸检测/关键点（喂液化的 `centroid`）→ **P1p-3** 可选精修 / NPU。
 
 ### 3.6 混合算力（P3 及以后）
 日常编辑全端侧；仅"GPEN 增强 / 批量 / 老设备"才唤醒 NAS 上的 Rust 引擎。网络模型：**RAW 一次落盘 + 代理图 + 参数栈回传**，绝不做"每步回传整张 RAW"（A7C II ARW ~35–57MB，远程回传 ~10–12s/张，不可交互）。
@@ -225,7 +232,7 @@ com.hifn.pixelcake
 │   │   ├── ColorMath.kt                      #   线性↔sRGB 查表（processPixel 已移除，F06）
 │   │   ├── PixelProgram.kt                   #   【新·P1b】预编译 WB×曝光标量增益 + sRGB LUT
 │   │   └── EditEngine.kt                     #   分带渲染（renderIntoSrgb/renderIntoLinear/renderLinearFile）
-│   ├── ml/                                   # 【规划未建·P1+】FaceDetector/Landmarker/Segmenter
+│   ├── ml/                                   # 【P1+·设计稿已出】SkinMaskModel / MlSkinMask / FloatGrid（见 docs/P1p_DESIGN.md）；P1p-2 再扩 FaceDetector/Landmarker
 │   ├── render/                               # 【规划未建】PreviewPipeline（GPU/RenderEffect/AGSL）
 │   └── model/                                # 【部分】EditParams 等；Photo/Preset/Project 规划中
 ├── data/                                     # 【规划未建】Room 历史/预设缓存；preset/ .cube LUT
@@ -313,7 +320,7 @@ com.hifn.pixelcake
 | LibRaw 接入（NDK + 子模块 + ILCE-7CM2 机型配置） | P1b | **高** | 先在 P1a 只做 JPEG/HEIF 修图、ARW 仅预览；P1b 再接入；CI 编译耗时需评估 |
 | `app/src/main/cpp/third_party/LibRaw` 子模块为空 | P1b | 中 | `git submodule add` 官方 LibRaw，确认版本含 A7C II |
 | 相机 API / liveview 可用性 | P2 | 中 | 先 USB PTP 拉图 PoC；liveview（ScalarWebAPI）待验证，不行则退回"拍完拉图" |
-| ONNX → TFLite 模型转换 | P1+ | 中 | 后置，先用画笔蒙版 |
+| ONNX → TFLite 模型转换 | P1+ | **低** | **已规避**：改用 MediaPipe 现成 `.tflite` 模型（见 §3.5 / `docs/P1p_DESIGN.md`），转换链降级为可选后置项 |
 | 端侧 GPEN 设备分化 | P1+ | 中 | 设备分级；弱机转 P3 |
 | NAS 算力（i5-8600T + UHD630） | P3 | 中 | INT8 量化 + 低分辨率 + 批量串行 |
 | targetSdk 37 破坏性变更 | 全 | 中 | 见 §6.3 逐项验证 |
