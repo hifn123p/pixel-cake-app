@@ -31,12 +31,19 @@ object MlMaskProvider {
     /** 自动蒙版当前是否可用（模型已加载且未因 OOM 关闭）。 */
     val available: Boolean get() = !disabled && model != null
 
+    /** 已加载模型的加速器名（`GPU` / `CPU`）；模型未加载时为 `null`。供 UI 展示与真机验收核对。 */
+    val accelerator: String? get() = model?.acceleratorName
+
     /**
      * 为 [src] 生成皮肤蒙版；返回对象的 [MlSkinMask.resampleTo] 可安全用于任意目标尺寸。
+     *
+     * `@Synchronized`：编辑器的预览重渲与导出可能并发进入（两者都在 `Dispatchers.Default`），
+     * 串行化可避免同一 key 被重复推理、以及缓存字段被交错写坏。
      *
      * @param key 源图标识（建议 `uri + 尺寸`）；相同 key 命中缓存，不重复推理
      * @return 失败返回 `null`（**不抛异常**）
      */
+    @Synchronized
     fun skinMaskFor(context: Context, src: Bitmap, key: String): MlSkinMask? {
         if (disabled) return null
         if (cacheMask != null && cacheKey == key) return cacheMask

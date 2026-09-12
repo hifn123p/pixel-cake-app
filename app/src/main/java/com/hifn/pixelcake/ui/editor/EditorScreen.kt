@@ -19,6 +19,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -42,7 +43,7 @@ import com.hifn.pixelcake.core.edit.preset.Preset
 import kotlin.math.round
 
 /**
- * 编辑界面（P1a 最小可用链路 + P1b 人像精修）。
+ * 编辑界面（P1a 最小可用链路 + P1b 人像精修 + P1p-1b 自动蒙版）。
  * 所有状态由上层 AppRoot 持有，这里只负责呈现与回调：滑块拖动 -> onParamChange(...)/onRetouchChange(...)，
  * 松手/选择类动作 -> onParamCommit()/onRetouchCommit() 入撤销栈。
  *
@@ -50,6 +51,9 @@ import kotlin.math.round
  *  - "none"   ：按住图片查看原图（原图对比）；
  *  - "skin"   ：拖动涂抹皮肤作用区（磨皮/液化蒙版），坐标归一化 [0..1] 经 onBrushStroke 上报；
  *  - "blemish"：点击脏点位置，追加祛瑕描迹，经 onInpaintStroke 上报。
+ *
+ * 自动蒙版（[autoMaskEnabled]，P1p-1b）决定磨皮/液化的**默认作用域**：开启时由 AI 识别的皮肤区决定
+ * （画笔涂抹取并集补正），关闭时退回「画笔 → 整幅」的 P1 行为。[autoMaskNote] 由上层填入模型/加速器状态。
  *
  * @param exportFormat 导出格式（JPEG / PNG），由上层持有以便跨重组保留。
  */
@@ -64,6 +68,8 @@ fun EditorScreen(
     brushRadius: Float,
     inpaintRadius: Float,
     inpaintCount: Int,
+    autoMaskEnabled: Boolean,
+    autoMaskNote: String,
     presets: List<Preset>,
     activePresetId: String,
     canUndo: Boolean,
@@ -82,6 +88,7 @@ fun EditorScreen(
     onInpaintRadiusChange: (Float) -> Unit,
     onClearMask: () -> Unit,
     onClearInpaint: () -> Unit,
+    onAutoMaskChange: (Boolean) -> Unit,
     onPreset: (Preset) -> Unit,
     onReset: () -> Unit,
     onUndo: () -> Unit,
@@ -192,6 +199,10 @@ fun EditorScreen(
                 }
             }
 
+            // 自动蒙版（P1p-1b）：AI 识别皮肤作为磨皮/液化的默认作用域，画笔涂抹取并集补正
+            Spacer(Modifier.height(4.dp))
+            AutoMaskRow(autoMaskEnabled, autoMaskNote, onAutoMaskChange)
+
             // 皮肤画笔作用区
             if (retouchTool == "skin") {
                 AdjustSlider("磨皮强度", retouch.neutralGray.strength, 0f, 1f, 0.05f,
@@ -210,7 +221,7 @@ fun EditorScreen(
                 Button(onClick = onClearInpaint, Modifier.fillMaxWidth()) { Text("清除瑕疵点") }
             }
 
-            // 美型液化（始终可用；需先涂皮肤蒙版才有作用域）
+            // 美型液化（始终可用；作用域由自动蒙版/画笔决定）
             Spacer(Modifier.height(8.dp))
             Text("美型", style = MaterialTheme.typography.bodyMedium)
             AdjustSlider("瘦脸", retouch.beauty.slimFace, 0f, 1f, 0.05f,
@@ -286,6 +297,37 @@ fun EditorScreen(
         if (status.isNotEmpty()) {
             Spacer(Modifier.height(4.dp))
             Text(status, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+/**
+ * 自动蒙版开关（P1p-1b）。
+ *
+ * 开启时磨皮/液化默认只作用于 AI 识别出的皮肤区（画笔涂抹取并集补正）；关闭时退回
+ * 「画笔 → 整幅」的 P1 行为。[note] 由上层依据模型加载/加速器结果填入，真机验收时用它核对
+ * 「是否真的走了 GPU」。
+ */
+@Composable
+private fun AutoMaskRow(enabled: Boolean, note: String, onChange: (Boolean) -> Unit) {
+    Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("自动蒙版（AI 皮肤识别）", style = MaterialTheme.typography.bodyMedium)
+            Switch(checked = enabled, onCheckedChange = onChange)
+        }
+        Text(
+            if (enabled) "磨皮/液化仅作用于识别到的皮肤区；画笔涂抹可补正"
+            else "已关闭：磨皮/液化作用于整幅或画笔涂抹区",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        if (enabled && note.isNotEmpty()) {
+            Text(note, style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

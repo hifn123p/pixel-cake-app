@@ -25,7 +25,8 @@ interface RetouchMask {
  * 全幅恒强蒙版：`sample` 恒为 1，**O(1) 内存**（注意不是一整张 `FloatArray` —— 33MP 下那是 131MB）。
  *
  * 这是调用方表达「**未圈定局部作用域 ⇒ 作用域就是整幅**」的显式手段：
- * 编辑器在用户没画任何画笔描迹时用它（见 `RetouchScale.skinMask`），从而保留「滑杆一拖就有可见效果」；
+ * 编辑器在用户没画任何画笔描迹、且未启用自动蒙版时用它（见 `RetouchScale.editorSkinMask`），
+ * 从而保留「滑杆一拖就有可见效果」；
  * 相机批量链路则显式传 `null`，表达「不执行」。两者都写在**调用点**，`null` 于是只有一种含义。
  */
 object FullMask : RetouchMask {
