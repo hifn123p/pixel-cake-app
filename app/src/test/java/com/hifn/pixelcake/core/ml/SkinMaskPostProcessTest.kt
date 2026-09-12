@@ -79,15 +79,15 @@ class SkinMaskPostProcessTest {
     }
 
     @Test
-    fun smooth3x3AveragesSevenNeighbours() {
+    fun smooth3x3AveragesOverPresentNeighbours() {
         val side = 3
         val v = FloatArray(side * side)
         v[1 * side + 1] = 1f // 仅中心为 1
         SkinMaskPostProcess.smooth3x3(v, side)
-        // 中心 3×3 全邻域 = 1/9
+        // 按「窗口内实际存在的邻居」取均值：中心满 3×3 窗口 → 1/9；角落仅 4 格 → 1/4
         assertEquals(1f / 9f, v[1 * side + 1], 1e-6f)
-        assertEquals(1f / 9f, v[0], 1e-6f)
-        assertEquals(1f / 9f, v[2 * side + 2], 1e-6f)
+        assertEquals(1f / 4f, v[0], 1e-6f)
+        assertEquals(1f / 4f, v[2 * side + 2], 1e-6f)
     }
 
     @Test
