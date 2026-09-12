@@ -28,7 +28,7 @@ description: 像素蛋糕（AI 人像精修）安卓应用的唯一开发计划�
 | M0b | ✅ | ARW 内嵌 JPEG 预览解码（纯 Kotlin TIFF/IFD，零 NDK） |
 | P1a | ✅ | 最小编辑链路 → 首个真机可测 APK（导入/曝光·曲线·LUT/导出/日志）。**收尾补齐**：① 亮度**曲线** UI（黑场/中间调/白场三点锚点 → `EditParams.lumaPoints`，换算抽为 `core/edit/ToneCurve.kt` 并单测）——引擎 `PixelProgram` 早已支持、矩阵也标 ✅，但编辑器一直没有入口；② **PNG 导出**可选（`Exporter` 本就支持 JPEG/PNG，此前所有调用点硬编码 JPEG 导致 PNG 不可达）。 |
 | P1b | ✅ | **LibRaw 全量解码**（子模块 `third_party/LibRaw`[master `dde798dd`] + LibRaw-cmake[`eb98e432`]，静态链接；`raw_bridge.cpp` 全量解马赛克→RGBA；`useLibRaw=true`，失败回退预览）。**人像算子全量落地**：NeutralGray / Beauty / Inpaint / ColorTransfer 均落 `core/edit/retouch/`，由 `RetouchLayer` 单趟 getPixels 按「磨皮→液化→祛瑕→追色」编排；retouch 整图 pass 已接到 RAW 与 JPEG/HEIF 的预览 + 全分辨率导出四条路径（复用目标 Bitmap，符合 F05）。编辑器：工具选择（皮肤/祛瑕）、美型三滑块、追色风格+强度、**10 套参数栈预设**（`core/edit/preset/Presets.kt`）。**2026-09-11 批次**：撤销/重做升级为 `EditSnapshot`（tonal + retouch 同步回退）、画笔描迹节流+条数上限、打开大图加载进度反馈、「重置全部」+ 预设选中态。单测：NeutralGray / Beauty / Inpaint / ColorTransfer / RasterMask / Presets / EditHistory。**剩**：P1b-6 真机统一测试（用户侧 A7C2 实拍验收）。 |
-| P1+ / F03② | 🔜 | **P1+** ML 自动蒙版：设计稿 **`docs/P1p_DESIGN.md`（v0.1）已完成选型** —— 用 **LiteRT + MediaPipe `selfie_multiclass_256x256`**（Apache-2.0，6 类含 `face-skin`/`body-skin`）替代原「TFLite + NNAPI」（**NNAPI 已在 Android 15 废弃**）；待拍板 §12 四项决策后落 **P1p-1**（自动皮肤蒙版，`MlSkinMask : RetouchMask`，UI 零改动）。**F03②**「代理秒进」的感知延迟已用「打开即显解码进度 + 预览本就走 `halfSize` 代理」缓解；「后台母版无缝切换」为可选画质优化，后置。 |
+| P1+ / F03② | ✅/🔜 | **P1+** ML 自动蒙版：设计稿 **`docs/P1p_DESIGN.md`（v0.1）已完成选型** —— 用 **LiteRT + MediaPipe `selfie_multiclass_256x256`**（Apache-2.0，6 类含 `face-skin`/`body-skin`）替代原「TFLite + NNAPI」（**NNAPI 已在 Android 15 废弃**）；**P1p-1 已落地**（`core/ml/` 六件套 + LiteRT 2.2.0 + MediaPipe `selfie_multiclass_256x256`，16,371,837B，见根 `NOTICE`）：`RetouchScale.editorSkinMask` 合成「ML ∪ 画笔取 `max`」（关自动蒙版时等价 P1 旧口径），编辑器加「自动蒙版」开关（默认开，显示 GPU/CPU 加速器与回退提示），预览/导出四条路径全部接入；模型不可用或 OOM 时自动降级回退「画笔 → 整幅」。**剩**：真机验收（一加15）。**P1p-2** 人脸关键点喂液化 `centroid`，后置。**F03②**「代理秒进」的感知延迟已用「打开即显解码进度 + 预览本就走 `halfSize` 代理」缓解；「后台母版无缝切换」为可选画质优化，后置。 |
 | P2 / P3 | ✅（待真机验收）/ 🔜 | **P2**：A7C2 USB 直连 —— 设计稿 `docs/P2_DESIGN.md`（v0.3）；**PoC-1~5 全部落地**：① 免权限 USB 枚举 + Sony VID/接口类识别（`camera/CameraProbe`、`camera/UsbCameraScanner`）；② USB 授权（`camera/UsbPermission`：`FLAG_MUTABLE` PendingIntent + 广播/系统 action 双注册 + 300ms 轮询兜底）；③ PTP 会话握手 + 设备信息 + 存储/对象枚举（`PtpProtocol`/`PtpData`/`PtpTransport`/`CameraPtpReport`）；④ **`GetObject` 256KB 分块流式下载**（`PtpTransport.downloadObject`）+ **长生命周期会话** `camera/CameraSession`（列图/拉图/批量复用，I/O 串行化于内部 Mutex）；⑤ **批量套预设导出** `camera/CameraBatch`（拉取→复用 P1 管线套 `Presets.ALL`→导出到相册，导完即删、文件边界取消、进度回调）。UI：首页 `CameraPanel` 完成 检测→握手→列图→单张导入编辑器→批量套预设，编辑器接线由 `HomeScreen.onOpenLocalFile` 打通；连接成功后自动产出 PoC-2/3 **体检报告**（`CameraConnection.inspect(session, steps)` 改为对**已有会话**体检，不再自开会话——既消除死代码，也省掉一次多余握手）。协议层 + 数据集解析 + 批处理纯逻辑（`CameraBatchTest`）均有 JVM 单测。**剩**：真机验收（A7C2 实插）。**P3**：NAS Docker 化 Rust 引擎。 |
 
 > LibRaw master API 注意：已移除 `dcraw_free()`；`dcraw_make_mem_image()` 的返回产物必须用 `LibRaw::dcraw_clear_mem()` 释放，`free_image()` 只释放内部 `imgdata.image`、二者不可混用（见 F02 / D09）；Kotlin `val version` 与 native `getVersion()` JVM 签名冲突，已改名 `librawVersion`（详见 §8 风险表与每日日志 2026-09-09）。
@@ -81,7 +81,8 @@ description: 像素蛋糕（AI 人像精修）安卓应用的唯一开发计划�
 | A7C2 直连（USB PTP 拉图 + 批量套预设导出） | | | ✅ | |
 | 边拍边预览（liveview，需 CRSDK / ScalarWebAPI PoC） | | | 后置 | |
 | NAS 目录控制 / 单张·批量后台修图 | | | | ✅ |
-| ML 自动蒙版（人脸/关键点/分割） | | 后置 | | |
+| ML 自动皮肤蒙版（P1p-1：LiteRT + MediaPipe 皮肤分割；编辑器「自动蒙版」开关，默认开） | | ✅(P1+) | | |
+| ML 人脸检测 / 关键点（P1p-2：喂液化 `centroid`） | | 后置 | | |
 
 ### 2.2 明确不做
 - P1 阶段不涉及任何后端/网络（**照片在手机上，全程本地**）。
@@ -161,7 +162,7 @@ P1a  最小可用编辑链路 → 首个真机可测 APK
 P1b  完整人像修图 + ARW 全量修图
       LibRaw NDK 全量解码 → 16-bit 管线
       中性灰磨皮 / 液化 / 祛瑕 / 追色 / 局部 + 内置预设 ~10 套
-P1+  ML 自动蒙版（需 ONNX→TFLite）
+P1+  ML 自动蒙版（LiteRT + MediaPipe 现成 .tflite，UI 零改动）
 ──────────────────────────────────────────────────────
 P2   A7C2 直连（USB PTP 拉图，先 PoC）+ 预设套用 + 边拍边看
 P3   NAS Docker 化 + axum API（注意 API 37 本地网络权限）
@@ -232,7 +233,7 @@ com.hifn.pixelcake
 │   │   ├── ColorMath.kt                      #   线性↔sRGB 查表（processPixel 已移除，F06）
 │   │   ├── PixelProgram.kt                   #   【新·P1b】预编译 WB×曝光标量增益 + sRGB LUT
 │   │   └── EditEngine.kt                     #   分带渲染（renderIntoSrgb/renderIntoLinear/renderLinearFile）
-│   ├── ml/                                   # 【P1+·设计稿已出】SkinMaskModel / MlSkinMask / FloatGrid（见 docs/P1p_DESIGN.md）；P1p-2 再扩 FaceDetector/Landmarker
+│   ├── ml/                                   # 【已建·P1p-1】FloatGrid / SkinMaskPostProcess / SkinMaskModel / LiteRtSkinMaskModel / MlSkinMask / MlMaskProvider（见 docs/P1p_DESIGN.md）；P1p-2 再扩 FaceDetector/Landmarker
 │   ├── render/                               # 【规划未建】PreviewPipeline（GPU/RenderEffect/AGSL）
 │   └── model/                                # 【部分】EditParams 等；Photo/Preset/Project 规划中
 ├── data/                                     # 【规划未建】Room 历史/预设缓存；preset/ .cube LUT
@@ -247,7 +248,7 @@ com.hifn.pixelcake
 ```
 > 注：**已建** = 当前仓库真实存在并可编译的模块；**规划未建** = v3.0 路线图中尚未落地的部分（编辑栈 EditStack/ops、ML 蒙版、GPU 预览、Room、相册/导出 UI、Hilt 依赖注入等）。Hilt / Room / Coil / Navigation / ktlint / detekt 截至本版**均未引入**——避免「逼代码去凑计划」，故按现状登记（D04）。
 
-**依赖现状**：截至本版仅引入 `androidx.core-ktx` / `activity-compose` / `lifecycle-runtime-ktx` / Compose BOM(Material3) / JUnit(测试)。Hilt · Room · Coil · Navigation · TFLite · ktlint · detekt · ONNX-RT 均**未引入**（规划中，引入前需本地验证）。
+**依赖现状**：截至本版仅引入 `androidx.core-ktx` / `activity-compose` / `lifecycle-runtime-ktx` / Compose BOM(Material3) / **`com.google.ai.edge.litert:litert` 2.2.0（P1p-1 自动蒙版）** / JUnit(测试)。Hilt · Room · Coil · Navigation · TFLite(旧 Interpreter API，已被 LiteRT 取代) · ktlint · detekt · ONNX-RT 均**未引入**（规划中，引入前需本地验证）。
 
 ### 5.3 复用 vs 自研 决策表
 | 能力 | 决策 | 理由 |
