@@ -22,9 +22,12 @@ description: P1+ 阶段（ML 自动蒙版）的技术选型、模型选型、分
 
 | 批次 | 内容 | 状态 |
 |---|---|---|
-| **P1p-1a** | 依赖接入（`com.google.ai.edge.litert:litert:2.2.0`）+ 模型入库 + `core/ml/` 内核 + JVM 单测 + 许可声明 | ✅ 已完成（已提交；**依赖能否在 CI 解析待验证**） |
-| **P1p-1b** | UI 接线：编辑器「自动蒙版」开关（默认开）；`RetouchScale.editorSkinMask` 合成「ML ∪ 画笔取 `max`」（关自动蒙版时等价 P1 旧口径）；预览 + 导出四条路径接入 | ✅ 代码完成（待真机验收） |
+| **P1p-1a** | 依赖接入（`com.google.ai.edge.litert:litert:2.2.0`）+ 模型入库 + `core/ml/` 内核 + JVM 单测 + 许可声明 | ✅ 已完成（**CI 实证 `litert:2.2.0` 可解析 + native 打包**，run `34699770791`） |
+| **P1p-1b** | UI 接线：编辑器「自动蒙版」开关（默认开）；`RetouchScale.editorSkinMask` 合成「ML ∪ 画笔取 `max`」（关自动蒙版时等价 P1 旧口径）；预览 + 导出四条路径接入 | ✅ 已完成并 push（CI 全绿） |
 | **P1p-1c** | 真机验收（一加15）：核对日志「模型加载成功 / 是否走 GPU」、自动蒙版对皮肤的作用范围、无 OOM | ⬜ 待做 |
+| **P1p-2a** | **检测内核（纯 Kotlin）**：`FaceAnchors`（SSD anchor 生成，移植 `SsdAnchorsCalculator`）+ `FaceDetectionPostProcess`（解码 + 加权 NMS）+ `Letterbox` + `FaceDetection` 数据类 + 3 组 JVM 单测 | ✅ 已完成（本轮） |
+| **P1p-2b** | **运行时**：模型入库（`face_detection_full_range_sparse.tflite`）+ `FaceDetector` 接口 + `LiteRtFaceDetector`（LiteRT GPU→CPU 级联）+ `MlFaceProvider`（懒加载 / 每图一次缓存 / 降级 / 日志）+ `NOTICE` | ⬜ 待做 |
+| **P1p-2c** | **接线**：检测出的脸中心/眼心喂 `Beauty` 的 `centroid`（替代「蒙版质心猜」）+ UI 回显 | ⬜ 待做 |
 
 > P1p-1a 的定位是**先验证风险最高的那一步**：`litert` 只在 Google Maven、且含 native 库，
 > 能否在 CI 正常解析/打包是本批最大未知数；内核与单测先落地，接线再跟上。
@@ -134,7 +137,14 @@ core/ml/
 ├── FloatGrid.kt            # 低分辨率浮点网格 + 双线性采样（无 Android 依赖）
 ├── MlSkinMask.kt           # RetouchMask 实现：持 FloatGrid，sample 双线性、resampleTo 不分配整幅
 ├── MlMaskProvider.kt       # 单例：懒加载模型 + 每图一次缓存 + 失败降级 + 日志
-└── (P1p-2) FaceDetector.kt / FaceLandmarker.kt
+│
+│   # —— P1p-2 人脸检测（以下为 P1p-2a 已落地，其余标注批次）——
+├── FaceAnchors.kt          # 纯函数：SSD anchor 生成（移植 SsdAnchorsCalculator；FULL_RANGE/SHORT_RANGE 预置）
+├── FaceDetectionPostProcess.kt  # 纯函数：16 维 raw → 框+6 关键点（含 sigmoid / reverse_output_order）+ 加权 NMS
+├── Letterbox.kt            # 纯函数：等比缩放 + 居中 padding 的几何换算（含投回源图）
+├── FaceDetection.kt        # 数据类：NormFace（张量归一化坐标）/ FaceDetection（源图像素坐标）
+├── (P1p-2b) FaceDetector.kt / LiteRtFaceDetector.kt / MlFaceProvider.kt
+└── (P1p-3) FaceLandmarker.kt（478 点网格）
 ```
 
 **可测性设计**：`SkinMaskModel` 是接口 → JVM 单测注入 fake（返回构造好的概率网格），**测试完全不碰 LiteRT 原生库**。
@@ -263,3 +273,59 @@ DebugLog 新增/复用 tag：`ML`。启动快照里 dump「LiteRT 版本 / 实�
 - MediaPipe Image Segmenter（模型清单/规格/延迟）：<https://developers.google.cn/edge/mediapipe/solutions/vision/image_segmenter>
 - NNAPI 废弃（Android 15）：Android Developers「NNAPI 迁移指南」
 - OpenVINO selfie segmentation notebook（同一模型 + Intel 核显，P3 参考）：<https://docs.openvino.ai/2024/notebooks/tflite-selfie-segmentation-with-output.html>
+
+---
+
+## 15. P1p-2 人脸检测：实测 I/O 与实现口径
+
+> **本节所有数字均来自真实文件的离线解析**（隔离 venv + `pip install --no-deps tflite flatbuffers`，
+> 直接读 flatbuffer 打印张量规格），**不是照抄文档** —— 模型卡/文档实测有两处过时。
+> 下载源：`https://storage.googleapis.com/mediapipe-assets/<name>.tflite`；解码参数出自同目录
+> `mediapipe/modules/face_detection/face_detection_*.pbtxt`（**不在 `.tflite` 里**）。
+
+### 15.1 候选实测（三选一，均 Apache-2.0；`custom_ops = 0` ⇒ LiteRT GPU/CPU 直跑，无需厂商 delegate）
+
+| 模型 | 体积 | 输入 | 输出 | anchor 规格 |
+|---|---|---|---|---|
+| `face_detection_short_range` | 229,032 B | `input` `[1,128,128,3]` f32 | `regressors[1,896,16]` + `classificators[1,896,1]` | SSD：4 层 strides 8/16/16/16、896 anchors、scale 128、阈值 0.5 |
+| `face_detection_full_range` | 1,083,786 B | `input` `[1,192,192,3]` f32 | `reshaped_regressor_face_4[1,2304,16]` + `...[1,2304,1]` | CenterNet 式：1 层 stride 4（48×48）、2304 anchors、scale 192、阈值 0.6 |
+| **`face_detection_full_range_sparse`** ✅ | **676,746 B** | `input_1` `[1,192,192,3]` f32 | `Identity[1,2304,16]` + `Identity_1[1,2304,1]` | 同上；**MediaPipe 自家 full-range 管线用的就是它** |
+
+- **两处对文档的更正**：① 实测输入是 **FLOAT32**（非 float16）；② full/sparse 张量是 **192×192**（模型卡写 sparse「160×192」是旧值）。
+- **选型**：`face_detection_full_range_sparse.tflite` —— 后摄向（A7C2 旅行照）、体积最小、解码配置与 dense 版**完全一致**，故 dense/sparse 可互换。
+- **输入归一化**：`[-1.0, 1.0]`（即 `pixel/127.5 − 1`），由 pbtxt 的 `output_tensor_float_range` 明示。
+
+### 15.2 解码链路（MediaPipe 一致，逐项对照 C++ 源码）
+
+1. **预处理**：等比缩小 + **居中** padding 到 192×192（`keep_aspect_ratio: true` + `border_mode: BORDER_ZERO`）→ 归一化 `[-1,1]`。
+   ⚠️ **不能直接拉伸**成方图（改变人脸比例，召回明显下降）。
+2. **anchor 生成**（`SsdAnchorsCalculator`）：`fixed_anchor_size = true` ⇒ `w = h = 1`、中心 `(i+0.5)/48`；
+   连续**同 stride 的层会合并**成同一格多锚（full-range 只 1 层，不涉及）。
+3. **解码**（`TfLiteTensorsToDetectionsCalculator`）：`reverse_output_order = true` ⇒ 16 维前 4 个是
+   **`[x_center, y_center, w, h]`**（写反会让框转 90°）；分数 `sigmoid(clamp(raw, ±100))`，阈值 0.6；
+   框心 `raw / 192 * anchor.w + anchor.center`；`apply_exponential_on_box_size` 默认 **false**（直接相除）；
+   宽/高为负的框丢弃。**16 = 4 框 + 6 关键点 × 2**。
+4. **抑制**（`NonMaxSuppressionCalculator`）：`INTERSECTION_OVER_UNION`、`min_suppression_threshold = 0.3`、
+   `algorithm = WEIGHTED` ⇒ 被抑制的框**按分数加权并入胜者**（框与关键点都平均），
+   **胜者分数保持不变**（不累加）。
+5. **投回源图**：张量归一化坐标 → 源像素，用 `Letterbox` 的逆变换。
+
+### 15.3 代码映射
+
+| 文件 | 职责 | 批次 |
+|---|---|---|
+| `core/ml/FaceAnchors.kt` | anchor 生成（`FULL_RANGE` / `SHORT_RANGE` 预置规格） | P1p-2a ✅ |
+| `core/ml/FaceDetectionPostProcess.kt` | 解码 + 加权 NMS + `largest()` | P1p-2a ✅ |
+| `core/ml/Letterbox.kt` | letterbox 几何 + 投回源图 | P1p-2a ✅ |
+| `core/ml/FaceDetection.kt` | `NormFace`（张量坐标）/ `FaceDetection`（源图坐标，含 `centerX/Y`、`eyeCenter`、`eyeRoll`） | P1p-2a ✅ |
+| `core/ml/FaceDetector.kt` + `LiteRtFaceDetector.kt` | 接口 + LiteRT 实现（GPU→CPU 级联，永不抛） | P1p-2b |
+| `core/ml/MlFaceProvider.kt` | 懒加载 + 每图一次缓存 + 降级 + 日志 | P1p-2b |
+
+**可测性**：`FaceAnchors` / `FaceDetectionPostProcess` / `Letterbox` 均为**纯 Kotlin 纯函数**，
+单测覆盖「锚点数量与顺序」「reverse_output_order 的取值」「加权合并的加权平均与分数保持」「letterbox 正反互逆」。
+推理正确性（真实 LiteRT 调用）不进 JVM 单测，靠真机验收（与 LibRaw 同策略）。
+
+### 15.4 待真机核实的两个假设
+
+1. **letterbox 边框颜色**：这里按 `BORDER_ZERO` 补 **黑（归一化 −1）**。若真机发现框系统性偏移/漏检，先复核此项。
+2. **letterbox 对齐**：这里按 MediaPipe `PadRoi` 的**居中**放置（四舍五入取整）。框中心有偏移时复核。
