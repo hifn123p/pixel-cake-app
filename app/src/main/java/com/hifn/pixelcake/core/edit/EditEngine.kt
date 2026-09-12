@@ -71,13 +71,19 @@ object EditEngine {
         }
     }
 
-    /** 16-bit 线性底图 -> 目标位图。返回 false 表示被取消。 */
+    /**
+     * 16-bit 线性底图 -> 目标位图。返回 false 表示被取消。
+     *
+     * @param faceAnchor 液化锚点（P1p-2c，绝对像素，与 [target] 同尺寸）；`null` = 退回蒙版质心猜。
+     *   插在 [isCancelled] **之前**，以保住「尾随 lambda = isCancelled」的调用写法。
+     */
     fun renderIntoLinear(
         target: Bitmap,
         base: LinearImage,
         p: EditParams,
         retouch: RetouchState? = null,
         mask: RetouchMask? = null,
+        faceAnchor: RetouchLayer.FaceAnchor? = null,
         isCancelled: () -> Boolean = { false }
     ): Boolean {
         val w = base.width
@@ -108,7 +114,7 @@ object EditEngine {
             target.setPixels(band, 0, w, 0, y, w, rows)
             y += rows
         }
-        if (retouch != null) RetouchLayer.apply(target, retouch, mask)
+        if (retouch != null) RetouchLayer.apply(target, retouch, mask, faceAnchor)
         return true
     }
 
@@ -124,6 +130,7 @@ object EditEngine {
         p: EditParams,
         retouch: RetouchState? = null,
         mask: RetouchMask? = null,
+        faceAnchor: RetouchLayer.FaceAnchor? = null,
         onProgress: (Int) -> Boolean = { true }
     ): Bitmap? {
         val src = RawLinearSource.open(path, maxLongSide) ?: return null
@@ -157,7 +164,7 @@ object EditEngine {
                 ok = onProgress(y * 100 / h)
             }
             if (ok) {
-                if (retouch != null) RetouchLayer.apply(target, retouch, mask)
+                if (retouch != null) RetouchLayer.apply(target, retouch, mask, faceAnchor)
                 DebugLog.i(DebugLog.TAG_EDIT, "export linear ok", mapOf("w" to w, "h" to h))
                 target
             } else {

@@ -55,6 +55,10 @@ import kotlin.math.round
  * 自动蒙版（[autoMaskEnabled]，P1p-1b）决定磨皮/液化的**默认作用域**：开启时由 AI 识别的皮肤区决定
  * （画笔涂抹取并集补正），关闭时退回「画笔 → 整幅」的 P1 行为。[autoMaskNote] 由上层填入模型/加速器状态。
  *
+ * 液化锚点（[liquifyNote]，P1p-2c）：`slimFace` / `slimJaw` 锚在脸框中心、`eyeEnlarge` 锚在双眼连线
+ * 中点（由人脸检测给出）；检测不可用或图里没人脸时退回「蒙版质心猜」。[liquifyNote] 由上层填入
+ * 实际生效的来源，真机验收时用它核对「锚点到底来自哪」。
+ *
  * @param exportFormat 导出格式（JPEG / PNG），由上层持有以便跨重组保留。
  */
 @Composable
@@ -70,6 +74,7 @@ fun EditorScreen(
     inpaintCount: Int,
     autoMaskEnabled: Boolean,
     autoMaskNote: String,
+    liquifyNote: String,
     presets: List<Preset>,
     activePresetId: String,
     canUndo: Boolean,
@@ -221,9 +226,13 @@ fun EditorScreen(
                 Button(onClick = onClearInpaint, Modifier.fillMaxWidth()) { Text("清除瑕疵点") }
             }
 
-            // 美型液化（始终可用；作用域由自动蒙版/画笔决定）
+            // 美型液化（始终可用；作用域由自动蒙版/画笔决定，锚点由人脸检测决定 —— P1p-2c）
             Spacer(Modifier.height(8.dp))
             Text("美型", style = MaterialTheme.typography.bodyMedium)
+            if (liquifyNote.isNotEmpty()) {
+                Text(liquifyNote, style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
             AdjustSlider("瘦脸", retouch.beauty.slimFace, 0f, 1f, 0.05f,
                 { onRetouchChange(retouch.copy(beauty = retouch.beauty.copy(slimFace = it))) }, onRetouchCommit)
             AdjustSlider("收下颌", retouch.beauty.slimJaw, 0f, 1f, 0.05f,

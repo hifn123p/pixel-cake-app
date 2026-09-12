@@ -130,6 +130,30 @@ class BeautyTest {
         assertTrue("包围盒缓冲结果应与整幅实现逐位一致", expected.contentEquals(actual))
     }
 
+    /** `eyeCentroid`（P1p-2c）确实换掉了大眼的锚点：与不给眼心相比，结果必须不同。 */
+    @Test
+    fun eyeCentroidOverridesEyeEnlargeAnchor() {
+        val w = 41; val h = 41
+        val params = BeautyParams(eyeEnlarge = 0.6f)
+        val faceOnly = gradient(w, h)
+        Beauty.apply(faceOnly, w, h, params, fullMask, centroid = 20f to 20f)
+        val withEyes = gradient(w, h)
+        Beauty.apply(withEyes, w, h, params, fullMask, centroid = 20f to 20f, eyeCentroid = 6f to 6f)
+        assertTrue("眼心不同 ⇒ 大眼取样点不同 ⇒ 结果必须不同", !faceOnly.contentEquals(withEyes))
+    }
+
+    /** 不给 `eyeCentroid` 与「显式把质心当眼心」逐位相同 —— P1 口径**没有**被悄悄改动。 */
+    @Test
+    fun omittedEyeCentroidEqualsCentroid() {
+        val w = 31; val h = 31
+        val params = BeautyParams(slimFace = 0.4f, slimJaw = 0.3f, eyeEnlarge = 0.5f)
+        val omitted = gradient(w, h)
+        Beauty.apply(omitted, w, h, params, fullMask, centroid = 17f to 11f)
+        val explicit = gradient(w, h)
+        Beauty.apply(explicit, w, h, params, fullMask, centroid = 17f to 11f, eyeCentroid = 17f to 11f)
+        assertTrue("省略 eyeCentroid 必须等价于「眼心 = 质心」", omitted.contentEquals(explicit))
+    }
+
     // ---- 朴素整幅参照实现（独立于被测代码，仅用于钉住缓冲口径等价性） ----
 
     private fun naiveFullFrame(src: IntArray, w: Int, h: Int, params: BeautyParams, mask: RetouchMask): IntArray {

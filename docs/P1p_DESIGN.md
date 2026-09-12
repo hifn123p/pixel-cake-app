@@ -18,16 +18,16 @@ description: P1+ 阶段（ML 自动蒙版）的技术选型、模型选型、分
 
 用 **LiteRT**（不是 TFLite+NNAPI）跑 **MediaPipe `selfie_multiclass_256x256`**（Apache-2.0，6 类含 `face-skin`/`body-skin`）→ 输出 256×256 皮肤概率网格 → 包装成 `MlSkinMask : RetouchMask`（**低分辨率网格 + 按需双线性采样，绝不物化整幅 `FloatArray`**）→ 编辑器/批处理在「有 ML 蒙版」时优先用它，失败则按原逻辑回退（画笔 → `FullMask`）。
 
-### 0.1 实施进度（2026-09-12）
+### 0.1 实施进度（2026-09-13）
 
 | 批次 | 内容 | 状态 |
 |---|---|---|
 | **P1p-1a** | 依赖接入（`com.google.ai.edge.litert:litert:2.2.0`）+ 模型入库 + `core/ml/` 内核 + JVM 单测 + 许可声明 | ✅ 已完成（**CI 实证 `litert:2.2.0` 可解析 + native 打包**，run `34699770791`） |
 | **P1p-1b** | UI 接线：编辑器「自动蒙版」开关（默认开）；`RetouchScale.editorSkinMask` 合成「ML ∪ 画笔取 `max`」（关自动蒙版时等价 P1 旧口径）；预览 + 导出四条路径接入 | ✅ 已完成并 push（CI 全绿） |
 | **P1p-1c** | 真机验收（一加15）：核对日志「模型加载成功 / 是否走 GPU」、自动蒙版对皮肤的作用范围、无 OOM | ⬜ 待做 |
-| **P1p-2a** | **检测内核（纯 Kotlin）**：`FaceAnchors`（SSD anchor 生成，移植 `SsdAnchorsCalculator`）+ `FaceDetectionPostProcess`（解码 + 加权 NMS）+ `Letterbox` + `FaceDetection` 数据类 + 3 组 JVM 单测 | ✅ 已完成（本轮） |
-| **P1p-2b** | **运行时**：模型入库（`face_detection_full_range_sparse.tflite`）+ `FaceDetector` 接口 + `LiteRtFaceDetector`（LiteRT GPU→CPU 级联）+ `MlFaceProvider`（懒加载 / 每图一次缓存 / 降级 / 日志）+ `NOTICE` | ✅ 已完成（本轮） |
-| **P1p-2c** | **接线**：检测出的脸中心/眼心喂 `Beauty` 的 `centroid`（替代「蒙版质心猜」）+ UI 回显 | ⬜ 待做 |
+| **P1p-2a** | **检测内核（纯 Kotlin）**：`FaceAnchors`（SSD anchor 生成，移植 `SsdAnchorsCalculator`）+ `FaceDetectionPostProcess`（解码 + 加权 NMS）+ `Letterbox` + `FaceDetection` 数据类 + 3 组 JVM 单测 | ✅ 已完成（提交 `2448e99`） |
+| **P1p-2b** | **运行时**：模型入库（`face_detection_full_range_sparse.tflite`）+ `FaceDetector` 接口 + `LiteRtFaceDetector`（LiteRT GPU→CPU 级联）+ `MlFaceProvider`（懒加载 / 每图一次缓存 / 降级 / 日志）+ `NOTICE` | ✅ 已完成（提交 `88a0648`） |
+| **P1p-2c** | **接线**：检测出的脸中心/眼心喂 `Beauty` 的 `centroid` / `eyeCentroid`（替代「蒙版质心猜」）+ UI 回显液化锚点来源 | ✅ 已完成（本地提交，**待 push**；口径见 §15.6） |
 
 > P1p-1a 的定位是**先验证风险最高的那一步**：`litert` 只在 Google Maven、且含 native 库，
 > 能否在 CI 正常解析/打包是本批最大未知数；内核与单测先落地，接线再跟上。
@@ -337,3 +337,29 @@ DebugLog 新增/复用 tag：`ML`。启动快照里 dump「LiteRT 版本 / 实�
 - SHA-256：`2c3728e6da56f21e21a320433396fb06d40d9088f2247c05e5635a688d45dfe1`
 - 下载源：`https://storage.googleapis.com/mediapipe-assets/face_detection_full_range_sparse.tflite`
 - 许可：Apache-2.0（原样随包，未修改）；`.tflite` 已由 `noCompress` 排除压缩（与 P1p-1a 同一处配置）。
+
+### 15.6 P1p-2c 接线口径（人脸锚点 → 液化）
+
+| 项 | 落地 |
+|---|---|
+| 锚点类型 | `RetouchLayer.FaceAnchor(faceX, faceY, eyeX, eyeY)`，单位是**渲染分辨率下的绝对像素** |
+| 换算 | `FaceAnchor.fromDetection(face, srcW, srcH, w, h)` —— 经**归一化坐标**中转；越界 clamp，非法尺寸返回 `null` |
+| 消费者 | `Beauty.apply(..., centroid, eyeCentroid)`：`slimFace` / `slimJaw` 锚在脸框中心，`eyeEnlarge` 锚在双眼连线中点 |
+| 降级 | 模型不可用 / 图里没人脸 → **整个 `FaceAnchor` 传 `null`** ⇒ 退回 `Beauty.centroid`（**P1 口径逐位相同**，单测钉死） |
+| 触发时机 | 仅当 `beautyActive()`（三个美型滑块任一 > 0）才跑检测；导出复用预览的缓存（同一 `mlKey`）⇒ 零成本 |
+| 取哪张脸 | `MlFaceProvider.facesFor` 已按面积降序 ⇒ `firstOrNull()` = **最大脸** |
+| UI 回显 | `EditorScreen.liquifyNote`（「美型」区）：`液化锚点：人脸检测（GPU）· N 张脸` / `液化锚点：蒙版质心（未检测到人脸）` / `液化锚点：蒙版质心（人脸检测不可用）` |
+| 涉及文件 | `core/edit/retouch/RetouchLayer.kt`（`FaceAnchor` + `beautyPhase`）、`Beauty.kt`（`eyeCentroid`）、`core/edit/EditEngine.kt`（两条入口透传）、`MainActivity.kt`（三条渲染路径接线 + 状态）、`ui/editor/EditorScreen.kt`（回显） |
+
+**两条容易踩的坑（已修，均有单测钉死）**：
+
+1. **眼心必须参与液化条带的源行上下界**。`eyeEnlarge` 把源点拉向眼心，而眼心通常在脸框中心
+   **上方** ⇒ 源行可以取到 `eyeY < cy`。旧式只取 `min(蒙版顶, cy)` 会裁掉那几行，大眼的双线性取样
+   落到条带外被 clamp ⇒ **画质悄悄变差且不报错**。`RetouchLayerTest.faceAnchorWithEyeAboveMaskTopMatchesFullFrame`
+   用「眼心高出蒙版顶」的输入钉死。（`faceAnchor == null` 时 `eyeY == cy`，两式退化为原式 ⇒ 逐位不变。）
+2. **锚点必须按归一化坐标换算**。ARW 预览的「源图」是内嵌 JPEG 预览（3504×2336），而 retouch 跑在
+   16-bit 线性代理（2048×1366）/ 导出全分辨率上。直接拿检测像素当渲染像素用，锚点会随分辨率整体偏移
+   —— 预览看着还行、导出就跑偏。`FaceAnchorTest.sameFaceLandsAtSameNormalizedSpotAcrossResolutions`
+   钉死此不变式。
+
+**其它**：换图 / 退出编辑器时 `MlFaceProvider.invalidate()` 与 `MlMaskProvider.invalidate()` 一并清缓存。

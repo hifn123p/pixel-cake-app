@@ -7,12 +7,13 @@ import com.hifn.pixelcake.core.edit.RetouchMask
  * 美型液化（P1b-4 / Phase 3）。
  *
  * P1 不依赖人脸检测，按画笔蒙版作用域做几何形变（landmark-free 启发式）：
- *  - slimFace：水平方向把蒙版内像素拉向蒙版质心 x（瘦脸 / 收颊）；
+ *  - slimFace：水平方向把蒙版内像素拉向质心 x（瘦脸 / 收颊）；
  *  - slimJaw：仅蒙版下半部，垂直方向拉向质心 y（收下颌）；
  *  - eyeEnlarge：以质心为锚做局部放大（大眼近似）。
  *
- * 参考 Rust `crates/engine/src/retouch/beauty.rs`（实施时精读）。P1+ 接入人脸关键点后改为
- * 脸部感知液化（见 `docs/P1b_DESIGN.md` §5.2）。纯函数、零 Android 依赖，便于 JVM 单测。
+ * **P1p-2c 起锚点可被「人脸检测」覆盖**：`slimFace` / `slimJaw` 用脸框中心，`eyeEnlarge` 用双眼连线
+ * 中点（[apply] 的 `centroid` / `eyeCentroid`）；两者都不给时退回「蒙版质心猜」= P1 行为，
+ * 且与 P1 结果**逐位相同**（由 `BeautyTest` 钉死）。参考 Rust `crates/engine/src/retouch/beauty.rs`。
  *
  * **内存纪律（FIX_LIST F05 / 第二轮复审 R10）**：原先无条件分配整幅 `IntArray(w·h)` 作输出缓冲
  * （33MP 下 ≈131MB）。现改为**只在蒙版支撑的包围盒**上开缓冲：蒙版外 `mv == 0` 即恒等映射，
@@ -25,7 +26,7 @@ import com.hifn.pixelcake.core.edit.RetouchMask
  * 唯一「既精确又有界」的口径。
  *
  * **[rowOffset] 按条带处理**：`RetouchLayer` 以「行条带」为单位喂像素（缓冲只覆盖整图的一段行）。
- * 此时位移与蒙版采样**一律用绝对坐标**，只有取样缓冲时减去 [rowOffset]；质心须由调用方在
+ * 此时位移与蒙版采样**一律用绝对坐标**，只有取样缓冲时减去 [rowOffset]；锚点须由调用方在
  * 条带外算好传入，否则会只在条带内统计而偏。
  */
 object Beauty {
@@ -45,14 +46,17 @@ object Beauty {
 
     /**
      * @param rowOffset 本缓冲首行在整图中的**绝对行号**；整幅调用传 0（默认）。
-     * @param centroid 预先算好的蒙版质心（绝对坐标）。传 `null`（默认）则本函数自行按 [fullHeight]
-     *   全量扫描；**按条带调用时必须传入**。
+     * @param centroid `slimFace` / `slimJaw` 的锚点（绝对坐标）。传 `null`（默认）则本函数自行按
+     *   [fullHeight] 全量扫描蒙版求质心；**按条带调用时必须传入**。人脸检测可用时由调用方喂脸框中心。
      * @param fullHeight 蒙版扫描的高度（=整图高度）；仅 [centroid] 为 `null` 时用到。
+     * @param eyeCentroid `eyeEnlarge` 的锚点（绝对坐标）。传 `null`（默认）时退回 [centroid]，
+     *   与 P1 口径**逐位相同**；人脸检测可用时由调用方喂双眼连线中点。
      */
     fun apply(
         pixels: IntArray, w: Int, h: Int,
         params: BeautyParams, mask: RetouchMask?,
-        rowOffset: Int = 0, centroid: Pair<Float, Float>? = null, fullHeight: Int = h
+        rowOffset: Int = 0, centroid: Pair<Float, Float>? = null, fullHeight: Int = h,
+        eyeCentroid: Pair<Float, Float>? = null
     ) {
         if (params.slimFace <= 0f && params.slimJaw <= 0f && params.eyeEnlarge <= 0f) return
         // 液化必须有权重作用域：mask 为 null 时全局形变会糊整图，直接跳过。
@@ -60,6 +64,9 @@ object Beauty {
         val c = centroid ?: centroid(m, w, fullHeight) ?: return
         val cx = c.first
         val cy = c.second
+        // 大眼锚点：给了眼心就用眼心，否则退回质心（P1 行为）
+        val ex = eyeCentroid?.first ?: cx
+        val ey = eyeCentroid?.second ?: cy
 
         // 蒙版支撑的包围盒 —— 只扫**本缓冲覆盖的那些行**（条带契约：调用方保证条带覆盖蒙版的整段行）。
         var minX = w; var minY = h; var maxX = -1; var maxY = -1
@@ -97,8 +104,8 @@ object Beauty {
                 if (params.slimFace > 0f) dx += mv * params.slimFace * 0.3f * (x - cx)
                 if (params.slimJaw > 0f && ay > cy) dy += mv * params.slimJaw * 0.3f * (ay - cy)
                 if (params.eyeEnlarge > 0f) {
-                    dx = cx + (dx - cx) * (1f - mv * params.eyeEnlarge * 0.3f)
-                    dy = cy + (dy - cy) * (1f - mv * params.eyeEnlarge * 0.3f)
+                    dx = ex + (dx - ex) * (1f - mv * params.eyeEnlarge * 0.3f)
+                    dy = ey + (dy - ey) * (1f - mv * params.eyeEnlarge * 0.3f)
                 }
                 // 源坐标是绝对行号，取样缓冲前换算回缓冲内的局部行
                 out[o] = sampleBilinear(pixels, w, h, dx, dy - rowOffset)

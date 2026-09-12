@@ -26,6 +26,7 @@ import com.hifn.pixelcake.core.decode.DecodedImage
 import com.hifn.pixelcake.core.decode.Decoder
 import com.hifn.pixelcake.core.decode.Exporter
 import com.hifn.pixelcake.core.decode.ExportFormat
+import com.hifn.pixelcake.core.edit.BeautyParams
 import com.hifn.pixelcake.core.edit.EditEngine
 import com.hifn.pixelcake.core.edit.EditHistory
 import com.hifn.pixelcake.core.edit.EditParams
@@ -38,6 +39,7 @@ import com.hifn.pixelcake.core.edit.RetouchState
 import com.hifn.pixelcake.core.edit.preset.Preset
 import com.hifn.pixelcake.core.edit.preset.Presets
 import com.hifn.pixelcake.core.edit.retouch.RetouchLayer
+import com.hifn.pixelcake.core.ml.MlFaceProvider
 import com.hifn.pixelcake.core.ml.MlMaskProvider
 import com.hifn.pixelcake.diag.DebugLog
 import com.hifn.pixelcake.ui.editor.EditorScreen
@@ -117,6 +119,8 @@ private fun AppRoot() {
     var autoMaskEnabled by remember { mutableStateOf(true) }
     // 自动蒙版状态提示：成功时显示加速器（GPU/CPU），失败时提示已回退。供真机验收核对。
     var autoMaskNote by remember { mutableStateOf("") }
+    // P1p-2c：液化锚点来源提示（人脸检测 / 蒙版质心）。供真机验收核对「锚点到底来自哪」。
+    var liquifyNote by remember { mutableStateOf("") }
 
     // 参数 / retouch / 蒙版 / 自动蒙版开关变化 -> 异步把参数栈 + retouch 重渲到代理图。
     // 用 snapshotFlow + conflate + collectLatest 做节流与取消（FIX_LIST F08）。
@@ -142,6 +146,7 @@ private fun AppRoot() {
                 // ML 蒙版缓存键：同一张图在预览与导出之间复用同一蒙版对象（P1p-1b）。
                 val mlKey = mlCacheKey(srcUri, src.bitmap)
                 var autoMaskNoteOut = ""
+                var liquifyNoteOut = ""
                 val target = renderMutex.withLock {
                     val existing = rendered
                     val bmp = if (existing == null || existing.width != w || existing.height != h) {
@@ -159,15 +164,30 @@ private fun AppRoot() {
                         }
                         val mask = buildSkinMask(w, h, strokes, radius, mlMask)
                         val renderRetouch = buildRenderRetouch(rt, w, h, inpStrokes, inpRadius)
+                        // 液化锚点（P1p-2c）：**只在真的开了液化参数时**才跑检测 —— 没人碰美型滑块时
+                        // 没必要多付一次推理。取最大的一张脸（`facesFor` 已按面积降序）。
+                        val beautyOn = beautyActive(renderRetouch.beauty)
+                        val faces = if (beautyOn) MlFaceProvider.facesFor(context, src.bitmap, mlKey) else null
+                        val faceAnchor = faces?.firstOrNull()?.let {
+                            RetouchLayer.FaceAnchor.fromDetection(it, src.bitmap.width, src.bitmap.height, w, h)
+                        }
+                        liquifyNoteOut = when {
+                            !beautyOn -> ""
+                            faces == null -> "液化锚点：蒙版质心（人脸检测不可用）"
+                            faceAnchor == null -> "液化锚点：蒙版质心（未检测到人脸）"
+                            else -> "液化锚点：人脸检测（${MlFaceProvider.accelerator ?: "?"}）· ${faces.size} 张脸"
+                        }
                         if (linear != null) {
                             // 协作取消：renderJob 被 collectLatest 取消后，这里会在下一带边界退出。
                             // 注意：renderIntoLinear 内部已在物化目标 Bitmap 上跑过 retouch 整图 pass，
                             // 这里**不能**再调 RetouchLayer.apply，否则 RAW 预览会重复叠加（与导出不一致）。
-                            EditEngine.renderIntoLinear(bmp, linear, p, renderRetouch, mask) { !renderJob.isActive }
+                            EditEngine.renderIntoLinear(
+                                bmp, linear, p, renderRetouch, mask, faceAnchor = faceAnchor
+                            ) { !renderJob.isActive }
                         } else {
                             EditEngine.renderIntoSrgb(bmp, src.bitmap, p)
                             // 8-bit sRGB 路径的 renderIntoSrgb 不含 retouch，需在此补一趟整图 pass。
-                            RetouchLayer.apply(bmp, renderRetouch, mask)
+                            RetouchLayer.apply(bmp, renderRetouch, mask, faceAnchor)
                         }
                     }
                     bmp
@@ -177,6 +197,7 @@ private fun AppRoot() {
                 rendered = target
                 renderStamp++
                 autoMaskNote = autoMaskNoteOut
+                liquifyNote = liquifyNoteOut
                 DebugLog.d(
                     DebugLog.TAG_EDIT, "render done",
                     mapOf("w" to target.width, "h" to target.height, "stamp" to renderStamp)
@@ -198,8 +219,9 @@ private fun AppRoot() {
                 imported = dec
                 srcUri = uri
                 history.reset()
-                // 换图：丢掉上一张的 ML 蒙版缓存（网格，不含 Bitmap，代价极低）。
+                // 换图：丢掉上一张的 ML 缓存（蒙版网格 + 人脸列表，均不含 Bitmap，代价极低）。
                 MlMaskProvider.invalidate()
+                MlFaceProvider.invalidate()
                 params = EditParams()
                 retouch = RetouchState()
                 brushStrokes = emptyList()
@@ -208,6 +230,7 @@ private fun AppRoot() {
                 inpaintRadius = 0.01f
                 activePresetId = "none"
                 autoMaskNote = ""
+                liquifyNote = ""
                 status = if (dec.linear != null) "RAW 已按 16-bit 线性管线载入" else ""
                 screen = "editor"
                 DebugLog.i(
@@ -245,6 +268,7 @@ private fun AppRoot() {
                     inpaintCount = inpaintStrokes.size,
                     autoMaskEnabled = autoMaskEnabled,
                     autoMaskNote = autoMaskNote,
+                    liquifyNote = liquifyNote,
                     presets = Presets.ALL,
                     activePresetId = activePresetId,
                     canUndo = history.canUndo,
@@ -334,12 +358,22 @@ private fun AppRoot() {
                                     val mlMask = if (autoOn) MlMaskProvider.skinMaskFor(context, img.bitmap, mlKey) else null
                                     val mask = buildSkinMask(ew, eh, strokes, radius, mlMask)
                                     val renderRetouch = buildRenderRetouch(rt, ew, eh, inpStrokes, inpRadius)
+                                    // 液化锚点（P1p-2c）：预览阶段若已跑过检测，这里直接命中 MlFaceProvider 缓存
+                                    // （同一 mlKey）⇒ 零成本；锚点按**导出分辨率**重新换算（与预览尺寸不同）。
+                                    val faceAnchor = if (beautyActive(renderRetouch.beauty)) {
+                                        MlFaceProvider.facesFor(context, img.bitmap, mlKey)?.firstOrNull()?.let {
+                                            RetouchLayer.FaceAnchor.fromDetection(
+                                                it, img.bitmap.width, img.bitmap.height, ew, eh
+                                            )
+                                        }
+                                    } else null
                                     val full = EditEngine.renderLinearFile(
                                         path = rawPath,
                                         maxLongSide = profile.fullResLongEdge,
                                         p = params,
                                         retouch = renderRetouch,
-                                        mask = mask
+                                        mask = mask,
+                                        faceAnchor = faceAnchor
                                     ) { p ->
                                         if (p % 20 == 0 || p >= 100) {
                                             scope.launch(Dispatchers.Main) { status = "正在生成导出… $p%" }
@@ -374,7 +408,15 @@ private fun AppRoot() {
                                             val fmlMask = if (autoOn) MlMaskProvider.skinMaskFor(context, img.bitmap, mlKey) else null
                                             val fmask = buildSkinMask(fw, fh, strokes, radius, fmlMask)
                                             val fretouch = buildRenderRetouch(rt, fw, fh, inpStrokes, inpRadius)
-                                            RetouchLayer.apply(fullTarget, fretouch, fmask)
+                                            // 液化锚点（P1p-2c）：同上，按导出分辨率换算
+                                            val fAnchor = if (beautyActive(fretouch.beauty)) {
+                                                MlFaceProvider.facesFor(context, img.bitmap, mlKey)?.firstOrNull()?.let {
+                                                    RetouchLayer.FaceAnchor.fromDetection(
+                                                        it, img.bitmap.width, img.bitmap.height, fw, fh
+                                                    )
+                                                }
+                                            } else null
+                                            RetouchLayer.apply(fullTarget, fretouch, fmask, fAnchor)
                                             val out = withContext(Dispatchers.IO) {
                                                 Exporter.export(context, fullTarget, fmt, 92)
                                             }
@@ -414,8 +456,9 @@ private fun AppRoot() {
                         rendered?.recycle()
                         rendered = null
                         ArwFullDecoder.releaseCache(src.rawCachePath)
-                        // 退出编辑器：清掉 ML 蒙版缓存（下次打开重新推理，避免用错图）。
+                        // 退出编辑器：清掉 ML 缓存（下次打开重新推理，避免用错图）。
                         MlMaskProvider.invalidate()
+                        MlFaceProvider.invalidate()
                         src.bitmap.recycle()
                         imported = null
                         srcUri = null
@@ -426,6 +469,7 @@ private fun AppRoot() {
                         inpaintRadius = 0.01f
                         activePresetId = "none"
                         autoMaskNote = ""
+                        liquifyNote = ""
                         renderStamp = 0
                         screen = "home"
                     }
@@ -500,3 +544,13 @@ private fun fitLongEdge(srcW: Int, srcH: Int, longEdge: Int): Pair<Int, Int> {
         (srcW * longEdge / srcH) to longEdge
     }
 }
+
+/**
+ * 液化参数是否**真的启用**（P1p-2c）。
+ *
+ * 用来决定「要不要为了液化锚点多跑一次人脸检测」：三个滑块都为 0 时
+ * `RetouchLayer.beautyPhase` 会整段跳过，此时检测出来的锚点根本用不上，
+ * 白花一次推理（Pixel 6 基准 GPU ≈71ms / CPU ≈218ms，大图更久）。
+ */
+private fun beautyActive(b: BeautyParams): Boolean =
+    b.slimFace > 0f || b.slimJaw > 0f || b.eyeEnlarge > 0f

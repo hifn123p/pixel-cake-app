@@ -64,21 +64,33 @@ class RetouchLayerTest {
     }
 
     /** 「整幅版」参照实现：一次取整图，按 磨皮 → 液化 → 祛瑕 → 追色 依次施加。 */
-    private fun reference(src: IntArray, w: Int, h: Int, state: RetouchState, mask: RetouchMask?): IntArray {
+    private fun reference(
+        src: IntArray, w: Int, h: Int, state: RetouchState, mask: RetouchMask?,
+        anchor: RetouchLayer.FaceAnchor? = null
+    ): IntArray {
         val px = src.copyOf()
         val m = mask?.resampleTo(w, h)
         NeutralGray.apply(px, w, h, state.neutralGray, m)
-        Beauty.apply(px, w, h, state.beauty, m)
+        // 液化锚点口径必须与编排一致：`RetouchLayer.beautyPhase` 把 `faceX/Y` 当 `centroid`、
+        // `eyeX/Y` 当 `eyeCentroid`；`anchor == null` 时两者都为 null ⇒ Beauty 自行求蒙版质心（P1 口径）。
+        Beauty.apply(
+            px, w, h, state.beauty, m,
+            centroid = anchor?.let { it.faceX to it.faceY },
+            eyeCentroid = anchor?.let { it.eyeX to it.eyeY }
+        )
         Inpaint.apply(px, w, h, state.inpaint)
         ColorTransfer.apply(px, w, h, state.colorTransfer)
         return px
     }
 
-    private fun assertStreamingMatchesFullFrame(w: Int, h: Int, state: RetouchState, mask: RetouchMask?) {
+    private fun assertStreamingMatchesFullFrame(
+        w: Int, h: Int, state: RetouchState, mask: RetouchMask?,
+        anchor: RetouchLayer.FaceAnchor? = null
+    ) {
         val src = noisy(w, h)
-        val expected = reference(src, w, h, state, mask)
+        val expected = reference(src, w, h, state, mask, anchor)
         val store = MemStore(w, h, src.copyOf())
-        RetouchLayer.apply(store, state, mask)
+        RetouchLayer.apply(store, state, mask, anchor)
         val i = expected.indices.firstOrNull { expected[it] != store.data[it] }
         if (i != null) {
             throw AssertionError(
@@ -114,6 +126,45 @@ class RetouchLayerTest {
                 colorTransfer = ColorTransferParams(refId = "jp", intensity = 0.6f)
             ),
             FullMask
+        )
+    }
+
+    /**
+     * 人脸锚点（P1p-2c）下的等价性 —— 这条用例是**「眼心参与源行跨度」**那处改动的护栏。
+     *
+     * `ellipse` 的支撑行是 `[40, 120]`、质心 `(30, 80)`。这里刻意让眼心落到 `y=18` —— 既在脸框中心
+     * 上方，也**高出蒙版顶 40**：`eyeEnlarge` 把源点拉向眼心，蒙版顶那几行的源行会落到 36 附近。
+     * 若 `beautyPhase` 仍按旧的 `min(蒙版顶, cy)` 取下界（= 39），这些取样就落到条带外被 clamp 回
+     * 边界 ⇒ 与整幅版不一致，此用例立刻红。
+     */
+    @Test
+    fun faceAnchorWithEyeAboveMaskTopMatchesFullFrame() {
+        assertStreamingMatchesFullFrame(
+            57, 320,
+            RetouchState(
+                neutralGray = NeutralGrayParams(strength = 0.6f, radiusPx = 3, threshold = 35),
+                beauty = BeautyParams(slimFace = 0.5f, slimJaw = 0.4f, eyeEnlarge = 0.6f),
+                colorTransfer = ColorTransferParams(refId = "jp", intensity = 0.7f)
+            ),
+            ellipse,
+            RetouchLayer.FaceAnchor(faceX = 30f, faceY = 80f, eyeX = 28f, eyeY = 18f)
+        )
+    }
+
+    /**
+     * 锚点偏离蒙版（脸心偏到蒙版右侧、眼心远在蒙版**下方**）：跨度按锚点保守扩张后，
+     * 仍须与整幅版逐位一致 —— 也就是「有界」和「正确」两个要求同时成立。
+     */
+    @Test
+    fun faceAnchorOffsetFromMaskMatchesFullFrame() {
+        assertStreamingMatchesFullFrame(
+            50, 280,
+            RetouchState(
+                beauty = BeautyParams(slimFace = 0.7f, slimJaw = 0.5f, eyeEnlarge = 0.5f),
+                inpaint = listOf(InpaintStroke(15, 22, 2))
+            ),
+            ellipse,
+            RetouchLayer.FaceAnchor(faceX = 44f, faceY = 70f, eyeX = 46f, eyeY = 200f)
         )
     }
 
