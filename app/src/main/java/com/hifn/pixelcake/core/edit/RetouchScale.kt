@@ -73,6 +73,18 @@ object RetouchScale {
     }
 
     /**
+     * 把「ML 皮肤蒙版」与「画笔描迹蒙版」合并（P1p-1，口径见 `docs/P1p_DESIGN.md` §7）。
+     *
+     * 逐点取最大（[MaxMask]）：画笔是用户**显式补正**，取 `max` 才符合直觉。
+     * 任一侧为 `null` 时返回另一侧；两侧都 `null` 才返回 `null`（= 该算子不执行）。
+     */
+    fun mergeMasks(ml: RetouchMask?, brush: RetouchMask?): RetouchMask? = when {
+        ml == null -> brush
+        brush == null -> ml
+        else -> MaxMask(ml, brush)
+    }
+
+    /**
      * 按长边上限算目标尺寸。
      *
      * 相机批处理里源尺寸来自相机自报的 `ObjectInfo.imageWidth/Height`；

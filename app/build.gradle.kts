@@ -38,6 +38,8 @@ android {
     // resourceConfigurations 已在 AGP 8.8 起废弃，8.13 中报 deprecation。
     androidResources {
         localeFilters += listOf("zh-rCN", "en")
+        // P1+：.tflite 模型不参与 APK 压缩，保证可从 assets 直接 mmap（LiteRT 加载要求）
+        noCompress += "tflite"
     }
 
     // 签名配置只在 CI 注入了 KEYSTORE_PATH 时创建。
@@ -112,6 +114,9 @@ dependencies {
     implementation(libs.compose.material3)
 
     debugImplementation(libs.compose.ui.tooling)
+
+    // P1+：端侧推理（LiteRT / CompiledModel）。模型文件见 app/src/main/assets/models/
+    implementation(libs.litert)
 
     // M0b：纯 Kotlin ARW 预览解析的 JVM 单测
     testImplementation("junit:junit:4.13.2")

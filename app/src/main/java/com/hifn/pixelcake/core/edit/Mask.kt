@@ -78,3 +78,23 @@ class RasterMask(private val data: FloatArray, val w: Int, val h: Int) : Retouch
         }
     }
 }
+
+/**
+ * 两张蒙版**逐点取最大**的合并（P1p-1，见 `docs/P1p_DESIGN.md` §7）。
+ *
+ * 用于「ML 皮肤蒙版 ∪ 用户画笔描迹」：画笔是用户**显式补正**（例如 ML 漏了脖子/耳朵），
+ * 取 `max` 才符合直觉；若取 `min` 会出现「涂了反而没效果」。
+ *
+ * 内存：自身不持有任何像素，只存两个引用 —— 与 [FullMask] 同属 O(1) 量级，
+ * 不引入任何整幅分配（33MP 下 `FloatArray(w*h)` 就是 131MB）。
+ */
+class MaxMask(private val a: RetouchMask, private val b: RetouchMask) : RetouchMask {
+    override fun sample(px: Int, py: Int): Float {
+        val x = a.sample(px, py)
+        val y = b.sample(px, py)
+        return if (x >= y) x else y
+    }
+
+    override fun resampleTo(w: Int, h: Int): RetouchMask =
+        MaxMask(a.resampleTo(w, h), b.resampleTo(w, h))
+}

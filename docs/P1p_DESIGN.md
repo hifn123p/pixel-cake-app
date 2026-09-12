@@ -18,6 +18,24 @@ description: P1+ 阶段（ML 自动蒙版）的技术选型、模型选型、分
 
 用 **LiteRT**（不是 TFLite+NNAPI）跑 **MediaPipe `selfie_multiclass_256x256`**（Apache-2.0，6 类含 `face-skin`/`body-skin`）→ 输出 256×256 皮肤概率网格 → 包装成 `MlSkinMask : RetouchMask`（**低分辨率网格 + 按需双线性采样，绝不物化整幅 `FloatArray`**）→ 编辑器/批处理在「有 ML 蒙版」时优先用它，失败则按原逻辑回退（画笔 → `FullMask`）。
 
+### 0.1 实施进度（2026-09-12）
+
+| 批次 | 内容 | 状态 |
+|---|---|---|
+| **P1p-1a** | 依赖接入（`com.google.ai.edge.litert:litert:2.2.0`）+ 模型入库 + `core/ml/` 内核 + JVM 单测 + 许可声明 | ✅ 已完成（已提交；**依赖能否在 CI 解析待验证**） |
+| **P1p-1b** | UI 接线：编辑器「自动蒙版」开关；`RetouchScale.skinMask` 接入 ML 蒙版并与画笔取 `max`；真机验收 | ⬜ 待做 |
+
+> P1p-1a 的定位是**先验证风险最高的那一步**：`litert` 只在 Google Maven、且含 native 库，
+> 能否在 CI 正常解析/打包是本批最大未知数；内核与单测先落地，接线再跟上。
+
+**模型实际落地信息**（已写入根 `NOTICE`）：
+
+- 随包路径：`app/src/main/assets/models/selfie_multiclass_256x256.tflite`
+- 体积：**16,371,837 字节（≈15.6 MiB）**
+- SHA-256：`c6748b1253a99067ef71f7e26ca71096cd449baefa8f101900ea23016507e0e0`
+- 下载源：`https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_multiclass_256x256/float32/latest/selfie_multiclass_256x256.tflite`
+- 许可：Apache-2.0（原样随包，未修改）
+
 ---
 
 ## 1. 现状：接口已就绪，只差实现

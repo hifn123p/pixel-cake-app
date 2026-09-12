@@ -7,6 +7,12 @@ coreKtx = "1.17.0"
 activityCompose = "1.12.3"
 lifecycleRuntimeKtx = "2.10.0"
 
+# P1+（docs/P1p_DESIGN.md）：端侧推理改走 LiteRT（TFLite 继任者）。
+# 版本对齐 LiteRT main 分支源码（Environment.create / CompiledModel.create(AssetManager,...) /
+# Accelerator{NONE,CPU,GPU,NPU}）；Google Maven 上 <latest> 即 2.2.0。
+# 注意：litert 只在 Google Maven（settings.gradle.kts 已配 google()）。
+litert = "2.2.0"
+
 # CI runner 的 SDK 仓库（截至 2026-08 镜像）尚未发布 platforms;android-37，
 # 故 compile/target 暂对齐 minSdk=36；待官方发布 API 37 平台后改回 37。
 compileSdk = "36"
@@ -18,6 +24,9 @@ jvmTarget = "17"
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" }
 androidx-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "lifecycleRuntimeKtx" }
+
+# P1+ 端侧推理（含 Interpreter 与 CompiledModel；v2 上 GPU 加速器已并入本包）
+litert = { group = "com.google.ai.edge.litert", name = "litert", version.ref = "litert" }
 
 # 版本全部交由 Compose BOM 管理，不在此处写死
 compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }

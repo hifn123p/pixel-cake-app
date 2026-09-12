@@ -25,5 +25,19 @@
      app/build.gradle.kts 的 packaging.resources 中排除
      /META-INF/{AL2.0,LGPL2.1}，其许可随依赖源码 / Maven 元数据提供。
 
-注：本声明仅覆盖 LibRaw 与 LGPL 类依赖。内置 LUT / 模型各自的 MIT / CC
-许可随资源另行标注（见 README「致谢」与资源 LICENSE / NOTICE）。
+3. LiteRT 运行时 与 MediaPipe 图像分割模型（P1+，均 Apache-2.0）
+   - **LiteRT**（`com.google.ai.edge.litert:litert`，Apache-2.0）
+     用途：端侧执行皮肤分割模型（P1+ ML 自动蒙版，见
+     `app/src/main/java/com/hifn/pixelcake/core/ml/` 与 `docs/P1p_DESIGN.md`）。
+   - **MediaPipe Image Segmenter — SelfieMulticlass (256×256)**（Apache-2.0）
+       * 随包文件：`app/src/main/assets/models/selfie_multiclass_256x256.tflite`
+       * 体积：16,371,837 字节
+       * SHA-256：`c6748b1253a99067ef71f7e26ca71096cd449baefa8f101900ea23016507e0e0`
+       * 下载源：https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_multiclass_256x256/float32/latest/selfie_multiclass_256x256.tflite
+       * 模型卡：https://storage.googleapis.com/mediapipe-assets/Model%20Card%20Multiclass%20Segmentation.pdf
+       * 说明：模型**原样随包**分发，未做修改；本声明即满足其署名与许可保留要求。
+         （上游授权为 Apache-2.0，故不触发 LibRaw 那样的 relink 义务。）
+
+注：本声明覆盖 LibRaw、LGPL 类依赖、LiteRT 与内置的 MediaPipe 模型。内置 LUT /
+其他模型各自的 MIT / CC / Apache 许可随资源另行标注（见 README「致谢」与
+资源 LICENSE / NOTICE）。
