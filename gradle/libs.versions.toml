@@ -35,6 +35,11 @@ compose-ui-graphics = { group = "androidx.compose.ui", name = "ui-graphics" }
 compose-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
 compose-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }
 compose-material3 = { group = "androidx.compose.material3", name = "material3" }
+# UI 改版（docs/UI_DESIGN.md）：动效需要 AnimatedContent / AnimatedVisibility /
+# SharedTransitionLayout（≥1.7）与 animation-core 的 spring、CubicBezierEasing。
+# 此前工程只隐式依赖 material3 传递来的 animation-core，显式声明后
+# AnimatedVisibility / AnimatedContent / SharedTransitionLayout 才在编译类路径上。
+compose-animation = { group = "androidx.compose.animation", name = "animation" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

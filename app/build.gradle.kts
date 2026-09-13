@@ -112,6 +112,8 @@ dependencies {
     implementation(libs.compose.ui.graphics)
     implementation(libs.compose.ui.tooling.preview)
     implementation(libs.compose.material3)
+    // UI 改版：动效（AnimatedContent / AnimatedVisibility / SharedTransitionLayout + spring）
+    implementation(libs.compose.animation)
 
     debugImplementation(libs.compose.ui.tooling)
 

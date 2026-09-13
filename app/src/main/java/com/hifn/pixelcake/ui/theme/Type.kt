@@ -31,5 +31,15 @@ val Typography = Typography(
         fontSize = 12.sp,
         lineHeight = 16.sp,
         letterSpacing = 0.5.sp
+    ),
+    // UI 改版新增的第 5 档字号（caption）。
+    // ⚠️ 这是**上限**：全 App 字号只允许 24 / 16 / 14 / 12 / 11 五级
+    // （`docs/UI_DESIGN.md` §2.4 验收清单）。层次靠字重 + 颜色深浅表达，不靠继续加字号。
+    labelSmall = TextStyle(
+        fontFamily = FontFamily.Default,
+        fontWeight = FontWeight.Normal,
+        fontSize = 11.sp,
+        lineHeight = 14.sp,
+        letterSpacing = 0.4.sp
     )
 )

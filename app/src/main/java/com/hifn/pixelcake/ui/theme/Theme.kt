@@ -52,3 +52,42 @@ fun PixelCakeTheme(
         content = content
     )
 }
+
+/**
+ * 工作台配色（编辑页专用，**恒为深色，不跟随系统**）。
+ *
+ * 为什么不跟随系统：调色界面若在浅色下，界面自身的亮度会干扰用户对照片明暗与色彩的判断
+ * （浅底会让照片显得偏暗，用户会不自觉地调过曝）。Snapseed / Lightroom / VSCO 的编辑页
+ * 都是深色 —— 这是行业共识而非个人偏好。见 `docs/UI_DESIGN.md` §8 决策点 1。
+ */
+private val WorkspaceColors = darkColorScheme(
+    primary = Color(0xFFCFC0FF),
+    onPrimary = Color(0xFF2B1A63),
+    primaryContainer = Color(0xFF41307F),
+    onPrimaryContainer = Color(0xFFE9E3FF),
+    secondary = Color(0xFFCBC2D4),
+    onSecondary = Color(0xFF322D3A),
+    background = WorkspaceBg,
+    onBackground = OnDarkSurface,
+    surface = WorkspaceSurface,
+    onSurface = OnDarkSurface,
+    surfaceVariant = WorkspaceSurfaceHigh,
+    onSurfaceVariant = Color(0xFFCAC4D0),
+    outline = Color(0xFF605C66),
+    outlineVariant = Color(0xFF33313A)
+)
+
+/**
+ * 把内容强制套进工作台深色配色。
+ *
+ * 用法：编辑页整体包一层 —— `PixelCakeWorkspaceTheme { EditorScreen(...) }`。
+ * 嵌套 `MaterialTheme` 是官方支持的用法，外层主题与其它页面不受影响。
+ */
+@Composable
+fun PixelCakeWorkspaceTheme(content: @Composable () -> Unit) {
+    MaterialTheme(
+        colorScheme = WorkspaceColors,
+        typography = Typography,
+        content = content
+    )
+}
