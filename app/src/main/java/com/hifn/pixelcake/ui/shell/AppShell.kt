@@ -80,7 +80,7 @@ fun AppShell(
                         scaleIn(
                             initialScale = 0.98f,
                             animationSpec = Motion.springSoft()
-                        )) togetherTo
+                        )) togetherWith
                         fadeOut(tween(Motion.fast, easing = Motion.easingIn))
                 },
                 label = "tab"
