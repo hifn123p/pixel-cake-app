@@ -2,15 +2,14 @@
 
 > 由 push 触发的工作流运行结果整理。本文件每次 CI 后**覆盖重写**（前一次报告已清空）。
 > 生成时间：2026-09-13（本地）
-> 关联提交：`7c5f3db8ba0098a495700d92bf670f4260ea9210`
-> 运行链接：<https://github.com/hifn123p/pixel-cake-app/actions/runs/34709253707>
+> 关联提交：`fbc5e49bb2112444a61fdd9dc3931cfb03ef7bb6`
+> 运行链接：<https://github.com/hifn123p/pixel-cake-app/actions/runs/34745071202>
 
-## 结论：✅ 成功（success）—— P1p-2 人脸检测链路落地（内核 / 运行时 / 锚点接线）
+## 结论：✅ 成功（success）—— UI 改版第一步（设计 token / 玻璃组件 / 页面接线）
 
-push 到 `main` 触发 `Android CI`。本轮为 **P1p-2 人脸检测**三连提交：
-检测内核（`2448e99`）→ 人脸检测运行时（`88a0648`）→ 人脸锚点接线（`40863e8`）。
-首跑 run `34708984614` 因新单测 `FaceAnchorTest.kt` 未限定嵌套类名而**编译失败**（仅单测编译阶段），
-修正后 run `34709253707` **一次通过**，产出 debug APK。
+push 到 `main` 触发 `Android CI`。本轮为 **UI 改版（UI-1）**：设计 token 与玻璃组件基座（`ca22e91`）
+→ 组件与页面接线（`ca5410b`，19 文件 +2824/-543）。
+首跑 run `34744787789` 因两处编译错误（Build + Lint 双红），修正后 run `34745071202` **一次通过**，产出 debug APK。
 
 ## 任务（Job）总览（最终）
 
@@ -25,40 +24,43 @@ push 到 `main` 触发 `Android CI`。本轮为 **P1p-2 人脸检测**三连提�
 
 | Run | 提交 | 结论 | 失败点 / 修复 |
 |---|---|---|---|
-| `34708984614` | `40863e8` | ❌ failure | Build job 的 `:app:compileDebugUnitTestKotlin` 失败：新单测 `FaceAnchorTest.kt` 全篇以**未限定名** `FaceAnchor.fromDetection(...)` 引用类型，报一串 `Unresolved reference 'FaceAnchor'` 及级联的 `faceX`/`faceY`/`eyeX`/`eyeY`。 |
-| `34709253707` | `7c5f3db` | ✅ success | 补一行 `import com.hifn.pixelcake.core.edit.retouch.RetouchLayer.FaceAnchor`（`FaceAnchor` 是 `object RetouchLayer` 的**嵌套类**；同包内不会自动可见，必须限定或导入）后全绿 |
+| `34744787789` | `ca5410b` | ❌ failure（Build + Lint） | `:app:compileDebugKotlin` 两处 `Unresolved reference`：① `ui/components/ActionTile.kt:53` 用 `64.dp` 但**缺 `import androidx.compose.ui.unit.dp`**；② `ui/shell/AppShell.kt:83` 把 `togetherWith` 误写成 **`togetherTo`**（import 已是正确的 `togetherWith`，仅使用处拼错）。 |
+| `34745071202` | `fbc5e49` | ✅ success | 补 `dp` 导入 + 改回 `togetherWith` 后全绿（Lint 红是编译失败的级联，一并恢复） |
 
-> 诊断要点：`FaceAnchor` 定义在 `core/edit/retouch/RetouchLayer.kt` 内、**嵌套于 `object RetouchLayer`**（`RetouchLayer.FaceAnchor`）。
-> 生产侧调用（`MainActivity.kt` / `EditEngine.kt` / `RetouchLayerTest.kt`）均写作 `RetouchLayer.FaceAnchor`；仅新单测漏了限定。
-> 单测文件虽与 `RetouchLayer` **同包**（`com.hifn.pixelcake.core.edit.retouch`），但**同包不等于同类作用域** —— 嵌套类不写在 `RetouchLayer.` 后或 import 进来，就解析不到。属性 `faceX/...` 的报错是 `a` 类型推断失败后的级联，非独立问题。
+> 诊断要点：本轮**全量编译日志仅 2 条 `e:`**（不是被截断），可用「全仓扫描」交叉验证同类问题：
+> 正则找 `数字.dp` / `数字.sp` 但文件内无 `androidx.compose.ui.unit.<unit>` 导入 —— 扫描结果为 none，确认无遗漏。
 
 ## 本批提交
 
 | 提交 | 说明 |
 |---|---|
-| `2448e99` | `feat(ml)`: P1p-2a 人脸检测内核（anchor 生成 + 解码 + 加权 NMS + letterbox） |
-| `88a0648` | `feat(ml)`: P1p-2b 人脸检测运行时（模型入库 + LiteRT 实现 + 提供者） |
-| `40863e8` | `feat(ml)`: P1p-2c 人脸锚点接线（脸中心/眼心 → 液化 centroid/eyeCentroid）+ UI 回显 |
-| `7c5f3db` | `test`: FaceAnchorTest 补 `RetouchLayer.FaceAnchor` 导入（修复单测编译） |
+| `ca22e91` | `feat(ui)`: UI-1 基础层 —— 设计 token 与玻璃组件（UI 改版第一步） |
+| `ca5410b` | `feat(ui)`: UI-1b 玻璃组件与页面接线（components/editor/settings/shell + 主题 token 调整 + 设计稿） |
+| `fbc5e49` | `fix(ui)`: 修复 UI-1b 编译错误（ActionTile 补 dp 导入；AppShell togetherTo → togetherWith 笔误） |
+
+新增文件：`ui/components/{ActionTile,GlassChipRow,GlassSegmentedBar,ParamSlider}.kt`、
+`ui/editor/{EditorToolbar,ExportSheet,ParamPanel}.kt`、`ui/settings/{SettingsScreen,AboutSheet}.kt`、
+`ui/shell/AppShell.kt`、`ui/theme/Backdrop.kt`、`docs/ui_preview.html`。
 
 ## 历史回归记录
 
 | Run | 提交 | 结论 | 失败点 |
 |---|---|---|---|
-| `34699770791` | `1a2f3bd` | ✅ success | 无（测试期望修正后全绿，P1p ML 自动蒙版接线落地） |
-| `34699973933` | `2310fc7` | ✅ success | 无（CI 报告 docs-only 提交） |
 | `34703405933` | `350378d` | ✅ success | attempt 1 lint job Gradle daemon 崩溃（基础设施抖动）→ rerun attempt 2 全绿 |
 | `34703874001` | `fe534e5` | ✅ success | 无（CI 报告 docs-only 提交） |
 | `34708984614` | `40863e8` | ❌ failure | 单测 FaceAnchorTest 未限定嵌套类 `RetouchLayer.FaceAnchor` → Unresolved reference |
 | `34709253707` | `7c5f3db` | ✅ success | 无（补 import 后全绿，P1p-2 人脸检测链路落地） |
+| `34709474264` | `3d5b62c` | ✅ success | 无（CI 报告 docs-only 提交） |
+| `34744787789` | `ca5410b` | ❌ failure | ActionTile 缺 `dp` 导入 + AppShell `togetherTo` 笔误（两处编译错误） |
+| `34745071202` | `fbc5e49` | ✅ success | 无（UI-1 改版编译修复后全绿） |
 
 ## 后续步骤
 
-1. 真机（一加15）下载本轮 debug APK 验证 **P1p-2 人脸检测 → 液化锚点**：`slimFace`/`slimJaw` 落在真实脸中心、`eyeEnlarge` 落在眼心；对比「检测到人脸 / 无人脸（回退蒙版质心）」两种情形，并对比预览与导出是否一致（归一化换算护栏）。
-2. 一并回归 ML 自动蒙版、retouch、相机批量、Beauty、ToneCurve（已预留调试日志）。
+1. 真机（一加15）下载本轮 debug APK 验收 **UI 改版**：底部悬浮玻璃 TabBar（选中指示块滑动）、设置页、编辑器工具栏 / 参数面板 / 导出 Sheet、背景与动效；确认与 `docs/UI_DESIGN.md` 预期一致，并附调试日志。
+2. 一并回归 P1p-2 人脸检测 → 液化锚点、ML 自动蒙版、retouch、相机批量、Beauty、ToneCurve。
 3. 如有新修改，按固定流程 **全量推送** → 触发 CI → 结果覆盖写入本文件再推送。
 4. 如遇 lint job 报 `Gradle build daemon disappeared`，先 **rerun-failed-jobs** 重试一次（用 `ci_rerun.py`）。
 5. 如需发布签名 Release，需在仓库 Secrets 配置 `KEYSTORE_BASE64`（及别名/密码），否则 release job 持续跳过。
 
 ---
-*本报告由 push 后 GitHub Actions 运行结果自动整理；本轮 P1p-2 人脸检测链路落地，单测嵌套类限定修复后全绿。*
+*本报告由 push 后 GitHub Actions 运行结果自动整理；本轮 UI 改版第一步落地，两处编译错误修复后全绿。*
