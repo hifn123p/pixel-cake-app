@@ -5,6 +5,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -65,10 +66,21 @@ object Glass {
     }
 }
 
-/** 按当前系统主题取玻璃色值。 */
+/**
+ * 应用内「降低透明度」开关（设置 → 外观）。
+ *
+ * Android **没有** iOS 那种系统级「降低透明度」开关（详见 `docs/UI_DESIGN.md` §6 的更正），
+ * 所以只能由应用自己提供。用 CompositionLocal 而不是逐层传参：玻璃色值在十几个组件里被解析，
+ * 逐层透传会把参数列表污染得很难看，而这是一个「全局观感」开关，语义上就是环境值。
+ *
+ * 默认 `false`：即使调用方忘了 provide 也是正常观感，不会退化。
+ */
+val LocalLowTransparency = staticCompositionLocalOf { false }
+
+/** 按当前系统主题取玻璃色值。应用内开关打开时一律降级为实心底。 */
 @Composable
 fun rememberGlassTint(opaque: Boolean = false): GlassTint =
-    Glass.of(isSystemInDarkTheme(), opaque)
+    Glass.of(isSystemInDarkTheme(), opaque || LocalLowTransparency.current)
 
 /**
  * 把玻璃材质应用到任意组件：裁剪 + 半透明底 + 高光描边。

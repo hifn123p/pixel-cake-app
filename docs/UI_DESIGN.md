@@ -322,17 +322,69 @@ VSCO 的护城河也不是社交，是 `A4 / C1 / G3` 这些代号构成的**一
 
 | 阶段 | 范围 | 状态 |
 |---|---|---|
-| **UI-1 基础层** | `ui/theme/` 新增 `Spacing` / `Radius` / `Motion` / `Glass`；`Color.kt` 补灰阶与工作台深色；`Type.kt` 补 caption 11sp；`Theme.kt` 加 `PixelCakeWorkspaceTheme`；`ui/components/GlassCard.kt`。**零业务改动** | 🔄 进行中 |
-| **UI-2 外壳与页面** | `ui/shell/AppShell.kt`（2 Tab：调色台 / 设置 + 玻璃 TabBar + 转场）；调色台首页（空态即导入）；`ui/settings/SettingsScreen.kt` + 关于 Sheet | ⏳ |
-| **UI-3 编辑器** | 四段式布局（顶栏 / 预览 / 悬浮工具条 / 参数卡）；三级工具条；导出 · LUT · 曲线 · 相机连接 四个 Sheet；抽 `EditorUiState` | ⏳ |
-| **UI-4 细节与动效** | §5 动效表逐项落地 + 无障碍降级（`Motion.reduceMotion()`） | ⏳ |
-| **UI-5 渲染性能** | 静态模糊底图、列表稳定 key、真机（一加15）帧率实测与降级 | ⏳ |
+| **UI-1 基础层** | `ui/theme/` 新增 `Spacing` / `Radius` / `Motion` / `Glass`；`Color.kt` 补灰阶与工作台深色；`Type.kt` 补 caption 11sp；`Theme.kt` 加 `PixelCakeWorkspaceTheme`；`ui/components/GlassCard.kt`。**零业务改动** | ✅ 已提交 `ca22e91` |
+| **UI-2 外壳与页面** | `ui/shell/AppShell.kt`（2 Tab：调色台 / 设置 + 玻璃 TabBar + 转场）；调色台首页（空态即导入）；`ui/settings/SettingsScreen.kt` + 关于 Sheet；`ui/components/GlassSegmentedBar.kt`（TabBar 与编辑器工具条共用） | ✅ 已落地 |
+| **UI-3 编辑器** | 四段式布局（顶栏 / 预览 / 悬浮工具条 / 参数卡）；三级工具条；各 Sheet | ✅ 已落地（范围有调整，见 §7.2） |
+| **UI-4 细节与动效** | §5 动效表逐项落地 + 无障碍降级（`Motion.reduceMotion()`） | ✅ 已落地（见 §7.3） |
+| **UI-5 渲染性能** | 静态模糊底图、列表稳定 key、真机（一加15）帧率实测与降级 | 🔄 底图已落地；真机帧率实测待做 |
 | （后续）预设库 | §1.5 的 B 档：`Presets` 由 `object` 改为可扩展库 + 持久化，编辑成果可喂批量 / NAS | ⏸ 排后 |
 
 > **范围提醒**：UI-1 ~ UI-3 **只动 `ui/**` 与 `MainActivity`**；`core/edit/**`、`core/camera/**`、`ml/**`
 > 一律不碰 —— 保护已绿 CI 的 P1p-2c 与待真机验收的 P2 / P1p-1c。
 > 唯一例外是 `gradle/libs.versions.toml` + `app/build.gradle.kts` 新增
 > `androidx.compose.animation:animation` 依赖（动效需要，BOM 管版本）。
+
+### 7.1 UI-1 实际交付的文件
+
+| 文件 | 内容 |
+|---|---|
+| `ui/theme/Spacing.kt` | 7 档间距 token + 语义名（`page` / `cardInner` / `cardGap` / `sectionGap` / `controlHeight`） |
+| `ui/theme/Radius.kt` | 4 档圆角阶梯 `chip`/`card`/`sheet`/`shell` + `pill` |
+| `ui/theme/Motion.kt` | 时长档 `fast`/`base`/`slow`、`easingOut`/`easingIn`、`springSoft`/`springSnappy`、`pressedScale`、`reduceMotion()`、`durationFor()`、`Modifier.pressScale()` |
+| `ui/theme/Glass.kt` | `GlassTint`、`Glass.of()`、`Modifier.glassSurface()`、`LocalLowTransparency` |
+| `ui/theme/Backdrop.kt` | `blurredBackdrop()`：静态模糊底图（见 §7.4） |
+| `ui/theme/Color.kt` | 工作台深色 3 值 + 灰阶 6 级 + 玻璃描边/底色 |
+| `ui/theme/Theme.kt` | `PixelCakeWorkspaceTheme`（编辑页恒深色） |
+| `ui/theme/Type.kt` | `labelSmall` 11sp —— 字号封顶 5 级 |
+| `ui/components/GlassCard.kt` | `GlassCard` / `SectionHeader` / `CapsuleNote` |
+| `ui/components/GlassSegmentedBar.kt` | 泛型分段玻璃条（TabBar 与编辑器一级工具条共用） |
+| `ui/components/GlassChipRow.kt` | 横向滚动 chip 行（统一 `Radius.chip`） |
+| `ui/components/ParamSlider.kt` | 参数滑块 + 拖动状态上报 |
+| `ui/components/ActionTile.kt` | 动作卡（按下缩放，替代实心 Button） |
+
+### 7.2 UI-3 与原计划的偏差（刻意缩小范围）
+
+| 原计划 | 实际做法 | 理由 |
+|---|---|---|
+| 导出 · LUT · 曲线 · 相机连接 **四个 Sheet** | **只做导出 Sheet**。曲线 / LUT 直接作为一级分类的面板内容；相机连接保持调色台上的卡片 | 曲线与 LUT **本身就是一级分类**（§4.3），再弹一层 Sheet 是同一概念套两层壳；相机面板已有可用实现，改成 Sheet 属于纯搬运。判据是「内容量够不够独占一屏」，不是「概念上够不够独立」 |
+| 抽 `EditorUiState`（§4.2） | **未做**，`AppRoot` 状态保持原样 | 用户定的顺序是「先 UI 后能力」，状态收敛是**架构**不是 UI；且它要动 `MainActivity` 里那条已通过真机验收的渲染协程，风险与收益不成比例。留在 UI 之后的独立阶段 |
+| `GlassToolbar.kt` | 落到 `ui/editor/EditorToolbar.kt` + 共用 `GlassSegmentedBar` | 一级工具条与 TabBar 行为完全一致，分成两个文件必然漂移 |
+| 气泡滑块（跟着拇指飘） | 数值做成**标签行右侧的胶囊**，拖动时变强调色 + 轻微放大 | 跟着拇指走要依赖 Material3 `Slider` **未公开**的轨道内边距才能对齐，一改版就偏位。见 `ParamSlider` 文件头 |
+
+### 7.3 UI-4 实际落地项
+
+| 动效 | 落地位置 |
+|---|---|
+| 拖动时隐藏非参数 UI | `EditorScreen`：顶栏 `AnimatedVisibility` 收起（把高度让给预览）；工具条**只做透明度淡出**（收掉高度会让参数面板下移 44dp，手指按着的滑块会在拖动中跑掉） |
+| 参数值变化反馈 | `ParamSlider`：拖动中数值变强调色 + `1.12×` 放大 + 胶囊底 |
+| 分类切换淡换 | `EditorScreen`：`Crossfade(tween(Motion.base))` |
+| Tab 转场 | `AppShell`：淡入 + 轻放大（**不做左右推** —— 左右推是层级导航语意，用在平级 Tab 上会让人「迷路」） |
+| 指示块滑动 | `GlassSegmentedBar` / `GlassTabBar`：`animateDpAsState` + `springSnappy` |
+| 按下缩放 | `Modifier.pressScale()`（0.97）+ `indication = null`（避免缩放与涟漪两层反馈叠加） |
+| 无障碍降级 | `Motion.reduceMotion()` 读 `ValueAnimator.areAnimatorsEnabled()`（API 26+，minSdk 36） |
+| 状态说明不再占面板 | `CapsuleNote` 浮在预览上，3.2s 后自动淡出（`autoMaskNote` / `liquifyNote`） |
+
+### 7.4 UI-5 静态模糊底图（已落地）
+
+**做法**：照片 → 缩到 28px 宽（`Canvas` 画进**全新**位图，避免 `createScaledBitmap` 在尺寸相同时返回同一实例而就地改掉用户照片）→ 两轮半径 1 的**可分离盒式模糊**（边缘 clamp，否则四周出现黑边）→ 拉伸铺满（`FilterQuality.Low`，约 38× 放大，双线性本身就完成了大部分「模糊」）。
+
+**为什么这不是「实时 backdrop blur」**：整条链只在 `remember(original)` 里跑一次 —— 换图才算一次，拖动 / 滚动 / 切分类**零重算**。28×19 的小图，两轮模糊共约 6k 次运算。
+
+**不透明度 0.26**：底图的作用是给玻璃层提供可透出的色彩信息，不是当壁纸；调高会让界面自身变彩色，与「照片是唯一彩色主体」冲突。
+
+**顺带修掉的一个真 bug**：编辑页原来**没有自己铺底**——外层 `Surface` 位于 `PixelCakeWorkspaceTheme` **之外**，浅色模式下会在编辑页背后画浅灰底，出现「照片周围一圈浅色」。现在 `EditorScreen` 自己 `background(colorScheme.background)`（在 Workspace 主题内 = `WorkspaceBg`）。
+
+**待办（真机）**：一加15 上实测帧率；若大面积玻璃掉帧，把参数面板降级为实心底（`LocalLowTransparency` 已有现成机制，或直接给 `GlassCard` 传 `opaque = true`）。
 
 ---
 
@@ -350,30 +402,49 @@ VSCO 的护城河也不是社交，是 `A4 / C1 / G3` 这些代号构成的**一
 
 ---
 
-## 9. 文件地图（预计改动）
+## 9. 文件地图（实际改动，✅ 全部已落地）
 
 ```
 app/src/main/java/com/hifn/pixelcake/
 ├── ui/theme/
+│   ├── Spacing.kt         [新增] 7 档间距 + 语义名
 │   ├── Radius.kt          [新增] 圆角阶梯常量
-│   ├── GlassTokens.kt     [新增] 玻璃材质 Modifier + Token
-│   ├── Motion.kt          [新增] 动效曲线与时长
-│   ├── Color.kt           [修改] 新增工作台深色
-│   ├── Theme.kt           [修改] 工作台深色方案
-│   └── Type.kt            [修改] 新增 11sp caption
-├── ui/shell/
-│   └── AppShell.kt        [新增] TabBar + 页面转场 + 共享元素
-├── ui/editor/
-│   ├── EditorScreen.kt    [重构] 四段式布局
-│   ├── EditorUiState.kt   [新增] 状态收敛
-│   ├── GlassToolbar.kt    [新增] 分段玻璃工具条
-│   └── ParamPanel.kt      [新增] 参数玻璃卡 + 气泡滑块
-├── ui/home/
-│   └── HomeScreen.kt      [修改] 卡片化 + 玻璃
+│   ├── Glass.kt           [新增] 玻璃材质 Modifier + Token + LocalLowTransparency
+│   ├── Backdrop.kt        [新增] 静态模糊底图（缩略 + 盒式模糊 + 拉伸）
+│   ├── Motion.kt          [新增] 动效曲线/时长 + pressScale + reduceMotion
+│   ├── Color.kt           [修改] 工作台深色 + 灰阶 6 级 + 玻璃色
+│   ├── Theme.kt           [修改] PixelCakeWorkspaceTheme（恒深色）
+│   └── Type.kt            [修改] 11sp caption；bodySmall 别名到 caption
 ├── ui/components/
-│   └── GlassCard.kt       [新增] 通用玻璃卡 / 胶囊提示
-└── MainActivity.kt        [修改] 接入 AppShell，状态迁到 EditorUiState
+│   ├── GlassCard.kt        [新增] 通用玻璃卡 / SectionHeader / CapsuleNote
+│   ├── GlassSegmentedBar.kt[新增] 泛型分段玻璃条（TabBar 与工具条共用）
+│   ├── GlassChipRow.kt     [新增] 横向滚动 chip 行
+│   ├── ParamSlider.kt      [新增] 参数滑块 + 拖动状态上报
+│   └── ActionTile.kt       [新增] 动作卡（按下缩放，替代实心 Button）
+├── ui/shell/
+│   └── AppShell.kt         [新增] 2-Tab 外壳 + 玻璃 TabBar + 页面转场
+├── ui/editor/
+│   ├── EditorScreen.kt     [重构] 四段式布局 + 静态模糊底图 + 拖动隐藏
+│   ├── EditorToolbar.kt    [新增] 一级工具条（复用 GlassSegmentedBar）
+│   ├── ParamPanel.kt       [新增] 按分类渲染的参数玻璃卡
+│   └── ExportSheet.kt      [新增] 导出 Sheet
+├── ui/settings/
+│   ├── SettingsScreen.kt   [新增] 设置页
+│   └── AboutSheet.kt       [新增] 关于 Sheet（含开源组件署名）
+├── ui/home/
+│   └── HomeScreen.kt       [修改] 「调色台」：空态即导入 + 玻璃卡
+└── MainActivity.kt         [修改] 接入 AppShell（2 Tab），编辑器全屏置于外壳之外
 ```
+
+**没有落地的两项**（刻意，见 §7.2）：`ui/editor/EditorUiState.kt`（状态收敛属「能力」阶段）、
+`GlassToolbar.kt`（并入 `EditorToolbar.kt` + 共用 `GlassSegmentedBar`）。
 
 **约束**：本次改造**只动 UI 层**，`core/edit/**`、`core/camera/**`、`ml/**` 一律不碰，
 以免影响已通过 CI 的 P1p-2c 与待真机验收的 P2/P1p-1c。
+
+---
+
+## 10. 静态预览
+
+`docs/ui_preview.html` —— 按上述 token 真值复刻的四个界面静态预览（调色台 / 编辑器 / 拖动中 / 设置+关于）
+与 token 表、验收清单自查。用于在无法本地构建的情况下评审版式与密度；真实动效与手势仍需真机核对。

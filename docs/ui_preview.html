@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PixelCake · UI 改版预览（UI-1 ~ UI-5）</title>
+<style>
+  :root{
+    /* —— 设计 token（与 ui/theme/ 逐一对齐）—— */
+    --bg:#0E0E10;            /* WorkspaceBg */
+    --surface:#16161A;       /* WorkspaceSurface */
+    --surface-high:#1F1F25;  /* WorkspaceSurfaceHigh */
+    --on-dark:#E6E1E5;       /* OnDarkSurface */
+    --seed:#7C5CFF;          /* Seed */
+    --gray3:#BFBFC6;         /* 禁用 */
+    --gray4:#7A7A83;         /* 辅助文字 */
+    --glass:rgba(28,28,34,.72);        /* GlassTintDark */
+    --glass-light:rgba(255,255,255,.72);
+    --border:rgba(255,255,255,.14);    /* GlassBorderDark */
+    --border-strong:rgba(255,255,255,.22);
+
+    --r-chip:12px; --r-card:20px; --r-sheet:28px; --r-shell:36px;
+
+    --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:32px; --s7:48px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    background:#08080A; color:var(--on-dark);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    padding:var(--s6) var(--s5) var(--s7);
+    line-height:1.5; -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1240px;margin:0 auto}
+
+  /* —— 页头 —— */
+  .head{max-width:760px;margin-bottom:var(--s6)}
+  .head h1{font-size:26px;font-weight:500;letter-spacing:-.2px}
+  .head p{color:var(--gray4);font-size:13px;margin-top:var(--s2)}
+  .badge{
+    display:inline-block;font-size:11px;letter-spacing:.4px;padding:3px 10px;
+    border-radius:999px;border:1px solid var(--border);color:var(--gray3);margin-bottom:var(--s3)
+  }
+
+  /* —— 手机排布 —— */
+  .phones{display:flex;flex-wrap:wrap;gap:var(--s6);align-items:flex-start;margin-bottom:var(--s7)}
+  .phone-wrap{width:320px}
+  .phone-label{font-size:12px;letter-spacing:.5px;color:var(--gray4);margin-bottom:var(--s2);padding-left:var(--s1)}
+  .phone{
+    width:320px;height:660px;background:var(--bg);border:1px solid var(--border-strong);
+    border-radius:var(--r-shell);overflow:hidden;position:relative;
+    display:flex;flex-direction:column;
+    box-shadow:0 24px 48px rgba(0,0,0,.55);   /* 干净的下偏移阴影，无弥散光晕 */
+  }
+
+  /* —— 通用件 —— */
+  .card{
+    background:var(--glass);border:1px solid var(--border);border-radius:var(--r-card);
+    padding:var(--s4);
+  }
+  .sec-title{font-size:16px;font-weight:500}
+  .sec-sub{font-size:11px;color:var(--gray4);letter-spacing:.4px;margin-top:1px}
+  .row-between{display:flex;align-items:center;justify-content:space-between;gap:var(--s2)}
+  .mut{color:var(--gray4);font-size:12px}
+  .cap{font-size:11px;color:var(--gray4);letter-spacing:.4px}
+  .body{font-size:14px}
+
+  /* 动作卡 */
+  .tile{display:flex;align-items:center;gap:var(--s2);padding:var(--s3) 0;cursor:pointer}
+  .tile .t{font-size:14px}
+  .tile .s{font-size:11px;color:var(--gray4);letter-spacing:.4px;margin-top:2px}
+  .tile .trail{font-size:12px;color:var(--gray4);letter-spacing:.5px}
+  .tile.accent .t{color:var(--seed)}
+  .divider{height:var(--s1)}
+
+  /* chip */
+  .chips{display:flex;gap:var(--s2);overflow:hidden}
+  .chip{
+    font-size:12px;letter-spacing:.5px;padding:6px 12px;border-radius:var(--r-chip);
+    border:1px solid var(--border);color:var(--gray3);white-space:nowrap
+  }
+  .chip.on{color:var(--seed);background:rgba(124,92,255,.18);border-color:rgba(124,92,255,.42)}
+
+  /* 分段条 */
+  .seg{
+    display:flex;position:relative;background:var(--glass);border:1px solid var(--border);
+    border-radius:999px;padding:var(--s1);height:44px;align-items:center
+  }
+  .seg .items{display:flex;width:100%;height:100%;position:relative;z-index:2}
+  .seg .items span{
+    flex:1;display:flex;align-items:center;justify-content:center;
+    font-size:12px;letter-spacing:.5px;color:var(--gray3)
+  }
+  .seg .items span.on{color:var(--seed);font-weight:500}
+  .seg .ind{
+    position:absolute;top:var(--s1);bottom:var(--s1);z-index:1;
+    background:rgba(124,92,255,.18);border-radius:999px;
+  }
+
+  /* 滑块 */
+  .slider{padding:var(--s1) 0}
+  .slider .lab{display:flex;justify-content:space-between;align-items:center;font-size:14px}
+  .slider .val{
+    font-size:12px;letter-spacing:.5px;color:var(--gray4);
+    padding:1px var(--s2);border-radius:999px
+  }
+  .slider.drag .val{color:var(--seed);background:rgba(124,92,255,.12);transform:scale(1.12);font-weight:500}
+  .slider .track{height:6px;border-radius:999px;background:rgba(255,255,255,.10);margin-top:var(--s2);position:relative}
+  .slider .track i{position:absolute;left:0;top:0;bottom:0;border-radius:999px;background:var(--gray4);opacity:.5}
+  .slider.active .track i{background:var(--seed)}
+  .slider .track b{
+    position:absolute;top:50%;width:14px;height:14px;border-radius:50%;
+    background:var(--seed);transform:translate(-50%,-50%);border:2px solid #EDE8FF
+  }
+
+  /* 底部 TabBar */
+  .tabbar{
+    position:absolute;left:var(--s5);right:var(--s5);bottom:var(--s4);height:52px;
+    background:var(--glass);border:1px solid var(--border);border-radius:999px;
+    display:flex;align-items:center;padding:var(--s1);z-index:5
+  }
+  .tabbar .ind{
+    position:absolute;top:var(--s1);bottom:var(--s1);left:var(--s1);width:calc(50% - var(--s1));
+    background:rgba(124,92,255,.14);border-radius:999px
+  }
+  .tabbar .items{display:flex;width:100%;height:100%;position:relative;z-index:2}
+  .tabbar .items span{flex:1;display:flex;align-items:center;justify-content:center;font-size:12px;letter-spacing:.5px;color:var(--gray3)}
+  .tabbar .items span.on{color:var(--seed);font-weight:500}
+
+  /* 滚动内容区 */
+  .scroll{
+    flex:1;overflow:hidden;padding:var(--s5) var(--s5) 0;
+    display:flex;flex-direction:column;gap:var(--s3)
+  }
+  .scroll.flush{padding:0}
+  .fade{
+    position:absolute;left:0;right:0;bottom:0;height:120px;pointer-events:none;
+    background:linear-gradient(to bottom,transparent,var(--bg) 78%)
+  }
+
+  /* 编辑器 */
+  .topbar{display:flex;align-items:center;gap:2px;height:56px;padding:0 var(--s3);flex-shrink:0}
+  .tb{font-size:12px;letter-spacing:.5px;color:var(--gray3);padding:8px 9px;border-radius:var(--r-chip)}
+  .tb.strong{font-size:16px;color:var(--on-dark);letter-spacing:0}
+  .tb.cta{background:var(--seed);color:#fff;font-size:12px;padding:8px 14px;border-radius:var(--r-chip)}
+  .tb.off{opacity:.35}
+  .preview{
+    margin:0 var(--s3);flex:1;border-radius:var(--r-shell);position:relative;overflow:hidden;
+    background:#000;min-height:250px
+  }
+  .photo{
+    position:absolute;inset:0;
+    background:
+      radial-gradient(120% 90% at 30% 18%, rgba(255,208,170,.95) 0%, rgba(255,208,170,0) 55%),
+      radial-gradient(90% 80% at 78% 72%, rgba(96,130,255,.55) 0%, rgba(96,130,255,0) 60%),
+      linear-gradient(160deg,#3A2E44 0%,#1A1620 60%,#0D0B10 100%);
+  }
+  .subject{
+    position:absolute;left:50%;bottom:-14%;transform:translateX(-50%);
+    width:70%;height:66%;border-radius:46% 46% 40% 40%/52% 52% 34% 34%;
+    background:radial-gradient(60% 55% at 50% 26%, #F0C9A4 0%, #C9906A 46%, #6E4A3A 78%, #3A2A24 100%);
+    filter:blur(1.5px);opacity:.94
+  }
+  .vignette{position:absolute;inset:0;box-shadow:inset 0 -70px 90px -40px rgba(0,0,0,.7)}
+  .note{
+    position:absolute;left:50%;bottom:var(--s3);transform:translateX(-50%);
+    background:var(--surface-high);border:1px solid var(--border);border-radius:999px;
+    padding:5px var(--s3);font-size:11px;letter-spacing:.4px;color:var(--gray3);white-space:nowrap
+  }
+  .toolwrap{padding:var(--s2) var(--s5);flex-shrink:0}
+  .panelwrap{padding:0 var(--s5) var(--s5);display:flex;flex-direction:column;gap:var(--s1);flex-shrink:0}
+
+  /* 关于 sheet */
+  .dim{position:absolute;inset:0;background:rgba(0,0,0,.5);z-index:8}
+  .sheet{
+    position:absolute;left:0;right:0;bottom:0;z-index:9;
+    background:var(--surface);border-radius:var(--r-sheet) var(--r-sheet) 0 0;
+    border:1px solid var(--border);border-bottom:none;padding:var(--s2) var(--s5) var(--s6);
+    display:flex;flex-direction:column;gap:var(--s3)
+  }
+  .grab{width:34px;height:4px;border-radius:999px;background:rgba(255,255,255,.24);margin:0 auto var(--s2)}
+
+  /* —— token 表 —— */
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:var(--s4);margin-bottom:var(--s7)}
+  .tbl{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-card);padding:var(--s4)}
+  .tbl h3{font-size:16px;font-weight:500;margin-bottom:var(--s1)}
+  .tbl .hint{font-size:11px;color:var(--gray4);letter-spacing:.4px;margin-bottom:var(--s3)}
+  table{width:100%;border-collapse:collapse;font-size:12px}
+  td{padding:5px 0;vertical-align:middle;border-top:1px solid rgba(255,255,255,.06)}
+  tr:first-child td{border-top:none}
+  td.k{color:var(--gray3)}
+  td.v{color:var(--gray4);text-align:right;font-variant-numeric:tabular-nums}
+  .swatch{display:inline-block;width:11px;height:11px;border-radius:3px;border:1px solid var(--border);vertical-align:-1px;margin-right:6px}
+
+  /* —— 清单 —— */
+  .checks{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-card);padding:var(--s5);margin-bottom:var(--s7)}
+  .checks h2{font-size:16px;font-weight:500;margin-bottom:var(--s2)}
+  .checks .hint{font-size:11px;color:var(--gray4);letter-spacing:.4px;margin-bottom:var(--s4)}
+  .checks ul{list-style:none;display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:var(--s2) var(--s5)}
+  .checks li{font-size:13px;display:flex;gap:var(--s2);align-items:flex-start}
+  .ok{color:#0F7B4F;flex-shrink:0}
+  .todo{color:#9A6700;flex-shrink:0}
+  .checks li em{font-style:normal;color:var(--gray4);font-size:12px}
+
+  .foot{font-size:12px;color:var(--gray4);border-top:1px solid var(--border);padding-top:var(--s4)}
+  code{background:var(--surface-high);padding:1px 6px;border-radius:5px;font-size:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="head">
+    <div class="badge">UI 改版 · 静态预览 · 未提交（等你看完再 commit）</div>
+    <h1>PixelCake UI 改版预览</h1>
+    <p>这是按 <code>docs/UI_DESIGN.md</code> 与 <code>ui/theme/</code> 真实 token 复刻的静态预览，用于在无法本地构建的情况下肉眼验收版式、层次与密度。颜色 / 间距 / 圆角 / 字号全部取自代码里的 token 真值。</p>
+  </div>
+
+  <div class="phones">
+
+    <!-- ══════════ 1. 调色台 ══════════ -->
+    <div class="phone-wrap">
+      <div class="phone-label">① 调色台（Tab 1）· 空态即导入</div>
+      <div class="phone">
+        <div class="scroll">
+          <div>
+            <div style="font-size:24px;font-weight:500">调色台</div>
+            <div class="mut" style="margin-top:var(--s1)">本地 RAW 调色 · 人像精修。全程端侧处理，照片不出本机。</div>
+          </div>
+
+          <div class="card">
+            <div class="sec-title">开始</div>
+            <div class="sec-sub">选一张照片，或直接连相机拉图</div>
+            <div class="divider"></div>
+            <div class="tile">
+              <div style="flex:1">
+                <div class="t">从相册选择</div>
+                <div class="s">JPEG / HEIF，走 8-bit sRGB 管线</div>
+              </div>
+              <div class="trail">选择</div>
+            </div>
+            <div class="tile accent">
+              <div style="flex:1">
+                <div class="t">打开 ARW 文件</div>
+                <div class="s">16-bit 线性 RAW，预览与导出一致</div>
+              </div>
+              <div class="trail">打开</div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="sec-title">相机直连</div>
+            <div class="sec-sub">USB PTP · Sony A7C II</div>
+            <div class="divider"></div>
+            <div class="tile">
+              <div style="flex:1"><div class="t">连接相机</div><div class="s">检测 → 授权 → 列图 → 批量套预设</div></div>
+              <div class="trail">检测</div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="sec-title">设备与显示</div>
+            <div class="sec-sub">能力实测，用于判断管线档位</div>
+            <div class="divider"></div>
+            <div class="row-between" style="padding:3px 0"><span class="mut">芯片平台</span><span class="body">Snapdragon 8 Elite</span></div>
+            <div class="row-between" style="padding:3px 0"><span class="mut">广色域 (P3)</span><span class="body" style="color:#0F7B4F">支持</span></div>
+            <div class="row-between" style="padding:3px 0"><span class="mut">刷新率</span><span class="body">120 Hz</span></div>
+          </div>
+        </div>
+        <div class="fade"></div>
+        <div class="tabbar">
+          <div class="ind"></div>
+          <div class="items"><span class="on">调色台</span><span>设置</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════ 2. 编辑器 ══════════ -->
+    <div class="phone-wrap">
+      <div class="phone-label">② 编辑器（全屏 · 强制深色 · 四段式）</div>
+      <div class="phone">
+        <div class="topbar">
+          <div class="tb">‹</div>
+          <div class="tb strong">编辑</div>
+          <div style="flex:1"></div>
+          <div class="tb">撤销</div>
+          <div class="tb off">重做</div>
+          <div class="tb">重置</div>
+          <div class="tb cta">导出</div>
+        </div>
+
+        <div class="preview">
+          <div class="photo"></div>
+          <div class="subject"></div>
+          <div class="vignette"></div>
+          <div class="note">自动蒙版已启用（GPU）· 液化锚点：人脸检测 · 1 张脸</div>
+        </div>
+
+        <div class="toolwrap">
+          <div class="seg">
+            <div class="ind" style="left:4px;width:calc((100% - 8px)/5)"></div>
+            <div class="items">
+              <span class="on">人像</span><span>调色</span><span>曲线</span><span>LUT</span><span>预设</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="panelwrap">
+          <div class="card">
+            <div class="cap" style="margin-bottom:var(--s2)">画布工具</div>
+            <div class="chips" style="margin-bottom:var(--s3)">
+              <div class="chip">关闭</div><div class="chip on">皮肤画笔</div><div class="chip">祛瑕</div>
+            </div>
+            <div class="slider active drag">
+              <div class="lab"><span>磨皮强度</span><span class="val">0.55</span></div>
+              <div class="track"><i style="width:55%"></i><b style="left:55%"></b></div>
+            </div>
+            <div class="slider active">
+              <div class="lab"><span>磨皮半径</span><span class="val">0.012</span></div>
+              <div class="track"><i style="width:24%"></i><b style="left:24%"></b></div>
+            </div>
+            <div class="slider active">
+              <div class="lab"><span>笔刷大小</span><span class="val">0.040</span></div>
+              <div class="track"><i style="width:38%"></i><b style="left:38%"></b></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════ 3. 拖动中（隐形式） ══════════ -->
+    <div class="phone-wrap">
+      <div class="phone-label">③ 拖动滑块时 · 非参数 UI 全部让位（隐形式）</div>
+      <div class="phone">
+        <div class="preview" style="margin:0 var(--s3) 0;flex:1;min-height:300px">
+          <div class="photo"></div>
+          <div class="subject"></div>
+          <div class="vignette"></div>
+        </div>
+
+        <div class="toolwrap" style="opacity:.12">
+          <div class="seg">
+            <div class="ind" style="left:4px;width:calc((100% - 8px)/5)"></div>
+            <div class="items">
+              <span class="on">人像</span><span>调色</span><span>曲线</span><span>LUT</span><span>预设</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="panelwrap">
+          <div class="card">
+            <div class="cap" style="margin-bottom:var(--s2)">美型</div>
+            <div class="slider active drag">
+              <div class="lab"><span>瘦脸</span><span class="val">0.35</span></div>
+              <div class="track" style="height:8px"><i style="width:35%"></i><b style="left:35%;width:18px;height:18px"></b></div>
+            </div>
+            <div class="slider" style="opacity:.35">
+              <div class="lab"><span>收下颌</span><span class="val">0.00</span></div>
+              <div class="track"><b style="left:0%"></b></div>
+            </div>
+            <div class="slider" style="opacity:.35">
+              <div class="lab"><span>大眼</span><span class="val">0.00</span></div>
+              <div class="track"><b style="left:0%"></b></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════ 4. 设置 + 关于 ══════════ -->
+    <div class="phone-wrap">
+      <div class="phone-label">④ 设置（Tab 2）· 关于做 Sheet 不做页面</div>
+      <div class="phone">
+        <div class="scroll">
+          <div>
+            <div style="font-size:24px;font-weight:500">设置</div>
+            <div class="mut" style="margin-top:var(--s1)">默认值与系统级开关。调色参数都在编辑器里，不在这里。</div>
+          </div>
+
+          <div class="card">
+            <div class="sec-title">导出默认值</div>
+            <div class="sec-sub">决定编辑器里「导出」的初始格式</div>
+            <div class="divider"></div>
+            <div class="chips"><div class="chip on">JPEG</div><div class="chip">PNG</div></div>
+            <div class="cap" style="margin-top:var(--s2)">JPEG 体积小，适合直接发出去。</div>
+          </div>
+
+          <div class="card">
+            <div class="sec-title">AI 与性能</div>
+            <div class="sec-sub">端侧推理，照片不出本机</div>
+            <div class="divider"></div>
+            <div class="row-between">
+              <div><div class="body">默认开启自动蒙版</div><div class="cap">磨皮与液化只作用于 AI 识别出的皮肤区</div></div>
+              <div style="width:40px;height:22px;border-radius:999px;background:var(--seed);position:relative;flex-shrink:0"><b style="position:absolute;right:2px;top:2px;width:18px;height:18px;border-radius:50%;background:#fff"></b></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="sec-title">外观</div>
+            <div class="sec-sub">编辑页始终使用深色工作台</div>
+            <div class="divider"></div>
+            <div class="row-between">
+              <div><div class="body">降低透明度</div><div class="cap">毛玻璃换成实心底，提升文字可读性</div></div>
+              <div style="width:40px;height:22px;border-radius:999px;background:rgba(255,255,255,.16);position:relative;flex-shrink:0"><b style="position:absolute;left:2px;top:2px;width:18px;height:18px;border-radius:50%;background:#fff"></b></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="dim"></div>
+        <div class="sheet" style="padding-bottom:var(--s5)">
+          <div class="grab"></div>
+          <div>
+            <div style="font-size:24px;font-weight:500">像素蛋糕 PixelCake</div>
+            <div class="cap">v0.1.0 (1)</div>
+            <div class="mut" style="margin-top:var(--s1)">本地 RAW 调色 · 人像精修</div>
+          </div>
+          <div class="card">
+            <div class="sec-title">开源组件</div>
+            <div class="sec-sub">随包分发的第三方代码与模型</div>
+            <div class="divider"></div>
+            <div class="row-between" style="padding:3px 0"><div><div class="body">LibRaw</div><div class="cap">native 全量 RAW 解码</div></div><span class="cap" style="color:var(--seed)">LGPL-2.1 OR CDDL-1.0</span></div>
+            <div class="row-between" style="padding:3px 0"><div><div class="body">LiteRT</div><div class="cap">端侧模型运行时</div></div><span class="cap" style="color:var(--seed)">Apache-2.0</span></div>
+            <div class="row-between" style="padding:3px 0"><div><div class="body">MediaPipe ×2</div><div class="cap">皮肤分割 / 人脸检测</div></div><span class="cap" style="color:var(--seed)">Apache-2.0</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ══════════ Token 表 ══════════ -->
+  <div class="grid">
+    <div class="tbl">
+      <h3>间距 Spacing</h3>
+      <div class="hint">只允许 7 个值 · 语义名优先</div>
+      <table>
+        <tr><td class="k">xs</td><td class="v">4 dp</td></tr>
+        <tr><td class="k">s</td><td class="v">8 dp</td></tr>
+        <tr><td class="k">m · cardGap</td><td class="v">12 dp</td></tr>
+        <tr><td class="k">l · cardInner</td><td class="v">16 dp</td></tr>
+        <tr><td class="k">xl · page · sectionGap</td><td class="v">24 dp</td></tr>
+        <tr><td class="k">xxl</td><td class="v">32 dp</td></tr>
+        <tr><td class="k">xxxl</td><td class="v">48 dp</td></tr>
+        <tr><td class="k">controlHeight</td><td class="v">44 dp</td></tr>
+      </table>
+    </div>
+
+    <div class="tbl">
+      <h3>圆角 Radius</h3>
+      <div class="hint">四档阶梯 + 胶囊 · 不混用</div>
+      <table>
+        <tr><td class="k">chip</td><td class="v">12 dp</td></tr>
+        <tr><td class="k">card</td><td class="v">20 dp</td></tr>
+        <tr><td class="k">sheet</td><td class="v">28 dp</td></tr>
+        <tr><td class="k">shell</td><td class="v">36 dp</td></tr>
+        <tr><td class="k">pill</td><td class="v">50 %</td></tr>
+      </table>
+    </div>
+
+    <div class="tbl">
+      <h3>字号 Type</h3>
+      <div class="hint">封顶 5 级 · 层次靠字重与色深</div>
+      <table>
+        <tr><td class="k">displaySmall</td><td class="v">24 sp</td></tr>
+        <tr><td class="k">titleMedium</td><td class="v">16 sp</td></tr>
+        <tr><td class="k">bodyMedium</td><td class="v">14 sp</td></tr>
+        <tr><td class="k">labelMedium</td><td class="v">12 sp</td></tr>
+        <tr><td class="k">labelSmall / bodySmall</td><td class="v">11 sp</td></tr>
+      </table>
+    </div>
+
+    <div class="tbl">
+      <h3>颜色 Color</h3>
+      <div class="hint">1 主色 + 6 灰阶 + 3 语义色</div>
+      <table>
+        <tr><td class="k"><span class="swatch" style="background:#7C5CFF"></span>Seed 主色</td><td class="v">#7C5CFF</td></tr>
+        <tr><td class="k"><span class="swatch" style="background:#0E0E10"></span>WorkspaceBg</td><td class="v">#0E0E10</td></tr>
+        <tr><td class="k"><span class="swatch" style="background:#16161A"></span>WorkspaceSurface</td><td class="v">#16161A</td></tr>
+        <tr><td class="k"><span class="swatch" style="background:#1F1F25"></span>SurfaceHigh</td><td class="v">#1F1F25</td></tr>
+        <tr><td class="k"><span class="swatch" style="background:#E6E1E5"></span>OnDarkSurface</td><td class="v">#E6E1E5</td></tr>
+        <tr><td class="k">玻璃底 / 描边（暗）</td><td class="v">α .72 / .14</td></tr>
+      </table>
+    </div>
+
+    <div class="tbl">
+      <h3>动效 Motion</h3>
+      <div class="hint">统一缓动 + 统一时长档</div>
+      <table>
+        <tr><td class="k">fast</td><td class="v">150 ms</td></tr>
+        <tr><td class="k">base</td><td class="v">240 ms</td></tr>
+        <tr><td class="k">slow</td><td class="v">320 ms</td></tr>
+        <tr><td class="k">easingOut</td><td class="v">.16,1,.3,1</td></tr>
+        <tr><td class="k">springSoft / Snappy</td><td class="v">damp .8 / .9</td></tr>
+        <tr><td class="k">pressedScale</td><td class="v">0.97</td></tr>
+      </table>
+    </div>
+
+    <div class="tbl">
+      <h3>导航 Navigation</h3>
+      <div class="hint">8 个界面 · 只有 3 条路由</div>
+      <table>
+        <tr><td class="k">Tab 1</td><td class="v">调色台（空态即导入）</td></tr>
+        <tr><td class="k">Tab 2</td><td class="v">设置</td></tr>
+        <tr><td class="k">全屏（不套外壳）</td><td class="v">编辑器</td></tr>
+        <tr><td class="k">Sheet</td><td class="v">导出 · 关于</td></tr>
+        <tr><td class="k">卡片</td><td class="v">相机直连</td></tr>
+        <tr><td class="k">面板内</td><td class="v">曲线 · LUT</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <!-- ══════════ 验收清单 ══════════ -->
+  <div class="checks">
+    <h2>§2.4 可量化验收清单 · 逐条自查</h2>
+    <div class="hint">这一项是本次改版的核心：把「好看」拆成能打钩的条目，避免靠感觉评审</div>
+    <ul>
+      <li><span class="ok">✔</span><span>间距只用 4/8/12/16/24/32/48<em> · Spacing.kt 强制</em></span></li>
+      <li><span class="ok">✔</span><span>字号 ≤ 5 级（24/16/14/12/11）<em> · bodySmall 别名到 11sp</em></span></li>
+      <li><span class="ok">✔</span><span>字重 ≤ 3 档（Normal / Medium / —）</span></li>
+      <li><span class="ok">✔</span><span>1 主色 + 6 灰阶 + 3 语义色</span></li>
+      <li><span class="ok">✔</span><span>圆角只用 4 档 + 胶囊<em> · chip 强制 Radius.chip</em></span></li>
+      <li><span class="ok">✔</span><span>卡片无边框无投影，层次靠底差 + 1px 高光</span></li>
+      <li><span class="ok">✔</span><span>拖动参数时隐藏非参数 UI<em> · 顶栏收起，工具条只淡出</em></span></li>
+      <li><span class="ok">✔</span><span>转场 150–320 ms，统一缓动<em> · Motion.kt</em></span></li>
+      <li><span class="ok">✔</span><span><strong>不做实时 backdrop 模糊</strong><em> · 静态模糊底图一次生成</em></span></li>
+      <li><span class="ok">✔</span><span>无障碍：系统关动画时位移/缩放坍缩为 0<em> · reduceMotion()</em></span></li>
+      <li><span class="todo">◐</span><span>点击次数 ≤ Snapseed<em> · 待真机比对（编辑入口已减 1 跳）</em></span></li>
+      <li><span class="todo">◐</span><span>一加15 帧率实测<em> · UI-5 剩余项，掉帧则面板降级实心</em></span></li>
+      <li><span class="todo">◐</span><span>CameraPanel 尚未迁移到新 token<em> · 旧圆角/旧间距残留，排在后续</em></span></li>
+      <li><span class="todo">◐</span><span>EditorUiState 状态收敛<em> · 属「能力」不属 UI，单独立阶段</em></span></li>
+    </ul>
+  </div>
+
+  <div class="foot">
+    <p>对应代码：<code>ui/theme/*</code>（token 与玻璃）、<code>ui/components/*</code>（GlassCard / GlassSegmentedBar / GlassChipRow / ParamSlider / ActionTile）、<code>ui/shell/AppShell.kt</code>、<code>ui/home/HomeScreen.kt</code>、<code>ui/settings/*</code>、<code>ui/editor/*</code>（EditorScreen / EditorToolbar / ParamPanel / ExportSheet）、<code>MainActivity.kt</code>。</p>
+    <p style="margin-top:var(--s2)">本页为静态预览，用于版式与密度评审；真实动效与手势需在真机上核对。<code>core/edit/**</code>、<code>core/camera/**</code>、<code>ml/**</code> 全程未改动。</p>
+  </div>
+
+</div>
+</body>
+</html>

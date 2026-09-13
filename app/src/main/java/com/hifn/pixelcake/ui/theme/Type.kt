@@ -41,5 +41,15 @@ val Typography = Typography(
         fontSize = 11.sp,
         lineHeight = 14.sp,
         letterSpacing = 0.4.sp
+    ),
+    // `bodySmall` 是 Material 默认的 12sp —— 与我们的 labelMedium 撞号，会让「字号数」变成 6 级。
+    // 这里把它**别名到 caption**，而不是去改所有历史调用点（`CameraPanel` 等尚未迁移的文件）：
+    // 一处收敛，全局立刻合规，且不改动任何既 layout 的语义。
+    bodySmall = TextStyle(
+        fontFamily = FontFamily.Default,
+        fontWeight = FontWeight.Normal,
+        fontSize = 11.sp,
+        lineHeight = 14.sp,
+        letterSpacing = 0.4.sp
     )
 )

@@ -5,9 +5,15 @@ import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.Easing
 import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.foundation.interaction.InteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 
 /**
  * 动效 token（`docs/UI_DESIGN.md` §5）。
@@ -64,4 +70,27 @@ object Motion {
      */
     @Composable
     fun durationFor(ms: Int): Int = if (reduceMotion()) 0 else ms
+}
+
+/**
+ * 按下时轻微缩到 [Motion.pressedScale]（0.97）。
+ *
+ * 为什么不用 `Modifier.clickable` 的默认涟漪：涟漪是「覆盖在内容上的一层颜色」，
+ * 而缩放在视觉上是「这个东西被按了进去」—— 后者更接近实体按键的心理模型，
+ * 也是 iOS 味的关键一笔。两者叠加会显得脏，所以调用点请传 `indication = null`。
+ *
+ * 只作用于**大块可点区域**（列表项、动作卡）。给 chip / 图标按钮加缩放会显得抖。
+ */
+@Composable
+fun Modifier.pressScale(interactionSource: InteractionSource): Modifier {
+    val pressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) Motion.pressedScale else 1f,
+        animationSpec = Motion.springSnappy(),
+        label = "pressScale"
+    )
+    return this.graphicsLayer {
+        scaleX = scale
+        scaleY = scale
+    }
 }

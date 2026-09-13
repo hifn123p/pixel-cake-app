@@ -2,6 +2,7 @@ package com.hifn.pixelcake.ui.home
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -10,15 +11,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedCard
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -28,25 +23,32 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.hifn.pixelcake.diag.DebugLog
+import com.hifn.pixelcake.ui.components.ActionTile
+import com.hifn.pixelcake.ui.components.ActionTileDivider
+import com.hifn.pixelcake.ui.components.GlassCard
+import com.hifn.pixelcake.ui.components.SectionHeader
 import com.hifn.pixelcake.ui.theme.Bad
 import com.hifn.pixelcake.ui.theme.Ok
+import com.hifn.pixelcake.ui.theme.Spacing
 import com.hifn.pixelcake.ui.theme.Warn
 import java.io.File
 
 /**
- * 首页：设备能力实测面板 + 编辑链路入口。
+ * 调色台（原「首页」，`docs/UI_DESIGN.md` §3.2）。
  *
- * ARW 走「打开 ARW 文件」入口：内嵌 JPEG 只作秒开占位，
- * 真正的修图源是 LibRaw 解出的 16-bit 线性母版（P1b 已启用，不再是"仅预览"）。
+ * **空态即导入页** —— 这里刻意**不单独做一个导入页面**：导入没有任何需要独占屏幕的内容，
+ * 独立成页只会把「首页 → 导入 → 编辑器」变成三跳。所以导入入口就直接长在调色台的顶部。
  *
- * @param loading 正在解码（33MP ARW 的代理线性解码耗时可见，给出进度反馈，避免"点了没反应"）。
- * @param message 状态消息（解码失败提示 / 载入结果），为空则不显示。
- * @param onOpenLocalFile 相机直连拉取的本地缓存文件 → 打开编辑器（P2）。
+ * 布局约定（整个 UI 改版都遵守）：
+ * - 页面左右边距走 `Spacing.page`，卡片之间走 `Spacing.cardGap`；
+ * - 卡片一律 [GlassCard]：**不画边框、不投阴影**，层次靠「半透明底 + 1px 高光描边 + 留白」；
+ * - 调试日志入口已移到设置页（它不属于日常调色流程）。
+ *
+ * @param loading 正在解码（33MP ARW 的代理线性解码耗时可见，必须给反馈，避免"点了没反应"）
+ * @param message 状态消息（解码失败提示 / 载入结果），为空则不显示
+ * @param onOpenLocalFile 相机直连拉取的本地缓存文件 → 打开编辑器（P2）
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     onImportPhoto: () -> Unit,
@@ -59,169 +61,135 @@ fun HomeScreen(
     val caps = remember { context.probeCapabilities() }
     val profile = remember(caps) { caps.resolutionProfile() }
 
-    var logExported by remember { mutableStateOf(false) }
-
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("PixelCake") },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    titleContentColor = MaterialTheme.colorScheme.onSurface
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(
+            start = Spacing.page,
+            end = Spacing.page,
+            top = Spacing.xxl,
+            bottom = Spacing.xxxl
+        ),
+        verticalArrangement = Arrangement.spacedBy(Spacing.cardGap)
+    ) {
+        item {
+            Column(modifier = Modifier.padding(bottom = Spacing.m)) {
+                Text("调色台", style = MaterialTheme.typography.displaySmall)
+                Text(
+                    "本地 RAW 调色 · 人像精修。全程端侧处理，照片不出本机。",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = Spacing.xs)
                 )
-            )
+            }
         }
-    ) { padding ->
-        LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(padding),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            item {
-                Column(modifier = Modifier.padding(vertical = 8.dp)) {
-                    Text(
-                        "本地 RAW 调色 · 人像精修",
-                        style = MaterialTheme.typography.displaySmall
-                    )
-                    Text(
-                        "P1 已完成：ARW 全量修图 · 磨皮/液化/祛瑕/追色 · 预设 · 画笔蒙版。" +
-                            "P2 已完成：A7C2 USB 直连拉图（单张进编辑器 / 批量套预设导出）。下一步：AI 接入（P3）。",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 4.dp)
-                    )
-                }
-            }
 
-            item {
-                SectionCard("设备") {
-                    InfoRow("厂商 / 型号", "${caps.manufacturer} ${caps.model}")
-                    InfoRow("芯片平台", caps.soc)
-                    InfoRow("系统版本", "Android ${caps.androidVersion} (API ${caps.sdkInt})")
-                    InfoRow("主 ABI", caps.abi)
-                }
-            }
-
-            item {
-                SectionCard("显示与色彩") {
-                    InfoRow(
-                        "广色域 (P3)",
-                        if (caps.wideColorGamut) "支持" else "不支持",
-                        if (caps.wideColorGamut) Ok else Bad
-                    )
-                    InfoRow("HDR", caps.hdrTypes.joinToString(" / ").ifEmpty { "不支持" })
-                    InfoRow("刷新率", "${caps.refreshRateHz.toInt()} Hz")
-                }
-            }
-
-            item {
-                SectionCard("内存预算（A7C2 33MP · RGBA16F）") {
-                    InfoRow("单缓冲", "${caps.fp16SingleMiB} MiB")
-                    InfoRow("三缓冲", "${caps.fp16TripleMiB} MiB")
-                    InfoRow("当前可用", "${caps.availMemMiB} / ${caps.totalMemMiB} MiB")
-                    InfoRow(
-                        "全分辨率处理",
-                        if (caps.fullResFeasible) "可行" else "内存不足，需降采样",
-                        if (caps.fullResFeasible) Ok else Warn
-                    )
-                }
-            }
-
-            item {
-                SectionCard("导入（编辑链路）") {
-                    Button(
-                        onClick = onImportPhoto,
-                        enabled = !loading,
-                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
+        // ---- 空态：导入入口（整块可点的动作卡，拇指友好）----
+        item {
+            GlassCard {
+                SectionHeader(
+                    title = "开始",
+                    subtitle = "选一张照片，或直接连相机拉图"
+                )
+                Spacer(Modifier.height(Spacing.s))
+                ActionTile(
+                    title = "从相册选择",
+                    subtitle = "JPEG / HEIF，走 8-bit sRGB 管线",
+                    onClick = onImportPhoto,
+                    enabled = !loading,
+                    trailing = "选择"
+                )
+                ActionTileDivider()
+                ActionTile(
+                    title = "打开 ARW 文件",
+                    subtitle = "16-bit 线性 RAW，预览与导出一致",
+                    onClick = onImportArw,
+                    enabled = !loading,
+                    accent = true,
+                    trailing = "打开"
+                )
+                if (loading) {
+                    Spacer(Modifier.height(Spacing.m))
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.s),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("导入照片（JPEG / HEIF）")
-                    }
-                    Spacer(Modifier.height(8.dp))
-                    Button(
-                        onClick = onImportArw,
-                        enabled = !loading,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("打开 ARW 文件（16-bit 线性 RAW 修图）")
-                    }
-                    if (loading) {
-                        Spacer(Modifier.height(12.dp))
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                strokeWidth = 2.dp
-                            )
-                            Text(
-                                message.ifEmpty { "正在解码…" },
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    } else if (message.isNotEmpty()) {
-                        Spacer(Modifier.height(12.dp))
+                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
                         Text(
-                            message,
+                            message.ifEmpty { "正在解码…" },
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-                }
-            }
-
-            item {
-                // P2：相机 USB 直连（检测 → 授权 → PTP 会话 → 列图 → 单张/批量拉图套预设）
-                CameraPanel(
-                    longEdge = profile.fullResLongEdge,
-                    onOpenLocalFile = onOpenLocalFile
-                )
-            }
-
-            item {
-                SectionCard("调试日志") {
-                    InfoRow(
-                        "当前状态",
-                        if (logExported) "已触发系统分享" else "就绪",
-                        if (logExported) Ok else MaterialTheme.colorScheme.onSurfaceVariant
+                } else if (message.isNotEmpty()) {
+                    Spacer(Modifier.height(Spacing.m))
+                    Text(
+                        message,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Button(
-                        onClick = { logExported = DebugLog.export(context) },
-                        modifier = Modifier.padding(top = 12.dp)
-                    ) {
-                        Text("导出调试日志")
-                    }
-                }
-            }
-
-            item {
-                SectionCard("路线图") {
-                    // 与 DEV_PLAN 对齐：P1（含 P1b 人像精修）与 P2（A7C2 直连拉图）已完成；下一步 P1+ / P3
-                    RoadmapStep(1, "工程骨架 + CI", done = true)
-                    RoadmapStep(2, "NDK + LibRaw（A7C2 ARW 解码）", done = true)
-                    RoadmapStep(3, "16-bit 线性渲染管线（预览/导出同源）", done = true)
-                    RoadmapStep(4, "人像算子（磨皮 / 液化 / 祛瑕 / 追色）", done = true)
-                    RoadmapStep(5, "内置人像预设 10 套", done = true)
-                    RoadmapStep(6, "局部调整与画笔蒙版", done = true)
-                    RoadmapStep(7, "A7C2 直连（USB PTP 拉图 + 批量套预设）", done = true)
-                    RoadmapStep(8, "AI 接入（TFLite + NNAPI）", done = false)
                 }
             }
         }
-    }
-}
 
-@Composable
-private fun SectionCard(title: String, content: @Composable () -> Unit) {
-    OutlinedCard(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold
+        // ---- P2：相机 USB 直连（检测 → 授权 → PTP 会话 → 列图 → 单张 / 批量套预设）----
+        item {
+            CameraPanel(
+                longEdge = profile.fullResLongEdge,
+                onOpenLocalFile = onOpenLocalFile
             )
-            content()
+        }
+
+        item {
+            GlassCard {
+                SectionHeader(title = "设备与显示", subtitle = "能力实测，用于判断管线档位")
+                Spacer(Modifier.height(Spacing.m))
+                InfoRow("厂商 / 型号", "${caps.manufacturer} ${caps.model}")
+                InfoRow("芯片平台", caps.soc)
+                InfoRow("系统版本", "Android ${caps.androidVersion} (API ${caps.sdkInt})")
+                InfoRow("主 ABI", caps.abi)
+                InfoRow(
+                    "广色域 (P3)",
+                    if (caps.wideColorGamut) "支持" else "不支持",
+                    if (caps.wideColorGamut) Ok else Bad
+                )
+                InfoRow("HDR", caps.hdrTypes.joinToString(" / ").ifEmpty { "不支持" })
+                InfoRow("刷新率", "${caps.refreshRateHz.toInt()} Hz")
+            }
+        }
+
+        item {
+            GlassCard {
+                SectionHeader(
+                    title = "内存预算",
+                    subtitle = "A7C2 33MP · RGBA16F 单张全幅占用"
+                )
+                Spacer(Modifier.height(Spacing.m))
+                InfoRow("单缓冲", "${caps.fp16SingleMiB} MiB")
+                InfoRow("三缓冲", "${caps.fp16TripleMiB} MiB")
+                InfoRow("当前可用", "${caps.availMemMiB} / ${caps.totalMemMiB} MiB")
+                InfoRow(
+                    "全分辨率处理",
+                    if (caps.fullResFeasible) "可行" else "内存不足，需降采样",
+                    if (caps.fullResFeasible) Ok else Warn
+                )
+            }
+        }
+
+        item {
+            GlassCard {
+                SectionHeader(title = "路线图", subtitle = "已完成与下一步")
+                Spacer(Modifier.height(Spacing.m))
+                RoadmapStep(1, "工程骨架 + CI", done = true)
+                RoadmapStep(2, "NDK + LibRaw（A7C2 ARW 解码）", done = true)
+                RoadmapStep(3, "16-bit 线性渲染管线（预览 / 导出同源）", done = true)
+                RoadmapStep(4, "人像算子（磨皮 / 液化 / 祛瑕 / 追色）", done = true)
+                RoadmapStep(5, "内置人像预设 10 套", done = true)
+                RoadmapStep(6, "局部调整与画笔蒙版", done = true)
+                RoadmapStep(7, "端侧 AI（皮肤分割自动蒙版 + 人脸检测液化锚点）", done = true)
+                RoadmapStep(8, "A7C2 直连（USB PTP 拉图 + 批量套预设）", done = true)
+                RoadmapStep(9, "UI 改版（本阶段）", done = false)
+                RoadmapStep(10, "NAS 联动（P3）", done = false)
+            }
         }
     }
 }
@@ -233,7 +201,7 @@ private fun InfoRow(
     valueColor: Color = Color.Unspecified
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = Spacing.xs),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Text(
@@ -251,9 +219,12 @@ private fun InfoRow(
 
 @Composable
 private fun RoadmapStep(index: Int, title: String, done: Boolean) {
-    Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = Spacing.xs),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
         Text(
-            if (done) "[x]" else "[ ]",
+            if (done) "✓" else "·",
             style = MaterialTheme.typography.bodyMedium,
             color = if (done) Ok else MaterialTheme.colorScheme.onSurfaceVariant
         )

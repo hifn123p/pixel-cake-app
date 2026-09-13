@@ -11,8 +11,9 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -46,7 +47,12 @@ import com.hifn.pixelcake.ui.editor.EditorScreen
 import com.hifn.pixelcake.ui.home.HomeScreen
 import com.hifn.pixelcake.ui.home.probeCapabilities
 import com.hifn.pixelcake.ui.home.resolutionProfile
+import com.hifn.pixelcake.ui.settings.SettingsScreen
+import com.hifn.pixelcake.ui.shell.AppShell
+import com.hifn.pixelcake.ui.shell.PixelCakeTab
+import com.hifn.pixelcake.ui.theme.LocalLowTransparency
 import com.hifn.pixelcake.ui.theme.PixelCakeTheme
+import com.hifn.pixelcake.ui.theme.PixelCakeWorkspaceTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
@@ -91,7 +97,12 @@ private fun AppRoot() {
     val scope = rememberCoroutineScope()
     val profile = remember { context.probeCapabilities().resolutionProfile() }
 
-    var screen by remember { mutableStateOf("home") }
+    var tab by remember { mutableStateOf(PixelCakeTab.Darkroom) }
+    // 编辑器是否打开。**刻意不用第三个 Tab**：编辑是全屏工作台，进入后 TabBar 直接消失，
+    // 把画面整块交给预览区（`docs/UI_DESIGN.md` §3.3）。
+    var editorOpen by remember { mutableStateOf(false) }
+    // 「降低透明度」：影响全 App 玻璃材质，因此由这里持有并经 CompositionLocal 下发。
+    var lowTransparency by remember { mutableStateOf(false) }
     var imported by remember { mutableStateOf<DecodedImage?>(null) }
     var srcUri by remember { mutableStateOf<Uri?>(null) }
     val history = remember { EditHistory() }
@@ -232,7 +243,7 @@ private fun AppRoot() {
                 autoMaskNote = ""
                 liquifyNote = ""
                 status = if (dec.linear != null) "RAW 已按 16-bit 线性管线载入" else ""
-                screen = "editor"
+                editorOpen = true
                 DebugLog.i(
                     DebugLog.TAG_DECODE,
                     "decoded",
@@ -252,10 +263,13 @@ private fun AppRoot() {
         uri?.let(openInEditor)
     }
 
-    when (screen) {
-        "editor" -> {
-            val src = imported
-            if (src != null) {
+    if (editorOpen) {
+        val src = imported
+        // `val src = imported` 后必须再判一次 null：`imported` 是被多个 lambda 捕获并修改的
+        // 局部 `var`，Kotlin 不允许对它做智能转换，只有拷进局部 val 才能安全解包。
+        if (src != null) {
+            // 编辑页**强制深色**：照片必须是页面上唯一的彩色主体（`docs/UI_DESIGN.md` §8 决策点 1）。
+            PixelCakeWorkspaceTheme {
                 EditorScreen(
                     original = src.bitmap,
                     rendered = rendered,
@@ -471,21 +485,36 @@ private fun AppRoot() {
                         autoMaskNote = ""
                         liquifyNote = ""
                         renderStamp = 0
-                        screen = "home"
+                        editorOpen = false
                     }
                 )
-            } else {
-                screen = "home"
             }
         }
-        else -> HomeScreen(
-            onImportPhoto = { photoLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
-            onImportArw = { arwLauncher.launch(arrayOf("*/*")) },
-            loading = loading,
-            message = status,
-            // P2：相机直连拉取的缓存文件（file:// 于本进程内可读，ARW 由后缀路由到线性管线）
-            onOpenLocalFile = { file -> openInEditor(Uri.fromFile(file)) }
-        )
+    } else {
+        // 外壳：底部 2-Tab + 页面转场。编辑器**不套在这一层**（全屏工作台）。
+        CompositionLocalProvider(LocalLowTransparency provides lowTransparency) {
+            AppShell(current = tab, onSelect = { tab = it }) { currentTab ->
+                when (currentTab) {
+                    PixelCakeTab.Darkroom -> HomeScreen(
+                        onImportPhoto = { photoLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+                        onImportArw = { arwLauncher.launch(arrayOf("*/*")) },
+                        loading = loading,
+                        message = status,
+                        // P2：相机直连拉取的缓存文件（file:// 于本进程内可读，ARW 由后缀路由到线性管线）
+                        onOpenLocalFile = { file -> openInEditor(Uri.fromFile(file)) }
+                    )
+
+                    PixelCakeTab.Settings -> SettingsScreen(
+                        exportFormat = exportFormat,
+                        onExportFormatChange = { exportFormat = it },
+                        autoMaskEnabled = autoMaskEnabled,
+                        onAutoMaskChange = { autoMaskEnabled = it },
+                        lowTransparency = lowTransparency,
+                        onLowTransparencyChange = { lowTransparency = it }
+                    )
+                }
+            }
+        }
     }
 }
 
