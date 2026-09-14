@@ -100,6 +100,12 @@ private const val BACKDROP_ALPHA = 0.26f
  * - 工具条在参数面板**上方** → 只能做**透明度**淡出。若把高度收掉，面板会整体下移 44dp，
  *   用户手指按着的滑块会在拖动中突然跑掉 —— 这类「动一下就跳」是触屏调参最忌的体验。
  *
+ * ## 动效一律「按属性分派」（`Motion` 类文档）
+ *
+ * 本页所有淡入淡出都是**透明度**，所以走 `tween` + [Motion.durationFor]
+ * （时长确定、且能被系统「移除动画」坍缩）。这一页曾经 5 处漏写 `durationFor`，
+ * 系统关了动画 App 还在动 —— 已随本次改造修掉。
+ *
  * ## 预览区手势（由 [retouchTool] 决定，语义与旧版完全一致）
  * - `"none"`   ：按住看原图（前后对比）；
  * - `"skin"`   ：拖动涂抹皮肤作用区，坐标归一化到 [0..1] 后经 [onBrushStroke] 上报；
@@ -128,6 +134,8 @@ fun EditorScreen(
     liquifyNote: String,
     presets: List<Preset>,
     activePresetId: String,
+    // 预设 id → 缩略图（按**原图**渲染，见 `MainActivity.buildPresetThumbs`）。缺省即无缩略图。
+    presetThumbs: Map<String, Bitmap> = emptyMap(),
     canUndo: Boolean,
     canRedo: Boolean,
     status: String,
@@ -172,7 +180,7 @@ fun EditorScreen(
     // 顶栏收起 / 工具条淡出（两者做法不同，原因见类文档）
     val chromeAlpha by animateFloatAsState(
         targetValue = if (dragging) 0f else 1f,
-        animationSpec = tween(Motion.fast, easing = Motion.easingOut),
+        animationSpec = tween(Motion.durationFor(Motion.fast), easing = Motion.easingOut),
         label = "chromeAlpha"
     )
 
@@ -203,8 +211,8 @@ fun EditorScreen(
         // ———— 1. 顶栏 ————
         AnimatedVisibility(
             visible = !dragging,
-            enter = fadeIn(tween(Motion.fast, easing = Motion.easingOut)),
-            exit = fadeOut(tween(Motion.fast, easing = Motion.easingIn))
+            enter = fadeIn(tween(Motion.durationFor(Motion.fast), easing = Motion.easingOut)),
+            exit = fadeOut(tween(Motion.durationFor(Motion.fast), easing = Motion.easingIn))
         ) {
             EditorTopBar(
                 canUndo = canUndo,
@@ -273,7 +281,7 @@ fun EditorScreen(
         ) {
             Crossfade(
                 targetState = category,
-                animationSpec = tween(Motion.base, easing = Motion.easingOut),
+                animationSpec = tween(Motion.durationFor(Motion.base), easing = Motion.easingOut),
                 label = "paramCategory"
             ) { cat ->
                 ParamPanel(
@@ -287,6 +295,7 @@ fun EditorScreen(
                     autoMaskEnabled = autoMaskEnabled,
                     presets = presets,
                     activePresetId = activePresetId,
+                    presetThumbs = presetThumbs,
                     onParamChange = onParamChange,
                     onParamCommit = onParamCommit,
                     onRetouchChange = onRetouchChange,
@@ -439,8 +448,8 @@ private fun BoxScope.PreviewNotes(autoMaskNote: String, liquifyNote: String) {
 
     AnimatedVisibility(
         visible = visible,
-        enter = fadeIn(tween(Motion.base, easing = Motion.easingOut)),
-        exit = fadeOut(tween(Motion.slow, easing = Motion.easingIn)),
+        enter = fadeIn(tween(Motion.durationFor(Motion.base), easing = Motion.easingOut)),
+        exit = fadeOut(tween(Motion.durationFor(Motion.slow), easing = Motion.easingIn)),
         modifier = Modifier.align(Alignment.BottomCenter).padding(Spacing.m)
     ) {
         Column(

@@ -2,7 +2,6 @@ package com.hifn.pixelcake.ui.components
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -24,7 +23,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import com.hifn.pixelcake.ui.theme.Motion
 import com.hifn.pixelcake.ui.theme.Radius
-import com.hifn.pixelcake.ui.theme.Seed
 import com.hifn.pixelcake.ui.theme.Spacing
 import kotlin.math.round
 
@@ -37,6 +35,13 @@ import kotlin.math.round
  * 的轨道内边距不是公开 API —— 一旦它改版，气泡就会明显偏位。与其做一个随时会错位的动效，
  * 不如把数值放在**标签行右侧**并用强调色 + 轻微放大来提示「这个值正在被你改动」：
  * 读数永远对齐、永远不遮挡画面，且拖动时眼睛不需要在两个位置之间来回跳。
+ *
+ * ## 拖动时的两段动画按属性分派（`Motion` 类文档）
+ *
+ * - **颜色** → [Motion.springEffects]（临界阻尼；回弹弹簧用在颜色上会越过目标色再弹回，发脏）；
+ * - **缩放** → [Motion.springSpatialFast]（空间属性，跟手）。
+ *
+ * 这两行正好是「按属性分族」的最小示例：同一个「正在拖动」的布尔量，驱动两个不同族的动画。
  *
  * ## 拖动状态上报（[onDraggingChange]）
  *
@@ -60,15 +65,16 @@ fun ParamSlider(
     onDraggingChange: (Boolean) -> Unit = {}
 ) {
     var dragging by remember { mutableStateOf(false) }
+    val accent = MaterialTheme.colorScheme.primary
 
     val valueColor by animateColorAsState(
-        targetValue = if (dragging) Seed else MaterialTheme.colorScheme.onSurfaceVariant,
-        animationSpec = tween(Motion.fast),
+        targetValue = if (dragging) accent else MaterialTheme.colorScheme.onSurfaceVariant,
+        animationSpec = Motion.springEffects(),
         label = "paramValueColor"
     )
     val valueScale by animateFloatAsState(
         targetValue = if (dragging) 1.12f else 1f,
-        animationSpec = Motion.springSnappy(),
+        animationSpec = Motion.springSpatialFast(),
         label = "paramValueScale"
     )
 
@@ -87,7 +93,7 @@ fun ParamSlider(
                 modifier = Modifier
                     .scale(valueScale)
                     .background(
-                        if (dragging) Seed.copy(alpha = 0.12f) else Color.Transparent,
+                        if (dragging) accent.copy(alpha = 0.12f) else Color.Transparent,
                         Radius.pill
                     )
                     .padding(horizontal = Spacing.s, vertical = Spacing.xs)

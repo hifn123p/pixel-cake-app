@@ -30,7 +30,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.hifn.pixelcake.ui.theme.Motion
 import com.hifn.pixelcake.ui.theme.Radius
-import com.hifn.pixelcake.ui.theme.Seed
 import com.hifn.pixelcake.ui.theme.Spacing
 import com.hifn.pixelcake.ui.theme.glassSurface
 import com.hifn.pixelcake.ui.theme.rememberGlassTint
@@ -56,6 +55,10 @@ private object Shell {
  * 编辑器**不套在这一层里** —— 它是全屏工作台，进入后 TabBar 直接消失（把画面全交给预览区）。
  * 所以调用方应按「编辑器 / 其余」两分支渲染，而不是在 [AppShell] 内部判断。
  *
+ * 转场按属性拆开：**缩放走空间弹簧、淡入淡出走 `tween` + `durationFor`**
+ * （原因见 `Motion` 的类文档 —— 回弹弹簧绝不能碰 alpha）。TabBar 是 iOS 观感的关键一笔，
+ * 所以缩放用空间族而不是淡入替代。
+ *
  * @param content 当前 Tab 的页面内容
  */
 @Composable
@@ -76,12 +79,12 @@ fun AppShell(
                 transitionSpec = {
                     // Tab 是**平级**的：淡入淡出 + 轻微放大，不做左右推
                     // （左右推是层级导航的语义，用在 Tab 上会让人觉得「迷路了」）
-                    (fadeIn(tween(Motion.base, easing = Motion.easingOut)) +
+                    (fadeIn(tween(Motion.durationFor(Motion.base), easing = Motion.easingOut)) +
                         scaleIn(
                             initialScale = 0.98f,
-                            animationSpec = Motion.springSoft()
+                            animationSpec = Motion.springSpatial()
                         )) togetherWith
-                        fadeOut(tween(Motion.fast, easing = Motion.easingIn))
+                        fadeOut(tween(Motion.durationFor(Motion.fast), easing = Motion.easingIn))
                 },
                 label = "tab"
             ) { tab ->
@@ -102,6 +105,10 @@ fun AppShell(
  *
  * 选中指示块用 [animateDpAsState] 在两个等宽格位之间滑动（iOS 观感）；
  * 两个 Tab 等宽，所以不需要测量每个 item 的实际宽度，直接用 `maxWidth / count` 即可。
+ *
+ * 指示块位移是**空间属性** → 走 [Motion.springSpatial]（阻尼 0.6，滑动到位时轻微回弹）。
+ * 强调色一律取 `colorScheme.primary`，不直接写 `Seed` —— 深色主题下 primary 是
+ * 降饱和版本，直接写 `Seed` 会既刺眼又对比度不足。
  */
 @Composable
 private fun GlassTabBar(
@@ -127,9 +134,10 @@ private fun GlassTabBar(
             val index = tabs.indexOf(current).coerceAtLeast(0)
             val indicatorX by animateDpAsState(
                 targetValue = itemWidth * index,
-                animationSpec = Motion.springSnappy(),
+                animationSpec = Motion.springSpatial(),
                 label = "tabIndicator"
             )
+            val accent = MaterialTheme.colorScheme.primary
 
             // 选中指示块（先画，位于文字之下）
             Box(
@@ -138,7 +146,7 @@ private fun GlassTabBar(
                     .width(itemWidth)
                     .fillMaxHeight()
                     .padding(Spacing.xs)
-                    .background(Seed.copy(alpha = 0.14f), Radius.pill)
+                    .background(accent.copy(alpha = 0.14f), Radius.pill)
             )
 
             Row(modifier = Modifier.fillMaxSize()) {
@@ -155,11 +163,7 @@ private fun GlassTabBar(
                             text = tab.label,
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
-                            color = if (selected) {
-                                Seed
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            }
+                            color = if (selected) accent else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }

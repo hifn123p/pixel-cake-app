@@ -19,7 +19,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.unit.dp
-import com.hifn.pixelcake.ui.theme.Seed
 import com.hifn.pixelcake.ui.theme.Spacing
 import com.hifn.pixelcake.ui.theme.pressScale
 
@@ -35,6 +34,9 @@ import com.hifn.pixelcake.ui.theme.pressScale
  * 3. **信息量**：导入动作需要一句说明（「16-bit 线性 RAW」），Button 装不下副标题。
  *
  * 触发整块的点击而不只是文字：44dp+ 的高度是误触下限，整块可点才够手指友好。
+ *
+ * `accent = true` 时的强调色取 `colorScheme.primary`（而非直接写 `Seed`）——
+ * 深色主题下 primary 是降饱和版本，直接写 `Seed` 会刺眼且对比度不足（见 `Color.kt`）。
  */
 @Composable
 fun ActionTile(
@@ -67,7 +69,7 @@ fun ActionTile(
             Text(
                 text = title,
                 style = MaterialTheme.typography.bodyMedium,
-                color = if (accent) Seed else MaterialTheme.colorScheme.onSurface
+                color = if (accent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
             )
             Text(
                 text = subtitle,

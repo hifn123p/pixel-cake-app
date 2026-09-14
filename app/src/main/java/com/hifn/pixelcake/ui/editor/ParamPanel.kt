@@ -1,5 +1,6 @@
 package com.hifn.pixelcake.ui.editor
 
+import android.graphics.Bitmap
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -21,6 +22,7 @@ import com.hifn.pixelcake.core.edit.preset.Preset
 import com.hifn.pixelcake.ui.components.GlassCard
 import com.hifn.pixelcake.ui.components.GlassChipRow
 import com.hifn.pixelcake.ui.components.ParamSlider
+import com.hifn.pixelcake.ui.components.PresetThumbRow
 import com.hifn.pixelcake.ui.theme.Spacing
 
 /** 皮肤画笔 / 祛瑕 的子模式 id。与上层 `retouchTool` 的字符串约定一致。 */
@@ -76,6 +78,8 @@ fun ParamPanel(
     autoMaskEnabled: Boolean,
     presets: List<Preset>,
     activePresetId: String,
+    // 预设 id → 缩略图（由上层按**原图**渲染一次，见 `MainActivity.buildPresetThumbs`）。缺失即占位。
+    presetThumbs: Map<String, Bitmap> = emptyMap(),
     onParamChange: (EditParams) -> Unit,
     onParamCommit: () -> Unit,
     onRetouchChange: (RetouchState) -> Unit,
@@ -102,7 +106,7 @@ fun ParamPanel(
             EditorCategory.Tone -> ToneParams(params, onParamChange, onParamCommit, onDraggingChange)
             EditorCategory.Curve -> CurveParams(params, onParamChange, onParamCommit, onDraggingChange)
             EditorCategory.Lut -> LutParams(params, onParamChange, onParamCommit, onDraggingChange)
-            EditorCategory.Preset -> PresetParams(presets, activePresetId, onPreset)
+            EditorCategory.Preset -> PresetParams(presets, activePresetId, presetThumbs, onPreset)
         }
     }
 }
@@ -368,18 +372,31 @@ private fun LutParams(
     )
 }
 
+/**
+ * 预设（`docs/UI_DESIGN.md` §1.5 的 **A 档**：卡片带**真实缩略图**，不再是纯文字 chip）。
+ *
+ * 缩略图由上层按**原图**渲染（每个预设一张，只在换图时算一次）—— 所以这里的职责只是「怎么摆」，
+ * 不含任何渲染逻辑。`presetThumbs` 缺失时 [PresetThumbRow] 会显示占位底色，不会崩也不会空白。
+ */
 @Composable
-private fun PresetParams(presets: List<Preset>, activePresetId: String, onPreset: (Preset) -> Unit) {
+private fun PresetParams(
+    presets: List<Preset>,
+    activePresetId: String,
+    presetThumbs: Map<String, Bitmap>,
+    onPreset: (Preset) -> Unit
+) {
     GroupLabel("预设（参数栈）")
-    GlassChipRow(
+    PresetThumbRow(
         items = presets,
         selected = presets.firstOrNull { it.id == activePresetId },
         label = { it.name },
+        thumb = { presetThumbs[it.id] },
         onSelect = onPreset
     )
     Text(
         if (activePresetId == "none") {
-            "选一个预设作为起点，再在其它分类里微调。手动改动任一参数后高亮会取消。"
+            "缩略图按**当前照片**渲染，所以每个预设的效果是所见即所得。" +
+                "选一个作为起点，再在其它分类里微调；手动改动任一参数后高亮会取消。"
         } else {
             "已套用预设；手动改动任一参数即视为「已偏离预设」，高亮取消。"
         },

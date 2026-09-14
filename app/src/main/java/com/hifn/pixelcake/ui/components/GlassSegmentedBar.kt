@@ -25,7 +25,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.hifn.pixelcake.ui.theme.Motion
 import com.hifn.pixelcake.ui.theme.Radius
-import com.hifn.pixelcake.ui.theme.Seed
 import com.hifn.pixelcake.ui.theme.Spacing
 import com.hifn.pixelcake.ui.theme.glassSurface
 import com.hifn.pixelcake.ui.theme.rememberGlassTint
@@ -39,6 +38,9 @@ import com.hifn.pixelcake.ui.theme.rememberGlassTint
  *
  * 实现要点：各项**等宽**，所以指示块的位移直接用 `maxWidth / items.size × index`，
  * 不需要逐项测量 —— 这是这里唯一容易写复杂的地方，等宽可以完全绕开。
+ *
+ * 指示块位移是**空间属性** → [Motion.springSpatial]（阻尼 0.6，滑动到位时轻微回弹）。
+ * 强调色取 `colorScheme.primary`（深色主题下是降饱和版本），不直接写 `Seed`。
  *
  * @param items    分段项
  * @param selected 当前项
@@ -70,9 +72,10 @@ fun <T> GlassSegmentedBar(
         val index = items.indexOf(selected).coerceAtLeast(0)
         val indicatorX by animateDpAsState(
             targetValue = itemWidth * index,
-            animationSpec = Motion.springSnappy(),
+            animationSpec = Motion.springSpatial(),
             label = "segIndicator"
         )
+        val accent = MaterialTheme.colorScheme.primary
 
         // 先画指示块，文字压在其上
         Box(
@@ -80,7 +83,7 @@ fun <T> GlassSegmentedBar(
                 .offset(x = indicatorX)
                 .width(itemWidth)
                 .fillMaxHeight()
-                .background(Seed.copy(alpha = 0.18f), Radius.pill)
+                .background(accent.copy(alpha = 0.18f), Radius.pill)
         )
 
         Row(modifier = Modifier.fillMaxSize()) {
@@ -97,11 +100,7 @@ fun <T> GlassSegmentedBar(
                         text = label(item),
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = if (isSelected) FontWeight.Medium else FontWeight.Normal,
-                        color = if (isSelected) {
-                            Seed
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        }
+                        color = if (isSelected) accent else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }

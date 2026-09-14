@@ -15,7 +15,7 @@ object Radius {
     /** 12dp：小控件 —— chip / 分段项 / 小按钮 */
     val chip: Shape = RoundedCornerShape(12.dp)
 
-    /** 20dp：卡片 —— 玻璃卡 / 信息卡 / 列表项 */
+    /** 20dp：卡片 —— 容器卡 / 玻璃卡 / 信息卡 / 列表项 */
     val card: Shape = RoundedCornerShape(20.dp)
 
     /** 28dp：抽屉 —— 底部参数面板 / ModalBottomSheet */

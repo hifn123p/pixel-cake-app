@@ -1,6 +1,9 @@
 package com.hifn.pixelcake
 
 import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.Rect
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -32,6 +35,7 @@ import com.hifn.pixelcake.core.edit.EditEngine
 import com.hifn.pixelcake.core.edit.EditHistory
 import com.hifn.pixelcake.core.edit.EditParams
 import com.hifn.pixelcake.core.edit.EditSnapshot
+import com.hifn.pixelcake.core.edit.FullMask
 import com.hifn.pixelcake.core.edit.InpaintStroke
 import com.hifn.pixelcake.core.edit.NeutralGrayParams
 import com.hifn.pixelcake.core.edit.RetouchMask
@@ -74,6 +78,14 @@ private const val MIN_STROKE_DIST2 = 0.008f * 0.008f
 
 /** 蒙版描迹条数上限（为 `RasterMask.fromStrokes` 的 O(n·r²) 重建耗时设上界）。 */
 private const val MAX_BRUSH_STROKES = 3000
+
+/**
+ * 预设缩略图边长（像素）。
+ *
+ * 取 192 = 64dp @3x（面板里的显示尺寸是 64dp）。10 张合计约 1.5MB —— 与全幅 `IntArray`
+ * 的 131MB 量级完全不是一回事，且**上界固定**（预设套数），所以不做回收，交给 GC。
+ */
+private const val PRESET_THUMB_PX = 192
 
 class MainActivity : ComponentActivity() {
 
@@ -132,12 +144,36 @@ private fun AppRoot() {
     var autoMaskNote by remember { mutableStateOf("") }
     // P1p-2c：液化锚点来源提示（人脸检测 / 蒙版质心）。供真机验收核对「锚点到底来自哪」。
     var liquifyNote by remember { mutableStateOf("") }
+    // UI-4b(A 档)：预设缩略图（id → 位图）。按**原图**渲染，只在换图时算一次。
+    var presetThumbs by remember { mutableStateOf(emptyMap<String, Bitmap>()) }
+
+    // 预设缩略图：**从原图渲染**，与当前编辑无关 —— 缩略图回答的是「这个预设会把照片变成什么样」，
+    // 不是「在现有编辑上叠加会怎样」。否则用户一调参全部缩略图跟着变，就失去了参照意义。
+    // 放在 IO/Default 线程：10 张 192×192 的渲染约几十毫秒，放主线程会卡一次首帧。
+    LaunchedEffect(imported) {
+        val src = imported ?: return@LaunchedEffect
+        presetThumbs = withContext(Dispatchers.Default) {
+            buildPresetThumbs(src.bitmap, Presets.ALL)
+        }
+        DebugLog.i(
+            DebugLog.TAG_EDIT, "preset thumbs ready",
+            mapOf("count" to presetThumbs.size, "px" to PRESET_THUMB_PX)
+        )
+    }
 
     // 参数 / retouch / 蒙版 / 自动蒙版开关变化 -> 异步把参数栈 + retouch 重渲到代理图。
     // 用 snapshotFlow + conflate + collectLatest 做节流与取消（FIX_LIST F08）。
     LaunchedEffect(imported) {
         val src = imported ?: return@LaunchedEffect
-        snapshotFlow { listOf(params, retouch, brushStrokes, inpaintStrokes, autoMaskEnabled) }
+        // 注意 `brushRadius` / `inpaintRadius` 必须**在监听列表里**：它们参与蒙版/祛瑕的
+        // 像素半径换算（见 buildRenderRetouch），漏掉会导致「只拖半径滑块，预览不跟随」——
+        // 蒙版仍按旧半径渲染，要等下一次别的参数变化才刷新（自愈，但严格说是所见非所得）。
+        snapshotFlow {
+            listOf(
+                params, retouch, brushStrokes, inpaintStrokes, autoMaskEnabled,
+                brushRadius, inpaintRadius
+            )
+        }
             .conflate()
             .collectLatest {
                 delay(RENDER_THROTTLE_MS)
@@ -285,6 +321,7 @@ private fun AppRoot() {
                     liquifyNote = liquifyNote,
                     presets = Presets.ALL,
                     activePresetId = activePresetId,
+                    presetThumbs = presetThumbs,
                     canUndo = history.canUndo,
                     canRedo = history.canRedo,
                     status = status,
@@ -562,6 +599,59 @@ private fun buildRenderRetouch(
         ),
         inpaint = inpaint
     )
+}
+
+/**
+ * 预设缩略图（`docs/UI_DESIGN.md` §1.5 的 A 档）。
+ *
+ * ## 三个刻意的口径
+ *
+ * 1. **从原图渲染，与当前编辑无关** —— 缩略图回答「这个预设会把照片变成什么样」。
+ *    若叠在当前编辑之上，用户每调一次参数全部缩略图都跟着变，参照系就没了。
+ * 2. **只应用影调 + 磨皮 + 追色，丢掉液化与祛瑕**：几何形变需要人脸锚点，
+ *    而缩略图阶段**不跑检测**（那是一次 GPU 推理，为 10 张 192px 小图付这个代价不值）。
+ *    没有锚点时「蒙版质心猜」会把小图拧得很难看，反而失真 —— 那就不如不显示。
+ * 3. **只在换图时算一次**（10 张 192×192，几十毫秒），不随参数变化重算。
+ *
+ * ## 尺寸与内存
+ *
+ * 中心方裁 + 缩放到 [PRESET_THUMB_PX]，**用 `Canvas` 画进全新位图**。
+ * 不能用 `Bitmap.createBitmap(src, x, y, w, h)` 或 `createScaledBitmap` —— 当裁剪区域等于整幅 /
+ * 目标尺寸等于原尺寸时，它们会**返回同一个实例**，后续 `setPixels` 会就地改掉用户的照片
+ * （`ui/theme/Backdrop.kt` 踩过同一个坑，见那里的注释）。
+ *
+ * @return 预设 id → 缩略图；某一条渲染失败会被跳过（调用方按「缺缩略图」占位处理）。
+ */
+private fun buildPresetThumbs(base: Bitmap, presets: List<Preset>): Map<String, Bitmap> {
+    if (base.width <= 0 || base.height <= 0) return emptyMap()
+    val side = PRESET_THUMB_PX
+    val square = Bitmap.createBitmap(side, side, Bitmap.Config.ARGB_8888)
+    val crop = min(base.width, base.height)
+    val left = (base.width - crop) / 2
+    val top = (base.height - crop) / 2
+    Canvas(square).drawBitmap(
+        base,
+        Rect(left, top, left + crop, top + crop),
+        Rect(0, 0, side, side),
+        Paint(Paint.FILTER_BITMAP_FLAG)
+    )
+
+    val out = LinkedHashMap<String, Bitmap>(presets.size)
+    for (preset in presets) {
+        val target = square.copy(Bitmap.Config.ARGB_8888, true) ?: continue
+        // 影调：与预览/导出同一条 sRGB 管线。
+        EditEngine.renderIntoSrgb(target, square, preset.params)
+        // retouch：缩略图上作用域取**整幅**（FullMask）—— 预设的磨皮/追色必须可见，
+        // 不能因为「没画蒙版」就整段跳过（那正是 mask = null 的语义）。
+        val rt = buildRenderRetouch(
+            preset.retouch.copy(beauty = BeautyParams(), inpaint = emptyList()),
+            side, side
+        )
+        RetouchLayer.apply(target, rt, FullMask)
+        out[preset.id] = target
+    }
+    square.recycle()
+    return out
 }
 
 /** 按长边上限计算全分辨率目标尺寸（与 RawLinearSource 解码尺寸同口径）。 */

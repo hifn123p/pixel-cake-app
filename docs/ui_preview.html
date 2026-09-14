@@ -8,10 +8,12 @@
   :root{
     /* —— 设计 token（与 ui/theme/ 逐一对齐）—— */
     --bg:#0E0E10;            /* WorkspaceBg */
-    --surface:#16161A;       /* WorkspaceSurface */
-    --surface-high:#1F1F25;  /* WorkspaceSurfaceHigh */
+    --surface:#1B1B22;       /* ContainerDark —— 实心容器卡（玻璃已收敛为浮层专用） */
+    --surface-high:#24242C;  /* ContainerDarkHigh */
     --on-dark:#E6E1E5;       /* OnDarkSurface */
-    --seed:#7C5CFF;          /* Seed */
+    --seed:#9C86F7;          /* SeedOnDark —— 本页 mockup 全是深色，故取深色档强调色 */
+    --seed-light:#7C5CFF;    /* Seed（浅色主题专用，本页不出现） */
+    --container-border:rgba(255,255,255,.08); /* ContainerBorderDark */
     --gray3:#BFBFC6;         /* 禁用 */
     --gray4:#7A7A83;         /* 辅助文字 */
     --glass:rgba(28,28,34,.72);        /* GlassTintDark */
@@ -53,8 +55,9 @@
   }
 
   /* —— 通用件 —— */
+  /* 承载型卡片 = 实心容器（玻璃已收敛为浮层专用，见 UI_DESIGN.md §1.6.1） */
   .card{
-    background:var(--glass);border:1px solid var(--border);border-radius:var(--r-card);
+    background:var(--surface);border:1px solid var(--container-border);border-radius:var(--r-card);
     padding:var(--s4);
   }
   .sec-title{font-size:16px;font-weight:500}
@@ -79,6 +82,18 @@
     border:1px solid var(--border);color:var(--gray3);white-space:nowrap
   }
   .chip.on{color:var(--seed);background:rgba(124,92,255,.18);border-color:rgba(124,92,255,.42)}
+
+  /* 预设缩略图行（A 档）：真实缩略图 + 名称；选中态 2px 强调描边 */
+  .prow{display:flex;gap:var(--s3);overflow:hidden}
+  .pitem{width:64px;display:flex;flex-direction:column;align-items:center;gap:var(--s1)}
+  .pthumb{
+    width:64px;height:64px;border-radius:var(--r-chip);position:relative;overflow:hidden;
+    border:1px solid var(--border);background:var(--surface-high)
+  }
+  .pthumb.on{border:2px solid var(--seed)}
+  .pthumb i{position:absolute;inset:0;display:block}
+  .pitem.on .plabel{color:var(--seed)}
+  .plabel{font-size:11px;color:var(--gray3);white-space:nowrap}
 
   /* 分段条 */
   .seg{
@@ -135,6 +150,21 @@
   .fade{
     position:absolute;left:0;right:0;bottom:0;height:120px;pointer-events:none;
     background:linear-gradient(to bottom,transparent,var(--bg) 78%)
+  }
+
+  /* 圆形玻璃按钮（顶栏主操作 / 作品位） */
+  .circle{
+    width:40px;height:40px;border-radius:999px;background:var(--glass);
+    border:1px solid var(--border);display:flex;align-items:center;justify-content:center;
+    font-size:16px;color:var(--on-dark);flex-shrink:0
+  }
+  /* 首页展示位：玻璃底 + 很淡的品牌光晕。极简版里它占满余下高度，是整屏唯一的视觉重心 */
+  .hero{
+    border-radius:var(--r-shell);border:1px solid var(--border);
+    background:
+      radial-gradient(560px 560px at 50% 50%, rgba(124,92,255,.18) 0%, rgba(124,92,255,0) 70%),
+      var(--glass);
+    display:flex;flex-direction:column;align-items:center;justify-content:center
   }
 
   /* 编辑器 */
@@ -212,57 +242,25 @@
     <div class="badge">UI 改版 · 静态预览 · 未提交（等你看完再 commit）</div>
     <h1>PixelCake UI 改版预览</h1>
     <p>这是按 <code>docs/UI_DESIGN.md</code> 与 <code>ui/theme/</code> 真实 token 复刻的静态预览，用于在无法本地构建的情况下肉眼验收版式、层次与密度。颜色 / 间距 / 圆角 / 字号全部取自代码里的 token 真值。</p>
+    <p style="margin-top:var(--s2)">首页已按反馈<strong>二次修订为极简</strong>：整屏只有<strong>一个展示位 + 右上角「＋」</strong>；说明文案、设备规格表、工程信息已全部删除（「首页介绍不对」）。见屏 ①与⑤。</p>
+    <p style="margin-top:var(--s2)"><strong>UI-4b 趋势对齐已落地</strong>（<code>UI_DESIGN.md</code> §1.6.1）：弹簧按属性分族、深色强调色降饱和、<strong>玻璃收敛为浮层专用</strong>（卡片默认实心容器）。本页 mockup 因此全部改用<strong>实心容器底 + 深色档强调色</strong>。</p>
+    <p style="margin-top:var(--s2)"><strong>后续补做已落地</strong>（<code>UI_DESIGN.md</code> §1.6.2）：① 预设卡片改为<strong>真实缩略图</strong>（屏⑥）；② 新增 <code>LocalDarkTheme</code> 修掉「强制深色主题下取错色板」的真 bug；③ 半径滑块纳入渲染监听。</p>
   </div>
 
   <div class="phones">
 
     <!-- ══════════ 1. 调色台 ══════════ -->
     <div class="phone-wrap">
-      <div class="phone-label">① 调色台（Tab 1）· 空态即导入</div>
+      <div class="phone-label">① 调色台（Tab 1）· 极简：一个展示位 + 一个动作</div>
       <div class="phone">
-        <div class="scroll">
-          <div>
-            <div style="font-size:24px;font-weight:500">调色台</div>
-            <div class="mut" style="margin-top:var(--s1)">本地 RAW 调色 · 人像精修。全程端侧处理，照片不出本机。</div>
-          </div>
-
-          <div class="card">
-            <div class="sec-title">开始</div>
-            <div class="sec-sub">选一张照片，或直接连相机拉图</div>
-            <div class="divider"></div>
-            <div class="tile">
-              <div style="flex:1">
-                <div class="t">从相册选择</div>
-                <div class="s">JPEG / HEIF，走 8-bit sRGB 管线</div>
-              </div>
-              <div class="trail">选择</div>
-            </div>
-            <div class="tile accent">
-              <div style="flex:1">
-                <div class="t">打开 ARW 文件</div>
-                <div class="s">16-bit 线性 RAW，预览与导出一致</div>
-              </div>
-              <div class="trail">打开</div>
-            </div>
-          </div>
-
-          <div class="card">
-            <div class="sec-title">相机直连</div>
-            <div class="sec-sub">USB PTP · Sony A7C II</div>
-            <div class="divider"></div>
-            <div class="tile">
-              <div style="flex:1"><div class="t">连接相机</div><div class="s">检测 → 授权 → 列图 → 批量套预设</div></div>
-              <div class="trail">检测</div>
-            </div>
-          </div>
-
-          <div class="card">
-            <div class="sec-title">设备与显示</div>
-            <div class="sec-sub">能力实测，用于判断管线档位</div>
-            <div class="divider"></div>
-            <div class="row-between" style="padding:3px 0"><span class="mut">芯片平台</span><span class="body">Snapdragon 8 Elite</span></div>
-            <div class="row-between" style="padding:3px 0"><span class="mut">广色域 (P3)</span><span class="body" style="color:#0F7B4F">支持</span></div>
-            <div class="row-between" style="padding:3px 0"><span class="mut">刷新率</span><span class="body">120 Hz</span></div>
+        <div class="topbar" style="padding:0 var(--s5)">
+          <div class="tb strong">调色台</div>
+          <div style="flex:1"></div>
+          <div class="circle">＋</div>
+        </div>
+        <div class="scroll" style="padding-top:var(--s2)">
+          <div class="hero" style="flex:1;min-height:340px">
+            <div style="font-size:24px;color:var(--gray3)">＋</div>
           </div>
         </div>
         <div class="fade"></div>
@@ -424,6 +422,110 @@
       </div>
     </div>
 
+    <!-- ══════════ 5. 开始 Sheet ══════════ -->
+    <div class="phone-wrap">
+      <div class="phone-label">⑤ 点「＋」后 · 三种开始方式（Sheet）</div>
+      <div class="phone">
+        <div class="scroll" style="opacity:.3">
+          <div class="hero" style="height:190px">
+            <div class="circle big">＋</div>
+          </div>
+        </div>
+        <div class="dim"></div>
+        <div class="sheet">
+          <div class="grab"></div>
+          <div>
+            <div style="font-size:24px;font-weight:500">开始</div>
+            <div class="cap" style="margin-top:2px">照片全程留在本机，不上传、不联网。</div>
+          </div>
+          <div class="tile">
+            <div style="flex:1"><div class="t">从相册选择</div><div class="s">JPEG / HEIF · 8-bit sRGB 管线</div></div>
+            <div class="trail">选择</div>
+          </div>
+          <div class="tile">
+            <div style="flex:1"><div class="t" style="color:var(--seed)">打开 RAW 文件</div><div class="s">ARW · 16-bit 线性管线，预览与导出一致</div></div>
+            <div class="trail">打开</div>
+          </div>
+          <div class="tile">
+            <div style="flex:1"><div class="t">连接相机</div><div class="s">USB 直连 A7C2，浏览卡内照片并批量套预设</div></div>
+            <div class="trail">连接</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════ 6. 预设（A 档：真实缩略图） ══════════ -->
+    <div class="phone-wrap">
+      <div class="phone-label">⑥ 预设分类 · 卡片带真实缩略图（按当前照片渲染，换图才重算）</div>
+      <div class="phone">
+        <div class="preview" style="margin:0 var(--s3) 0;flex:1;min-height:300px">
+          <div class="photo"></div>
+          <div class="subject"></div>
+          <div class="vignette"></div>
+        </div>
+
+        <div class="toolwrap">
+          <div class="seg">
+            <div class="ind" style="left:calc(4px + (100% - 8px)/5*4);width:calc((100% - 8px)/5)"></div>
+            <div class="items">
+              <span>人像</span><span>调色</span><span>曲线</span><span>LUT</span><span class="on">预设</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="panelwrap">
+          <div class="card">
+            <div class="cap" style="margin-bottom:var(--s2)">预设（参数栈）</div>
+            <div class="prow">
+              <div class="pitem on">
+                <div class="pthumb on"><i style="background:linear-gradient(160deg,#8E8E96,#55555C)"></i></div>
+                <div class="plabel">原图</div>
+              </div>
+              <div class="pitem">
+                <div class="pthumb"><i style="background:linear-gradient(160deg,#F2E9E0,#C9B7A6)"></i></div>
+                <div class="plabel">日系</div>
+              </div>
+              <div class="pitem">
+                <div class="pthumb"><i style="background:linear-gradient(160deg,#C9A87C,#6E5B45)"></i></div>
+                <div class="plabel">胶片</div>
+              </div>
+              <div class="pitem">
+                <div class="pthumb"><i style="background:linear-gradient(160deg,#B99B7C,#6B5843)"></i></div>
+                <div class="plabel">复古</div>
+              </div>
+              <div class="pitem">
+                <div class="pthumb"><i style="background:linear-gradient(160deg,#A9A6A0,#77746F)"></i></div>
+                <div class="plabel">莫兰迪</div>
+              </div>
+              <div class="pitem">
+                <div class="pthumb"><i style="background:linear-gradient(160deg,#F0DCCB,#B99C86)"></i></div>
+                <div class="plabel">奶油肌</div>
+              </div>
+              <div class="pitem">
+                <div class="pthumb"><i style="background:linear-gradient(160deg,#D8A98C,#7A5A48)"></i></div>
+                <div class="plabel">波特拉</div>
+              </div>
+              <div class="pitem">
+                <div class="pthumb"><i style="background:linear-gradient(160deg,#9A9A9A,#3A3A3A)"></i></div>
+                <div class="plabel">黑白</div>
+              </div>
+              <div class="pitem">
+                <div class="pthumb"><i style="background:linear-gradient(160deg,#8FA6BB,#3F4E5E)"></i></div>
+                <div class="plabel">冷调</div>
+              </div>
+              <div class="pitem">
+                <div class="pthumb"><i style="background:linear-gradient(160deg,#D9A06B,#7A4E2C)"></i></div>
+                <div class="plabel">暖调</div>
+              </div>
+            </div>
+            <div class="cap" style="margin-top:var(--s3)">
+              缩略图按<strong>当前照片</strong>渲染，所以每个预设的效果是所见即所得。选中态用 2px 强调描边。
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
   </div>
 
   <!-- ══════════ Token 表 ══════════ -->
@@ -469,26 +571,31 @@
 
     <div class="tbl">
       <h3>颜色 Color</h3>
-      <div class="hint">1 主色 + 6 灰阶 + 3 语义色</div>
+      <div class="hint">1 主色（浅 / 深两档）+ 6 灰阶 + 3 语义色 + 容器色阶（5 档 × 2 主题）</div>
       <table>
-        <tr><td class="k"><span class="swatch" style="background:#7C5CFF"></span>Seed 主色</td><td class="v">#7C5CFF</td></tr>
+        <tr><td class="k"><span class="swatch" style="background:#7C5CFF"></span>Seed（浅色主题）</td><td class="v">#7C5CFF</td></tr>
+        <tr><td class="k"><span class="swatch" style="background:#9C86F7"></span>SeedOnDark（深色 / 工作台）</td><td class="v">#9C86F7</td></tr>
         <tr><td class="k"><span class="swatch" style="background:#0E0E10"></span>WorkspaceBg</td><td class="v">#0E0E10</td></tr>
-        <tr><td class="k"><span class="swatch" style="background:#16161A"></span>WorkspaceSurface</td><td class="v">#16161A</td></tr>
-        <tr><td class="k"><span class="swatch" style="background:#1F1F25"></span>SurfaceHigh</td><td class="v">#1F1F25</td></tr>
+        <tr><td class="k"><span class="swatch" style="background:#1B1B22"></span>Container 容器（暗）</td><td class="v">#1B1B22</td></tr>
+        <tr><td class="k"><span class="swatch" style="background:#24242C"></span>ContainerHigh（暗）</td><td class="v">#24242C</td></tr>
+        <tr><td class="k"><span class="swatch" style="background:#FBFBFD"></span>Container 容器（浅）</td><td class="v">#FBFBFD</td></tr>
         <tr><td class="k"><span class="swatch" style="background:#E6E1E5"></span>OnDarkSurface</td><td class="v">#E6E1E5</td></tr>
-        <tr><td class="k">玻璃底 / 描边（暗）</td><td class="v">α .72 / .14</td></tr>
+        <tr><td class="k">玻璃底 / 描边（暗）</td><td class="v">α .72 / .14 · 仅浮层</td></tr>
+        <tr><td class="k">容器描边（暗 / 浅）</td><td class="v">α .08 / .07</td></tr>
       </table>
     </div>
 
     <div class="tbl">
       <h3>动效 Motion</h3>
-      <div class="hint">统一缓动 + 统一时长档</div>
+      <div class="hint">按属性分族：空间 0.6 / 效果 1.0 / 透明度 tween</div>
       <table>
         <tr><td class="k">fast</td><td class="v">150 ms</td></tr>
         <tr><td class="k">base</td><td class="v">240 ms</td></tr>
         <tr><td class="k">slow</td><td class="v">320 ms</td></tr>
         <tr><td class="k">easingOut</td><td class="v">.16,1,.3,1</td></tr>
-        <tr><td class="k">springSoft / Snappy</td><td class="v">damp .8 / .9</td></tr>
+        <tr><td class="k">springSpatialFast / Spatial（空间族）</td><td class="v">damp .6</td></tr>
+        <tr><td class="k">springEffects（效果族 · 颜色）</td><td class="v">damp 1.0</td></tr>
+        <tr><td class="k">透明度</td><td class="v">tween + durationFor</td></tr>
         <tr><td class="k">pressedScale</td><td class="v">0.97</td></tr>
       </table>
     </div>
@@ -515,22 +622,27 @@
       <li><span class="ok">✔</span><span>间距只用 4/8/12/16/24/32/48<em> · Spacing.kt 强制</em></span></li>
       <li><span class="ok">✔</span><span>字号 ≤ 5 级（24/16/14/12/11）<em> · bodySmall 别名到 11sp</em></span></li>
       <li><span class="ok">✔</span><span>字重 ≤ 3 档（Normal / Medium / —）</span></li>
-      <li><span class="ok">✔</span><span>1 主色 + 6 灰阶 + 3 语义色</span></li>
+      <li><span class="ok">✔</span><span>1 主色（<strong>浅 / 深两档</strong>）+ 6 灰阶 + 3 语义色</span></li>
+      <li><span class="ok">✔</span><span>深色强调色降饱和 ≈13%<em> · SeedOnDark，对比度 4.11:1 → 6.04:1，过 WCAG AA</em></span></li>
       <li><span class="ok">✔</span><span>圆角只用 4 档 + 胶囊<em> · chip 强制 Radius.chip</em></span></li>
-      <li><span class="ok">✔</span><span>卡片无边框无投影，层次靠底差 + 1px 高光</span></li>
+      <li><span class="ok">✔</span><span>卡片无粗边框无投影，层次靠<strong>容器底差 + 1px 极淡描边</strong></span></li>
+      <li><span class="ok">✔</span><span><strong>玻璃只用于浮层</strong>，承载型容器走实心<em> · GlassCard 默认 CardMaterial.Container</em></span></li>
       <li><span class="ok">✔</span><span>拖动参数时隐藏非参数 UI<em> · 顶栏收起，工具条只淡出</em></span></li>
-      <li><span class="ok">✔</span><span>转场 150–320 ms，统一缓动<em> · Motion.kt</em></span></li>
+      <li><span class="ok">✔</span><span>动效<strong>按属性分族</strong>：空间 0.6 / 颜色 1.0 / 透明度 tween<em> · Motion.kt</em></span></li>
       <li><span class="ok">✔</span><span><strong>不做实时 backdrop 模糊</strong><em> · 静态模糊底图一次生成</em></span></li>
-      <li><span class="ok">✔</span><span>无障碍：系统关动画时位移/缩放坍缩为 0<em> · reduceMotion()</em></span></li>
+      <li><span class="ok">✔</span><span>无障碍：系统关动画时位移 / 缩放 / 淡入淡出全部坍缩<em> · 弹簧自带；7 处 tween 补 durationFor（修 bug）</em></span></li>
+      <li><span class="ok">✔</span><span>预设卡片带<strong>真实缩略图</strong><em> · PresetThumbRow，按原图渲染，换图才重算（A 档）</em></span></li>
+      <li><span class="ok">✔</span><span>深色 / 玻璃色跟随<strong>生效主题</strong>而非系统 uiMode<em> · LocalDarkTheme（修「编辑页在系统浅色下取到浅色板」的 bug）</em></span></li>
+      <li><span class="ok">✔</span><span>每个可点控件都有实际动作<em> · 可达性审计：无死按钮 / 无空壳开关</em></span></li>
       <li><span class="todo">◐</span><span>点击次数 ≤ Snapseed<em> · 待真机比对（编辑入口已减 1 跳）</em></span></li>
-      <li><span class="todo">◐</span><span>一加15 帧率实测<em> · UI-5 剩余项，掉帧则面板降级实心</em></span></li>
+      <li><span class="todo">◐</span><span>一加15 帧率实测<em> · UI-5 剩余项（承载面板已是实心，掉帧则进一步收玻璃浮层）</em></span></li>
       <li><span class="todo">◐</span><span>CameraPanel 尚未迁移到新 token<em> · 旧圆角/旧间距残留，排在后续</em></span></li>
       <li><span class="todo">◐</span><span>EditorUiState 状态收敛<em> · 属「能力」不属 UI，单独立阶段</em></span></li>
     </ul>
   </div>
 
   <div class="foot">
-    <p>对应代码：<code>ui/theme/*</code>（token 与玻璃）、<code>ui/components/*</code>（GlassCard / GlassSegmentedBar / GlassChipRow / ParamSlider / ActionTile）、<code>ui/shell/AppShell.kt</code>、<code>ui/home/HomeScreen.kt</code>、<code>ui/settings/*</code>、<code>ui/editor/*</code>（EditorScreen / EditorToolbar / ParamPanel / ExportSheet）、<code>MainActivity.kt</code>。</p>
+    <p>对应代码：<code>ui/theme/*</code>（token · 玻璃 + 实心容器 + LocalDarkTheme）、<code>ui/components/*</code>（GlassCard / GlassSegmentedBar / GlassChipRow / PresetThumbRow / ParamSlider / ActionTile）、<code>ui/shell/AppShell.kt</code>、<code>ui/home/HomeScreen.kt</code>、<code>ui/settings/*</code>、<code>ui/editor/*</code>（EditorScreen / EditorToolbar / ParamPanel / ExportSheet）、<code>MainActivity.kt</code>（含 <code>buildPresetThumbs</code>）。</p>
     <p style="margin-top:var(--s2)">本页为静态预览，用于版式与密度评审；真实动效与手势需在真机上核对。<code>core/edit/**</code>、<code>core/camera/**</code>、<code>ml/**</code> 全程未改动。</p>
   </div>
 

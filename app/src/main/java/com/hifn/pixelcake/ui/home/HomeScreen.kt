@@ -1,8 +1,11 @@
 package com.hifn.pixelcake.ui.home
 
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -10,7 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -21,32 +24,50 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import com.hifn.pixelcake.ui.components.ActionTile
-import com.hifn.pixelcake.ui.components.ActionTileDivider
+import com.hifn.pixelcake.ui.components.CardMaterial
 import com.hifn.pixelcake.ui.components.GlassCard
-import com.hifn.pixelcake.ui.components.SectionHeader
-import com.hifn.pixelcake.ui.theme.Bad
-import com.hifn.pixelcake.ui.theme.Ok
+import com.hifn.pixelcake.ui.components.GlassCircleButton
+import com.hifn.pixelcake.ui.components.ImportSheet
+import com.hifn.pixelcake.ui.theme.Glass
+import com.hifn.pixelcake.ui.theme.Radius
 import com.hifn.pixelcake.ui.theme.Spacing
-import com.hifn.pixelcake.ui.theme.Warn
+import com.hifn.pixelcake.ui.theme.pressScale
+import com.hifn.pixelcake.ui.theme.rememberGlassTint
 import java.io.File
 
 /**
- * 调色台（原「首页」，`docs/UI_DESIGN.md` §3.2）。
+ * 调色台（首页，`docs/UI_DESIGN.md` §3.2.2）。
  *
- * **空态即导入页** —— 这里刻意**不单独做一个导入页面**：导入没有任何需要独占屏幕的内容，
- * 独立成页只会把「首页 → 导入 → 编辑器」变成三跳。所以导入入口就直接长在调色台的顶部。
+ * ## 极简：首页只有「一个展示位 + 一个动作」
  *
- * 布局约定（整个 UI 改版都遵守）：
- * - 页面左右边距走 `Spacing.page`，卡片之间走 `Spacing.cardGap`；
- * - 卡片一律 [GlassCard]：**不画边框、不投阴影**，层次靠「半透明底 + 1px 高光描边 + 留白」；
- * - 调试日志入口已移到设置页（它不属于日常调色流程）。
+ * 首页**不介绍产品**。说明性文字、规格罗列、设备参数，放在这里都会被读成「产品说明书」——
+ * 而首屏应该是**作品**的位置。所以整屏只剩两样东西：
  *
- * @param loading 正在解码（33MP ARW 的代理线性解码耗时可见，必须给反馈，避免"点了没反应"）
- * @param message 状态消息（解码失败提示 / 载入结果），为空则不显示
+ * 1. **展示位**：一块占满余下高度的玻璃，承载唯一的视觉重心（[StartHero]）；
+ * 2. **唯一动作**：右上角「＋」（[HomeTopBar]），点了才问「照片 / 文件 / 连接设备」。
+ *
+ * 曾经的「这台设备能做什么」2×2 规格表与「工程信息」折叠区**已删除**（用户口径：
+ * 「首页介绍不对，删了吧，极简风格」）。设备能力仍在需要处直接计算 —— 相机 Sheet 要用
+ * [ResolutionProfile.fullResLongEdge]，那条链路没动；只是**不再往首屏摆**。
+ *
+ * ## 减少的入口数量
+ *
+ * 从「三个等价选项 → 用户每次重新做决定」变成「一个动作 → 想清楚再给选项」。
+ * [StartHero] 与右上角「＋」是**同一个语义**（都开 [ImportSheet]）：一个随时可达，
+ * 一个在视觉重心上。不做第二个语义不同的入口。
+ *
+ * ## 这一页保留了两处玻璃（§1.6 允许的浮层用法）
+ *
+ * 展示位与「解码失败」提示卡都浮在页面底之上，属于浮层类，因此显式传
+ * [CardMaterial.Glass] —— 不依赖 [GlassCard] 的默认值（默认已改为实心容器）。
+ *
+ * @param loading 正在解码（33MP ARW 的代理线性解码耗时可见，必须给反馈）
+ * @param message 状态消息（解码失败提示），为空则不显示
  * @param onOpenLocalFile 相机直连拉取的本地缓存文件 → 打开编辑器（P2）
  */
 @Composable
@@ -58,70 +79,25 @@ fun HomeScreen(
     onOpenLocalFile: (File) -> Unit = {}
 ) {
     val context = LocalContext.current
-    val caps = remember { context.probeCapabilities() }
-    val profile = remember(caps) { caps.resolutionProfile() }
+    // 只为了把「导出长边」口径递给相机 Sheet；首屏不再展示任何设备信息。
+    val profile = remember { context.probeCapabilities().resolutionProfile() }
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(
-            start = Spacing.page,
-            end = Spacing.page,
-            top = Spacing.xxl,
-            bottom = Spacing.xxxl
-        ),
-        verticalArrangement = Arrangement.spacedBy(Spacing.cardGap)
-    ) {
-        item {
-            Column(modifier = Modifier.padding(bottom = Spacing.m)) {
-                Text("调色台", style = MaterialTheme.typography.displaySmall)
-                Text(
-                    "本地 RAW 调色 · 人像精修。全程端侧处理，照片不出本机。",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = Spacing.xs)
-                )
-            }
-        }
+    var showImport by remember { mutableStateOf(false) }
+    var showCamera by remember { mutableStateOf(false) }
 
-        // ---- 空态：导入入口（整块可点的动作卡，拇指友好）----
-        item {
-            GlassCard {
-                SectionHeader(
-                    title = "开始",
-                    subtitle = "选一张照片，或直接连相机拉图"
-                )
-                Spacer(Modifier.height(Spacing.s))
-                ActionTile(
-                    title = "从相册选择",
-                    subtitle = "JPEG / HEIF，走 8-bit sRGB 管线",
-                    onClick = onImportPhoto,
-                    enabled = !loading,
-                    trailing = "选择"
-                )
-                ActionTileDivider()
-                ActionTile(
-                    title = "打开 ARW 文件",
-                    subtitle = "16-bit 线性 RAW，预览与导出一致",
-                    onClick = onImportArw,
-                    enabled = !loading,
-                    accent = true,
-                    trailing = "打开"
-                )
-                if (loading) {
-                    Spacer(Modifier.height(Spacing.m))
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(Spacing.s),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                        Text(
-                            message.ifEmpty { "正在解码…" },
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                } else if (message.isNotEmpty()) {
-                    Spacer(Modifier.height(Spacing.m))
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            HomeTopBar(enabled = !loading, onAdd = { showImport = true })
+
+            // 状态消息只在「解码失败」这类真需要看见的场景出现，因此不占固定高度。
+            // 它是**瞬时提示**、浮在其他内容之上，故保留玻璃材质。
+            if (message.isNotEmpty() && !loading) {
+                GlassCard(
+                    material = CardMaterial.Glass,
+                    modifier = Modifier
+                        .padding(horizontal = Spacing.page)
+                        .padding(top = Spacing.s)
+                ) {
                     Text(
                         message,
                         style = MaterialTheme.typography.bodyMedium,
@@ -129,113 +105,131 @@ fun HomeScreen(
                     )
                 }
             }
-        }
 
-        // ---- P2：相机 USB 直连（检测 → 授权 → PTP 会话 → 列图 → 单张 / 批量套预设）----
-        item {
-            CameraPanel(
-                longEdge = profile.fullResLongEdge,
-                onOpenLocalFile = onOpenLocalFile
+            StartHero(
+                loading = loading,
+                onStart = { showImport = true },
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = Spacing.page)
+                    .padding(top = Spacing.s, bottom = Spacing.page)
             )
         }
 
-        item {
-            GlassCard {
-                SectionHeader(title = "设备与显示", subtitle = "能力实测，用于判断管线档位")
-                Spacer(Modifier.height(Spacing.m))
-                InfoRow("厂商 / 型号", "${caps.manufacturer} ${caps.model}")
-                InfoRow("芯片平台", caps.soc)
-                InfoRow("系统版本", "Android ${caps.androidVersion} (API ${caps.sdkInt})")
-                InfoRow("主 ABI", caps.abi)
-                InfoRow(
-                    "广色域 (P3)",
-                    if (caps.wideColorGamut) "支持" else "不支持",
-                    if (caps.wideColorGamut) Ok else Bad
-                )
-                InfoRow("HDR", caps.hdrTypes.joinToString(" / ").ifEmpty { "不支持" })
-                InfoRow("刷新率", "${caps.refreshRateHz.toInt()} Hz")
-            }
+        if (showImport) {
+            ImportSheet(
+                onPickPhoto = {
+                    showImport = false
+                    onImportPhoto()
+                },
+                onPickArw = {
+                    showImport = false
+                    onImportArw()
+                },
+                onConnectCamera = {
+                    showImport = false
+                    showCamera = true
+                },
+                onDismiss = { showImport = false }
+            )
         }
 
-        item {
-            GlassCard {
-                SectionHeader(
-                    title = "内存预算",
-                    subtitle = "A7C2 33MP · RGBA16F 单张全幅占用"
-                )
-                Spacer(Modifier.height(Spacing.m))
-                InfoRow("单缓冲", "${caps.fp16SingleMiB} MiB")
-                InfoRow("三缓冲", "${caps.fp16TripleMiB} MiB")
-                InfoRow("当前可用", "${caps.availMemMiB} / ${caps.totalMemMiB} MiB")
-                InfoRow(
-                    "全分辨率处理",
-                    if (caps.fullResFeasible) "可行" else "内存不足，需降采样",
-                    if (caps.fullResFeasible) Ok else Warn
-                )
-            }
-        }
-
-        item {
-            GlassCard {
-                SectionHeader(title = "路线图", subtitle = "已完成与下一步")
-                Spacer(Modifier.height(Spacing.m))
-                RoadmapStep(1, "工程骨架 + CI", done = true)
-                RoadmapStep(2, "NDK + LibRaw（A7C2 ARW 解码）", done = true)
-                RoadmapStep(3, "16-bit 线性渲染管线（预览 / 导出同源）", done = true)
-                RoadmapStep(4, "人像算子（磨皮 / 液化 / 祛瑕 / 追色）", done = true)
-                RoadmapStep(5, "内置人像预设 10 套", done = true)
-                RoadmapStep(6, "局部调整与画笔蒙版", done = true)
-                RoadmapStep(7, "端侧 AI（皮肤分割自动蒙版 + 人脸检测液化锚点）", done = true)
-                RoadmapStep(8, "A7C2 直连（USB PTP 拉图 + 批量套预设）", done = true)
-                RoadmapStep(9, "UI 改版（本阶段）", done = false)
-                RoadmapStep(10, "NAS 联动（P3）", done = false)
-            }
+        if (showCamera) {
+            CameraSheet(
+                longEdge = profile.fullResLongEdge,
+                onOpenLocalFile = onOpenLocalFile,
+                onDismiss = { showCamera = false }
+            )
         }
     }
 }
 
-@Composable
-private fun InfoRow(
-    label: String,
-    value: String,
-    valueColor: Color = Color.Unspecified
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = Spacing.xs),
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Text(
-            label,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Text(
-            value,
-            style = MaterialTheme.typography.bodyMedium,
-            color = valueColor
-        )
-    }
-}
+// ———————————————————————————————————————————————————————————————
+// 顶栏
+// ———————————————————————————————————————————————————————————————
 
+/**
+ * 首页顶栏：左侧标题，右侧「＋」。
+ *
+ * 刻意**不随内容滚动**（放在可滚动内容之外）：主操作在任何滚动位置都必须一点即达 ——
+ * 这是「显而易见优先」的直接体现（§1.4 信条 1）。
+ */
 @Composable
-private fun RoadmapStep(index: Int, title: String, done: Boolean) {
+private fun HomeTopBar(enabled: Boolean, onAdd: () -> Unit) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = Spacing.xs),
+        modifier = Modifier
+            .fillMaxWidth()
+            .statusBarsPadding()
+            .height(Spacing.controlHeight + Spacing.m)
+            .padding(horizontal = Spacing.page),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
-            if (done) "✓" else "·",
-            style = MaterialTheme.typography.bodyMedium,
-            color = if (done) Ok else MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Text(
-            "  $index. $title",
-            style = MaterialTheme.typography.bodyMedium,
-            color = if (done) {
-                MaterialTheme.colorScheme.onSurface
-            } else {
-                MaterialTheme.colorScheme.onSurfaceVariant
-            }
-        )
+        Text("调色台", style = MaterialTheme.typography.titleMedium)
+        Spacer(Modifier.weight(1f))
+        GlassCircleButton(label = "＋", onClick = onAdd, enabled = enabled, size = 40.dp)
+    }
+}
+
+// ———————————————————————————————————————————————————————————————
+// 展示位（全屏唯一视觉重心）
+// ———————————————————————————————————————————————————————————————
+
+/**
+ * 展示位：一块占满余下高度的玻璃，中心一个「＋」。
+ *
+ * ## 为什么保留一层几乎看不见的光晕
+ *
+ * 极简不等于「一块死板的灰」。强调色 α 0.18 的径向渐变只负责让大色块**有呼吸**，
+ * 它不是装饰，也不是品牌色展示 —— 调高就会与「照片是唯一彩色主体」冲突（编辑页尤其致命）。
+ *
+ * 光晕取 `colorScheme.primary` 而不是 [com.hifn.pixelcake.ui.theme.Seed]：深色主题下
+ * primary 是降饱和版本，直接写 `Seed` 会让首屏浮起一块过饱和的紫。
+ *
+ * ## 为什么只有符号、没有文案
+ *
+ * 「开始一张新的作品」这类句子是**产品在解释自己**，恰恰是首版被读成说明书的原因。
+ * 一个「＋」已经足够表达「从这里开始」，不需要再说一遍。
+ */
+@Composable
+private fun StartHero(
+    loading: Boolean,
+    onStart: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val tint = rememberGlassTint()
+    val interaction = remember { MutableInteractionSource() }
+
+    Box(
+        modifier = modifier
+            .pressScale(interaction)
+            .clickable(
+                interactionSource = interaction,
+                indication = null,
+                enabled = !loading,
+                onClick = onStart
+            )
+            .clip(Radius.shell)
+            .background(tint.surface, Radius.shell)
+            .background(
+                Brush.radialGradient(
+                    colors = listOf(
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.18f),
+                        Color.Transparent
+                    ),
+                    radius = 560f
+                )
+            )
+            .border(Glass.borderWidth, tint.border, Radius.shell),
+        contentAlignment = Alignment.Center
+    ) {
+        if (loading) {
+            CircularProgressIndicator(modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp)
+        } else {
+            Text(
+                "＋",
+                style = MaterialTheme.typography.displaySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }
