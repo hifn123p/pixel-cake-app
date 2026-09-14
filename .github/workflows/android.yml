@@ -58,6 +58,23 @@ jobs:
           path: app/build/outputs/apk/debug/*.apk
           retention-days: 90
 
+      # 「证书冲突」修复的回归护栏：打印签名证书指纹。
+      # 若跨构建指纹发生变化，说明 app/debug.keystore 没被用上（例如被误删或被 .gitignore 吞掉），
+      # 覆盖安装会重新开始报 INSTALL_FAILED_UPDATE_INCOMPATIBLE。非致命，缺 apksigner 时跳过。
+      - name: Print debug APK signer
+        if: success()
+        run: |
+          BT=$(ls -d "${ANDROID_SDK_ROOT:-$ANDROID_HOME}"/build-tools/*/ 2>/dev/null | sort -V | tail -1)
+          APK=$(ls app/build/outputs/apk/debug/*.apk 2>/dev/null | head -1)
+          if [ -z "$BT" ] || [ -z "$APK" ]; then
+            echo "apksigner 或 APK 缺失，跳过签名指纹检查"
+            exit 0
+          fi
+          echo "### debug APK 签名证书" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          "$BT/apksigner" verify --print-certs "$APK" | tee /tmp/certs.txt >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
       # F13：构建摘要（项目硬要求：Action 之后通知我）
       - name: Build summary
         if: always()
@@ -156,12 +173,14 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
+      # Secrets 里存的是 openssl 导出的 PKCS12（.p12），不是 keytool 的 JKS。
+      # Gradle 侧已显式声明 storeType = "PKCS12"，故文件名与后缀必须一致。
       - name: Decode keystore from Secrets
-        run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > "$RUNNER_TEMP/pixelcake.jks"
+        run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > "$RUNNER_TEMP/pixelcake.p12"
 
       - name: Assemble signed release
         env:
-          KEYSTORE_PATH: ${{ runner.temp }}/pixelcake.jks
+          KEYSTORE_PATH: ${{ runner.temp }}/pixelcake.p12
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
@@ -176,4 +195,4 @@ jobs:
 
       - name: Clean up keystore
         if: always()
-        run: rm -f "$RUNNER_TEMP/pixelcake.jks"
+        run: rm -f "$RUNNER_TEMP/pixelcake.p12"

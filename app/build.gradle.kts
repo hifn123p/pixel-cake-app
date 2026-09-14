@@ -42,9 +42,29 @@ android {
         noCompress += "tflite"
     }
 
-    // 签名配置只在 CI 注入了 KEYSTORE_PATH 时创建。
-    // 本地或无 Secrets 的 CI 环境回退到 debug 签名，保证 assembleRelease 永不因缺签名而失败。
+    // 签名配置分两条路：
+    // 1) debug —— 固定绑定入库的 app/debug.keystore（PKCS12）。
+    //    动机：以前 CI 从不注入 keystore，AGP 会在每台全新 runner 上自动生成 debug 密钥，
+    //    于是两次构建的 debug 包「包名相同、签名不同」⇒ 覆盖安装被系统拒绝
+    //    （INSTALL_FAILED_UPDATE_INCOMPATIBLE，一加/ColorOS 提示「证书冲突」）。
+    //    仓库 .gitignore 已用 `!debug.keystore` 反忽略该文件，故可入库。
+    // 2) release —— 仅在 CI 注入 KEYSTORE_PATH 时创建；缺 Secrets 时回退 debug 签名，
+    //    保证 assembleRelease 永不因缺签名而失败。
     signingConfigs {
+        val bundledDebugKeystore = file("debug.keystore")
+        if (bundledDebugKeystore.exists()) {
+            maybeCreate("debug").apply {
+                storeFile = bundledDebugKeystore
+                // Android 官方 debug 密钥约定口令，非机密；入库只为让签名跨构建稳定
+                storePassword = "android"
+                keyAlias = "androiddebugkey"
+                keyPassword = "android"
+                // 该密钥库由 openssl 导出为 PKCS12，必须显式声明，
+                // 否则默认按 .keystore 后缀当 JKS 解析而报「密钥库格式错误」
+                storeType = "PKCS12"
+            }
+        }
+
         val keystorePath = System.getenv("KEYSTORE_PATH")
         if (!keystorePath.isNullOrBlank()) {
             create("release") {
@@ -52,6 +72,8 @@ android {
                 storePassword = System.getenv("KEYSTORE_PASSWORD")
                 keyAlias = System.getenv("KEY_ALIAS")
                 keyPassword = System.getenv("KEY_PASSWORD")
+                // 同上：CI 从 Secrets 解出的是 PKCS12
+                storeType = "PKCS12"
             }
         }
     }
