@@ -2,77 +2,82 @@
 
 > 由 push 触发的工作流运行结果整理。本文件每次 CI 后**覆盖重写**（前一次报告已清空）。
 > 生成时间：2026-09-14（本地）
-> 关联提交：`ca4ac119e40a4566fec330b04322b6cdf5ce9b15`
-> 运行链接：<https://github.com/hifn123p/pixel-cake-app/actions/runs/34816492199>
+> 关联提交：`e633ec6093ba7a923e1974590218085d1b55bb22`
+> 运行链接：<https://github.com/hifn123p/pixel-cake-app/actions/runs/34859073004>
 
-## 结论：✅ 成功（success）—— UI 改版继续（玻璃组件扩展 / 动效 token 无障碍坍缩）
+## 结论：✅ 成功（success）—— 4 个 job 全绿，**首次产出签名 Release APK**
 
-push 到 `main` 触发 `Android CI`。本轮为 **UI-1c**：玻璃组件扩展与页面接线（`c3841cd`，21 文件 +1406/-359）
-+ 动效 token 的「系统移除动画」坍缩修正（`ca4ac11`）。
-首跑 run `34816082925` 因 `AppShell.kt` 两处 `@Composable` 上下文错误（Build + Lint 双红），
-修正后 run `34816492199` **一次通过**，产出 debug APK。
+push 到 `main` 触发 `Android CI`。本轮配置了 4 个 Secrets（`KEYSTORE_BASE64` / `KEYSTORE_PASSWORD` / `KEY_ALIAS` / `KEY_PASSWORD`），
+`check-signing` 探测到 keystore ⇒ **`Signed Release` 不再跳过，首次真正构建并产出签名 APK**。
+同时固定了 debug 签名（入库 `app/debug.keystore`）并补上 LiteRT 的 R8 规则。**一次通过，无失败 job。**
 
-## 任务（Job）总览（最终）
+## 任务（Job）总览
 
 | Job | 结论 | 说明 |
 |---|---|---|
-| Build Debug APK | ✅ success | `assembleDebug` + `testDebugUnitTest` 全过 → 上传 debug APK |
+| Build Debug APK | ✅ success | `assembleDebug`（固定 debug 签名）+ `testDebugUnitTest` 全过 → 上传 debug APK |
 | Lint (Android Lint) | ✅ success | `lintDebug` 通过 |
-| Check signing secrets | ✅ success | 探测 `KEYSTORE_BASE64` 是否存在 |
-| Signed Release | ⏭ skipped | 未配置 `KEYSTORE_BASE64` secret |
+| Check signing secrets | ✅ success | 探测到 `KEYSTORE_BASE64`（4 个 Secrets 已配） |
+| **Signed Release** | ✅ **success** | **首次运行**：解出 PKCS12 keystore → `assembleRelease`（启用 R8）→ 上传签名 APK |
 
-## 本轮失败 → 修复
+## 本轮产出物（Artifacts）
 
-| Run | 提交 | 结论 | 失败点 / 修复 |
-|---|---|---|---|
-| `34816082925` | `c3841cd` | ❌ failure（Build + Lint） | `AppShell.kt:82` 与 `:87` 报 `@Composable invocations can only happen from the context of a @Composable function`：`AnimatedContent` 的 `transitionSpec` lambda 里调用了 `Motion.durationFor(...)`，而该函数当时被标注 `@Composable`。 |
-| `34816492199` | `ca4ac11` | ✅ success | 去掉 `Motion.durationFor` / `Motion.reduceMotion` 的 `@Composable` 标注后全绿 |
+| Artifact | 大小 | 说明 |
+|---|---|---|
+| `pixelcake-release-e633ec6…` | ≈21.8 MB | **签名 Release APK**（首次产出，保留 90 天） |
+| `pixelcake-debug-e633ec6…` | ≈32.5 MB | Debug APK（保留 90 天） |
+| `lint-report-e633ec6…` | ≈30 KB | Android Lint HTML 报告（保留 7 天） |
 
-> **根因**：`Motion.reduceMotion()` 用 `remember { !ValueAnimator.areAnimatorsEnabled() }`，被标了 `@Composable`，
-> 连带 `durationFor()` 也是 `@Composable`。但 `transitionSpec` 是 `AnimatedContent` 的**非合成**作用域 lambda，
-> 在其中调用 `@Composable` 必然编译失败。
->
-> **修复与理由**：`areAnimatorsEnabled()` 只是一次静态读取，**不需要**合成作用域；且 `remember` 无 key ⇒ 永不刷新，
-> 反而无法响应系统开关变化。故两者改为**普通函数**（`fun durationFor(ms: Int): Int = if (reduceMotion()) 0 else ms`），
-> 于是「合成内」与「`transitionSpec` 等非合成上下文」都可调用 —— 与 `UI_DESIGN.md` §5 要求的
-> `tween(Motion.durationFor(Motion.base), easing = ...)` 写法在**任何位置**都成立。顺带删掉失效的 `remember` 导入。
-> `EditorScreen` 那 6 处调用点不受影响（非 composable 函数当然可被 composable 调用）。
+下载：Actions → 本轮 run `34859073004` → 页面底部 Artifacts；或在 GitHub API `…/actions/runs/34859073004/artifacts`。
 
 ## 本批提交
 
 | 提交 | 说明 |
 |---|---|
-| `c3841cd` | `feat(ui)`: UI-1c 玻璃组件扩展与页面接线（新增 GlassCircleButton/ImportSheet/PresetThumbRow/CameraSheet + 主题与页面调整） |
-| `ca4ac11` | `fix(ui)`: Motion.durationFor/reduceMotion 去掉 `@Composable`（可在 transitionSpec 等非合成上下文调用） |
+| `e633ec6` | `chore(signing)`: 固定 debug 签名（入库 `app/debug.keystore`，PKCS12）+ release 改用 PKCS12 Secrets + LiteRT R8 规则（首次启用 release） |
 
-新增文件：`ui/components/{GlassCircleButton,ImportSheet,PresetThumbRow}.kt`、`ui/home/CameraSheet.kt`；
-改动：`MainActivity`、`ui/components/{ActionTile,GlassCard,GlassSegmentedBar,ParamSlider}`、
-`ui/editor/{EditorScreen,ParamPanel}`、`ui/home/HomeScreen`、`ui/settings/SettingsScreen`、
-`ui/shell/AppShell`、`ui/theme/{Color,Glass,Motion,Radius,Theme}`、`docs/UI_DESIGN.md`、`docs/ui_preview.html`。
+改动明细：
+
+1. **`app/build.gradle.kts`** — 新增 `signingConfigs`：
+   - `debug`：绑定入库的 `app/debug.keystore`（PKCS12，口令为 Android 公开约定 `android`/`androiddebugkey`）。
+     动机：以前 CI 从不注入 keystore，AGP 会在每台全新 runner 上**自动生成** debug 密钥 ⇒ 两次构建的 debug 包
+     「包名相同、签名不同」⇒ 真机覆盖安装被拒（`INSTALL_FAILED_UPDATE_INCOMPATIBLE`，ColorOS 提示「证书冲突」）。
+   - `release`：`storeType = "PKCS12"`（Secrets 里存的是 openssl 导出的 `.p12`，非 keytool 的 JKS）。
+2. **`.github/workflows/android.yml`** — release job 解出 `pixelcake.p12`（原 `.jks`）并对应清理；
+   build job 新增「打印 debug APK 签名证书指纹」步骤（签名漂移回归护栏，非致命）。
+3. **`app/proguard-rules.pro`** — 新增 LiteRT 的 `-keep`/`-dontwarn`（R8 首次启用前的必要护栏：
+   LiteRT 经 JNI/反射访问自身类，不 keep 会在 release 包运行期崩，且 debug 不复现）。
+4. **`app/debug.keystore`**（新增入库）— Android 标准 debug 密钥库（PKCS12，2690 B，sha256 `9fe4dbdd…`）。
+
+## 🔐 安全边界（重要）
+
+- 入库的 **`debug.keystore` 是 Android 标准调试密钥**，其口令（`android`/`androiddebugkey`）是**公开约定、非机密**，
+  入库只为让 debug 签名跨构建稳定；`.gitignore` 用 `!debug.keystore` 有意反忽略。
+- ⚠️ **release keystore 绝不能入库**：它只存在于 GitHub Secrets（`KEYSTORE_BASE64` 等），
+  CI 通过 `$RUNNER_TEMP` 临时落盘、job 结束即删。请勿把 release 密钥文件提交进仓库。
+- 若将来**误提交**了任何真实密钥/口令，仅删除文件**不够** —— 必须用 `git filter-repo`（或 BFG）清理**历史**并立刻轮换该密钥。
 
 ## 历史回归记录
 
 | Run | 提交 | 结论 | 失败点 |
 |---|---|---|---|
-| `34708984614` | `40863e8` | ❌ failure | 单测 FaceAnchorTest 未限定嵌套类 `RetouchLayer.FaceAnchor` → Unresolved reference |
-| `34709253707` | `7c5f3db` | ✅ success | 无（补 import 后全绿，P1p-2 人脸检测链路落地） |
-| `34709474264` | `3d5b62c` | ✅ success | 无（CI 报告 docs-only 提交） |
 | `34744787789` | `ca5410b` | ❌ failure | ActionTile 缺 `dp` 导入 + AppShell `togetherTo` 笔误（两处编译错误） |
 | `34745071202` | `fbc5e49` | ✅ success | 无（UI-1 改版编译修复后全绿） |
 | `34745274221` | `30b73e3` | ✅ success | 无（CI 报告 docs-only 提交） |
 | `34816082925` | `c3841cd` | ❌ failure | AppShell `transitionSpec` 中调用 `@Composable` 的 `Motion.durationFor` |
 | `34816492199` | `ca4ac11` | ✅ success | 无（Motion token 去 `@Composable` 后全绿） |
+| `34816912452` | `7c3eae1` | ✅ success | 无（CI 报告 docs-only 提交） |
+| `34859073004` | `e633ec6` | ✅ success | 无（**首次 Signing Release 成功**，4 job 全绿） |
 
 ## 后续步骤
 
-1. 真机（一加15）下载本轮 debug APK 验收 **UI 改版**：玻璃 TabBar、导入 Sheet、预设缩略图行、相机 Sheet、圆形图标按钮、
-   设置页、编辑器工具栏 / 参数面板 / 导出 Sheet、背景与动效（对照 `docs/UI_DESIGN.md` 与 `docs/ui_preview.html`）。
-2. **无障碍回归**：系统「设置 → 开发者选项 → 动画程序时长缩放 = 关闭」后，所有 `tween` 淡入淡出应立即到位、无残影
-   （这正是本轮 `durationFor` 的护栏所保证的行为）。
-3. 一并回归 P1p-2 人脸检测 → 液化锚点、ML 自动蒙版、retouch、相机批量、Beauty、ToneCurve。
-4. 如有新修改，按固定流程 **全量推送** → 触发 CI → 结果覆盖写入本文件再推送。
-5. 如遇 lint job 报 `Gradle build daemon disappeared`，先 **rerun-failed-jobs** 重试一次（用 `ci_rerun.py`）。
-6. 如需发布签名 Release，需在仓库 Secrets 配置 `KEYSTORE_BASE64`（及别名/密码），否则 release job 持续跳过。
+1. 真机（一加15）分别下载 **release 签名 APK** 与 debug APK 验证：
+   - **release 包**：R8 混淆后 LiteRT/MediaPipe 推理、相机 PTP、ARW 解码等是否正常（首次跑 R8，重点看运行期）；
+   - **debug 包**：确认与上一版可**覆盖安装**（不再报 `INSTALL_FAILED_UPDATE_INCOMPATIBLE`）；
+   - 功能面：UI 改版（玻璃 TabBar/Sheet/组件）、P1p-2 人脸检测→液化锚点、ML 自动蒙版、retouch、相机批量、Beauty、ToneCurve。
+2. 如需**正式发布**（Tag + Release 页面附件），可另建 `tag`/`release` 工作流或用 `gh release`；当前 CI 只把签名 APK 作为 Actions Artifact 上传（保留 90 天）。
+3. 如有新修改，按固定流程 **全量推送** → 触发 CI → 结果覆盖写入本文件再推送。
+4. 如遇 lint job 报 `Gradle build daemon disappeared`，先 **rerun-failed-jobs** 重试一次（用 `ci_rerun.py`）。
 
 ---
-*本报告由 push 后 GitHub Actions 运行结果自动整理；本轮 UI 改版继续，`@Composable` 上下文错误修复后全绿。*
+*本报告由 push 后 GitHub Actions 运行结果自动整理；本轮 4 job 全绿，首次产出签名 Release APK。*
