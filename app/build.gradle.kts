@@ -17,7 +17,12 @@ android {
         versionCode = 1
         versionName = "0.1.0"
 
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        // 刻意**不声明** testInstrumentationRunner（审计 M8）：本项目没有 androidTest 源集、
+        // 也没有 androidx.test 依赖，裸声明是死配置 —— 一旦有人加仪器测试会因缺依赖直接红；
+        // 而且仪器测试在本项目的 CI 里根本跑不了（无反无模拟器）。
+        // 需要护栏的 UI 逻辑一律抽成**纯函数**走 JVM 单测：预览落点换算
+        // `ui/editor/EditorScreen.kt: fitContentRect` → `FitContentRectTest` 就是这条路的样板。
+        // 将来真要引入仪器测试，请连同 compose-ui-test-junit4 依赖一起加回来。
 
         externalNativeBuild {
             cmake {

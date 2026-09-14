@@ -48,6 +48,8 @@ import com.hifn.pixelcake.core.ml.MlFaceProvider
 import com.hifn.pixelcake.core.ml.MlMaskProvider
 import com.hifn.pixelcake.diag.DebugLog
 import com.hifn.pixelcake.ui.editor.EditorScreen
+import com.hifn.pixelcake.ui.editor.EditorStatus
+import com.hifn.pixelcake.ui.editor.StatusKind
 import com.hifn.pixelcake.ui.home.HomeScreen
 import com.hifn.pixelcake.ui.home.probeCapabilities
 import com.hifn.pixelcake.ui.home.resolutionProfile
@@ -120,7 +122,8 @@ private fun AppRoot() {
     val history = remember { EditHistory() }
     var params by remember { mutableStateOf(EditParams()) }
     var rendered by remember { mutableStateOf<Bitmap?>(null) }
-    var status by remember { mutableStateOf("") }
+    // 状态行：**类别 + 文案一起**存（审计 M2）。UI 侧按 kind 取色，不再拿文案做判断。
+    var status by remember { mutableStateOf(EditorStatus()) }
     var exporting by remember { mutableStateOf(false) }
     // 导出格式（JPEG / PNG）：由编辑器里的格式选择驱动，导出两条路径（RAW / sRGB）共用同一取值。
     var exportFormat by remember { mutableStateOf(ExportFormat.JPEG) }
@@ -144,7 +147,7 @@ private fun AppRoot() {
     var autoMaskNote by remember { mutableStateOf("") }
     // P1p-2c：液化锚点来源提示（人脸检测 / 蒙版质心）。供真机验收核对「锚点到底来自哪」。
     var liquifyNote by remember { mutableStateOf("") }
-    // UI-4b(A 档)：预设缩略图（id → 位图）。按**原图**渲染，只在换图时算一次。
+    // UI-4b（A 档）：预设缩略图（id → 位图）。按**原图**渲染，只在换图时算一次。
     var presetThumbs by remember { mutableStateOf(emptyMap<String, Bitmap>()) }
 
     // 预设缩略图：**从原图渲染**，与当前编辑无关 —— 缩略图回答的是「这个预设会把照片变成什么样」，
@@ -256,11 +259,11 @@ private fun AppRoot() {
         DebugLog.i(DebugLog.TAG_IMPORT, "pick", mapOf("uri" to uri.toString()))
         scope.launch {
             loading = true
-            status = "正在解码…"
+            status = EditorStatus(StatusKind.Info, "正在解码…")
             val dec = runCatching { Decoder.decodeToProxy(context, uri, profile.proxyLongEdge) }.getOrNull()
             loading = false
             if (dec == null) {
-                status = "无法解码该文件"
+                status = EditorStatus(StatusKind.Error, "无法解码该文件")
                 DebugLog.w(DebugLog.TAG_DECODE, "decode failed", mapOf("uri" to uri.toString()))
             } else {
                 imported = dec
@@ -278,7 +281,11 @@ private fun AppRoot() {
                 activePresetId = "none"
                 autoMaskNote = ""
                 liquifyNote = ""
-                status = if (dec.linear != null) "RAW 已按 16-bit 线性管线载入" else ""
+                status = if (dec.linear != null) {
+                    EditorStatus(StatusKind.Info, "RAW 已按 16-bit 线性管线载入")
+                } else {
+                    EditorStatus()
+                }
                 editorOpen = true
                 DebugLog.i(
                     DebugLog.TAG_DECODE,
@@ -399,7 +406,9 @@ private fun AppRoot() {
                             val mlKey = mlCacheKey(srcUri, img.bitmap)
                             exporting = true
                             exportCancelled.set(false)
-                            status = "正在生成导出…"
+                            status = EditorStatus(StatusKind.Info, "正在生成导出…")
+                            // A1 取证：导出起点（此刻蒙版/包围盒缓冲都还没分配）
+                            DebugLog.i(DebugLog.TAG_EDIT, "export begin", memorySnapshot())
                             val result: Pair<Uri?, String> = withContext(Dispatchers.Default) {
                                 val rawPath = img.rawCachePath
                                 if (rawPath != null) {
@@ -418,6 +427,8 @@ private fun AppRoot() {
                                             )
                                         }
                                     } else null
+                                    // A1 取证：耗峰前一刻（画笔栅格已建，液化条带与包围盒尚未分配）
+                                    DebugLog.i(DebugLog.TAG_EDIT, "raw export pre-render", memorySnapshot())
                                     val full = EditEngine.renderLinearFile(
                                         path = rawPath,
                                         maxLongSide = profile.fullResLongEdge,
@@ -427,7 +438,9 @@ private fun AppRoot() {
                                         faceAnchor = faceAnchor
                                     ) { p ->
                                         if (p % 20 == 0 || p >= 100) {
-                                            scope.launch(Dispatchers.Main) { status = "正在生成导出… $p%" }
+                                            scope.launch(Dispatchers.Main) {
+                                                status = EditorStatus(StatusKind.Info, "正在生成导出… $p%")
+                                            }
                                         }
                                         !exportCancelled.get()
                                     }
@@ -467,6 +480,9 @@ private fun AppRoot() {
                                                     )
                                                 }
                                             } else null
+                                            // A1 取证：整幅 retouch 前一刻（目标 Bitmap + 画笔栅格都在堆上，
+                                            // 紧接着 beautyPhase 还会再开两份整幅级缓冲 ⇒ 这里是最可能的爆点）
+                                            DebugLog.i(DebugLog.TAG_EDIT, "srgb export pre-retouch", memorySnapshot())
                                             RetouchLayer.apply(fullTarget, fretouch, fmask, fAnchor)
                                             val out = withContext(Dispatchers.IO) {
                                                 Exporter.export(context, fullTarget, fmt, 92)
@@ -488,20 +504,21 @@ private fun AppRoot() {
                             val (exportedUri, label) = result
                             exporting = false
                             status = when {
-                                exportCancelled.get() -> "已取消导出"
-                                exportedUri != null -> "已导出（$label）：$exportedUri"
-                                else -> "导出失败（$label）"
+                                exportCancelled.get() -> EditorStatus(StatusKind.Info, "已取消导出")
+                                exportedUri != null ->
+                                    EditorStatus(StatusKind.Success, "已导出（$label）：$exportedUri")
+                                else -> EditorStatus(StatusKind.Error, "导出失败（$label）")
                             }
                             DebugLog.i(
                                 DebugLog.TAG_EDIT, "export",
-                                mapOf("ok" to (exportedUri != null), "tier" to label)
+                                mapOf("ok" to (exportedUri != null), "tier" to label) + memorySnapshot()
                             )
                         }
                     },
                     onExportFormatChange = { exportFormat = it },
                     onCancelExport = {
                         exportCancelled.set(true)
-                        status = "正在取消…"
+                        status = EditorStatus(StatusKind.Info, "正在取消…")
                     },
                     onBack = {
                         rendered?.recycle()
@@ -536,7 +553,8 @@ private fun AppRoot() {
                         onImportPhoto = { photoLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
                         onImportArw = { arwLauncher.launch(arrayOf("*/*")) },
                         loading = loading,
-                        message = status,
+                        // 首屏状态是**纯文案**（无类别取色需求）→ 取 .text 即可。
+                        message = status.text,
                         // P2：相机直连拉取的缓存文件（file:// 于本进程内可读，ARW 由后缀路由到线性管线）
                         onOpenLocalFile = { file -> openInEditor(Uri.fromFile(file)) }
                     )
@@ -557,6 +575,29 @@ private fun AppRoot() {
 
 /** ML 蒙版缓存键：源图 uri + 预览位图尺寸。同一张图在预览与导出之间复用同一蒙版对象。 */
 private fun mlCacheKey(uri: Uri?, bmp: Bitmap): String = "${uri ?: "-"}#${bmp.width}x${bmp.height}"
+
+/**
+ * 堆内存快照（审计 A1 的取证手段，零风险、先做）。
+ *
+ * 33MP 全分辨率导出的峰值是否真的逼近堆上限，**靠真机日志判断，不靠推算**。
+ * 判读口径：
+ * - 失败时 `heapPct` 已接近 100 ⇒ 真 OOM，需要按 A1 的方案削峰；
+ * - 失败但 `heapPct` 明显偏低 ⇒ 另有原因（例如系统拒绝分配大 Bitmap、或 native 侧失败），
+ *   此时去改 retouch 的内存纪律是白费功夫。
+ *
+ * `maxMB` 即堆上限（`largeHeap` 未开启时约等于 dalvik.vm.heapgrowthlimit）。
+ */
+private fun memorySnapshot(): Map<String, Any> {
+    val r = Runtime.getRuntime()
+    val max = (r.maxMemory() / 1_048_576).coerceAtLeast(1)
+    val used = (r.totalMemory() - r.freeMemory()) / 1_048_576
+    return mapOf(
+        "usedMB" to used,
+        "totalMB" to r.totalMemory() / 1_048_576,
+        "maxMB" to max,
+        "heapPct" to (used * 100 / max)
+    )
+}
 
 /**
  * 编辑器侧的皮肤蒙版（P1p-1b）：委托 [RetouchScale.editorSkinMask]，与相机批处理共用**同一换算口径**。

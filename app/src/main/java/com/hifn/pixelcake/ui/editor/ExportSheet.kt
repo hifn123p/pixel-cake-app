@@ -24,6 +24,27 @@ import com.hifn.pixelcake.ui.theme.Radius
 import com.hifn.pixelcake.ui.theme.Spacing
 
 /**
+ * 状态类别 —— **UI 必须按它呈现，绝不能拿文案字符串判断**（审计 M2）。
+ *
+ * 此前 `ExportSheet` 用 `status.startsWith("已导出")` 决定颜色：文案是给用户看的，
+ * 一旦改一个字（「已导出」→「导出完成」）就会**静默改掉业务逻辑**，且不会有任何编译错误。
+ */
+enum class StatusKind { Info, Success, Error }
+
+/**
+ * 编辑器状态行的一条内容：类别 + 文案。
+ *
+ * 二者必须一起传递，避免出现「文案说成功、类别说失败」的不一致状态（分开两个参数就迟早会漏设一个）。
+ * [text] 为空表示不显示状态行。
+ */
+data class EditorStatus(
+    val kind: StatusKind = StatusKind.Info,
+    val text: String = ""
+) {
+    val visible: Boolean get() = text.isNotEmpty()
+}
+
+/**
  * 导出面板（`docs/UI_DESIGN.md` §3.2）。
  *
  * ## 为什么是 Sheet 而不是常驻底栏
@@ -41,7 +62,7 @@ fun ExportSheet(
     exportFormat: ExportFormat,
     onExportFormatChange: (ExportFormat) -> Unit,
     exporting: Boolean,
-    status: String,
+    status: EditorStatus,
     onExport: () -> Unit,
     onCancelExport: () -> Unit,
     onDismiss: () -> Unit
@@ -99,11 +120,18 @@ fun ExportSheet(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
-            if (status.isNotEmpty()) {
+            if (status.visible) {
                 Text(
-                    status,
+                    status.text,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = if (status.startsWith("已导出")) Ok else MaterialTheme.colorScheme.onSurfaceVariant
+                    // 按**结构化类别**取色，而不是按文案前缀猜（审计 M2）。
+                    // 顺带修掉一个实际体验问题：此前失败/取消与普通提示同色（灰色），
+                    // 导出失败在视觉上几乎无法与「正在生成导出…」区分。
+                    color = when (status.kind) {
+                        StatusKind.Success -> Ok
+                        StatusKind.Error -> MaterialTheme.colorScheme.error
+                        StatusKind.Info -> MaterialTheme.colorScheme.onSurfaceVariant
+                    }
                 )
             }
 
