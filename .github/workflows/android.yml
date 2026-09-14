@@ -240,13 +240,17 @@ jobs:
           set -euo pipefail
           ls -l dist
           APK=$(find dist -name '*.apk' | head -1)
+          # 附上版本号再挂到 Releases：否则附件名永远是千篇一律的 app-release.apk，
+          # 下载到本地后无法区分版本。
+          OUT="pixelcake-${GITHUB_REF_NAME}-release.apk"
+          cp "$APK" "$OUT"
           # --verify-tag：tag 必须已存在（本例由 push tag 触发），不让 gh 顺手新建
           # --generate-notes：按提交自动生成 release notes
-          gh release create "$GITHUB_REF_NAME" "$APK" \
+          gh release create "$GITHUB_REF_NAME" "$OUT" \
             --repo "$GITHUB_REPOSITORY" \
             --title "$GITHUB_REF_NAME" \
             --generate-notes \
             --verify-tag
           echo "### 🍰 Release $GITHUB_REF_NAME 已发布" >> "$GITHUB_STEP_SUMMARY"
-          echo "- APK: \`$(basename "$APK")\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- APK: \`$OUT\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- 页面: https://github.com/$GITHUB_REPOSITORY/releases/tag/$GITHUB_REF_NAME" >> "$GITHUB_STEP_SUMMARY"
