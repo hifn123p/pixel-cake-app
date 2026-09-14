@@ -41,11 +41,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -114,6 +116,10 @@ private const val BACKDROP_ALPHA = 0.26f
  * 坐标一律**归一化**再上报：预览尺寸与源图/导出分辨率都不是一回事（硬约定），
  * 任何一处直接传像素坐标都会在导出时错位。
  *
+ * ⚠️ 归一化的基准是**图片内容矩形**，不是预览 `Box`（见 [fitContentRect]）。因为 [ContentScale.Fit]
+ * 会给非等比的照片留黑边，用 `Box` 尺寸归一化会让落点系统性偏移 —— 这条曾经写反过，
+ * 后果是「涂不准 + 导出后位置也不对」，属 P0 级功能缺陷。
+ *
  * @param autoMaskNote 自动蒙版状态（模型/加速器）。以胶囊提示浮在预览上、数秒后淡出，
  *   **不再占参数面板空间** —— 它是系统状态说明，不是参数。真机验收时用它核对是否真走 GPU。
  * @param liquifyNote 液化锚点来源（人脸检测 / 蒙版质心）。同上，供真机验收核对。
@@ -138,7 +144,9 @@ fun EditorScreen(
     presetThumbs: Map<String, Bitmap> = emptyMap(),
     canUndo: Boolean,
     canRedo: Boolean,
-    status: String,
+    // 状态行：类别 + 文案一起传（见 [EditorStatus]）。**不要改回 String** ——
+    // 下游需要按类别取色，用文案前缀判断会在改文案时静默改变逻辑（审计 M2）。
+    status: EditorStatus,
     exporting: Boolean = false,
     exportFormat: ExportFormat = ExportFormat.JPEG,
     onParamChange: (EditParams) -> Unit,
@@ -243,9 +251,13 @@ fun EditorScreen(
                 Image(
                     bitmap = display,
                     contentDescription = "编辑预览",
+                    // contentScale 必须**显式**写出：手势归一化要靠它反算内容矩形（见 previewGestures）。
+                    // 依赖默认值的话，一旦 Compose 改了默认值就会静默改变落点换算。
+                    contentScale = ContentScale.Fit,
                     modifier = Modifier.fillMaxSize().previewGestures(
                         retouchTool = retouchTool,
                         previewSize = previewSize,
+                        contentSize = IntSize(display.width, display.height),
                         onBrushStroke = onBrushStroke,
                         onInpaintStroke = onInpaintStroke,
                         onPressChanged = { showOriginal = it }
@@ -378,38 +390,78 @@ private fun EditorTopBar(
 // ———————————————————————————————————————————————————————————————
 
 /**
+ * 按 [ContentScale.Fit] 反算图片在预览 `Box` 内的**实际绘制矩形**。
+ *
+ * 预览 `Box` 与照片长宽比几乎不可能一致（3:2 横构图照片 vs 竖屏的高 Box），于是 `Fit` 会把照片
+ * 等比缩放后**居中**放置，上下（或左右）留出黑边。而手势上报的是**相对照片**的归一化坐标，
+ * 所以必须先减掉黑边、再除以**内容**尺寸。
+ *
+ * ⚠️ 曾经的实现是「直接除以整块 Box 尺寸」，并附了注释说「与显示缩放无关」—— 那句话只在
+ * 「照片恰好铺满 Box」时成立。横构图照片在竖屏上，纵向归一化把黑边也算进了照片高度，
+ * 落点会系统性偏移（黑边越高偏得越多），且**预览与导出共用这套坐标**，两条路径一起错。
+ *
+ * @return 内容矩形；任一尺寸非法时返回 [Rect.Zero]（调用方据此跳过本次手势）。
+ *
+ * 可见性为 `internal`（而非 `private`）**是为了让 JVM 单测能直接覆盖它** —— 落点偏移这种
+ * 「看着对、其实系统性偏了」的缺陷靠目视验不出来，必须用数字钉死（`FitContentRectTest`）。
+ */
+internal fun fitContentRect(box: IntSize, image: IntSize): Rect {
+    if (box.width <= 0 || box.height <= 0 || image.width <= 0 || image.height <= 0) return Rect.Zero
+    val scale = minOf(
+        box.width.toFloat() / image.width,
+        box.height.toFloat() / image.height
+    )
+    val w = image.width * scale
+    val h = image.height * scale
+    val left = (box.width - w) / 2f
+    val top = (box.height - h) / 2f
+    return Rect(left, top, left + w, top + h)
+}
+
+/**
  * 预览区的指针交互。抽成 [Modifier] 扩展是为了让 [EditorScreen] 的布局部分读起来是布局，
  * 而不是被三段 `pointerInput` 代码块淹没。
  *
- * ⚠️ 坐标必须先除以**实测预览尺寸**再 `coerceIn(0f, 1f)`：预览是 letterbox 居中的，
- * 但上报的是归一化坐标，所以这里用整块预览 `Box` 的尺寸即可（与显示缩放无关）。
+ * 坐标一律先换算到**内容矩形**内的 [0..1] 再上报（换算依据见 [fitContentRect]）。
+ *
+ * ⚠️ `pointerInput` 的 key 必须带上 [previewSize] / [contentSize]：这两个参数是**普通值**
+ * （不是 state 读取），首帧拿到的是 `IntSize.Zero`；不把它们作为 key 重启手势协程，
+ * 归一化就会一直用首帧的零尺寸，涂抹落点会永远贴着角落。
  */
 private fun Modifier.previewGestures(
     retouchTool: String,
     previewSize: IntSize,
+    contentSize: IntSize,
     onBrushStroke: (Float, Float) -> Unit,
     onInpaintStroke: (Float, Float) -> Unit,
     onPressChanged: (Boolean) -> Unit
 ): Modifier = when (retouchTool) {
-    "skin" -> pointerInput(Unit) {
+    "skin" -> pointerInput(previewSize, contentSize) {
         detectDragGestures { change, _ ->
             change.consume()
-            val sx = previewSize.width.toFloat().coerceAtLeast(1f)
-            val sy = previewSize.height.toFloat().coerceAtLeast(1f)
+            val rect = fitContentRect(previewSize, contentSize)
+            if (rect.width <= 0f || rect.height <= 0f) return@detectDragGestures
+            // 拖动越界用 clamp（不能让手指划出画面就断笔），但基准是内容矩形而不是 Box。
             onBrushStroke(
-                (change.position.x / sx).coerceIn(0f, 1f),
-                (change.position.y / sy).coerceIn(0f, 1f)
+                ((change.position.x - rect.left) / rect.width).coerceIn(0f, 1f),
+                ((change.position.y - rect.top) / rect.height).coerceIn(0f, 1f)
             )
         }
     }
 
-    "blemish" -> pointerInput(Unit) {
+    "blemish" -> pointerInput(previewSize, contentSize) {
         detectTapGestures { offset ->
-            val sx = previewSize.width.toFloat().coerceAtLeast(1f)
-            val sy = previewSize.height.toFloat().coerceAtLeast(1f)
+            val rect = fitContentRect(previewSize, contentSize)
+            if (rect.width <= 0f || rect.height <= 0f) return@detectTapGestures
+            // 点在黑边上时**不落点**：那里没有像素，硬 clamp 会在照片边缘凭空多一个祛斑点。
+            if (offset.x < rect.left || offset.x > rect.right ||
+                offset.y < rect.top || offset.y > rect.bottom
+            ) {
+                return@detectTapGestures
+            }
             onInpaintStroke(
-                (offset.x / sx).coerceIn(0f, 1f),
-                (offset.y / sy).coerceIn(0f, 1f)
+                ((offset.x - rect.left) / rect.width).coerceIn(0f, 1f),
+                ((offset.y - rect.top) / rect.height).coerceIn(0f, 1f)
             )
         }
     }
