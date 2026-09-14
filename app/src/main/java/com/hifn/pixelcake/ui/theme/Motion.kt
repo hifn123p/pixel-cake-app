@@ -11,7 +11,6 @@ import androidx.compose.foundation.interaction.InteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 
@@ -97,17 +96,21 @@ object Motion {
      *
      * Android 上对应的开关是 `ANIMATOR_DURATION_SCALE == 0`，
      * `ValueAnimator.areAnimatorsEnabled()` 是官方推荐的读取方式（API 26+，本项目 minSdk 36）。
+     *
+     * ⚠️ **刻意不加 `@Composable`**：`areAnimatorsEnabled()` 是一次静态读取，不需要合成作用域；
+     * 而 `tween(Motion.durationFor(...))` 必须能在**非合成**上下文（如 `AnimatedContent` 的
+     * `transitionSpec` lambda）里调用 —— 标成 `@Composable` 会让那些调用点直接编译失败。
      */
-    @Composable
-    fun reduceMotion(): Boolean = remember { !ValueAnimator.areAnimatorsEnabled() }
+    fun reduceMotion(): Boolean = !ValueAnimator.areAnimatorsEnabled()
 
     /**
      * 依据系统动画开关，把时长档「坍缩」成 0（即不做 `tween`，直接落到终值）。
      *
      * 用法：`tween(Motion.durationFor(Motion.base), easing = Motion.easingOut)`。
      * ⚠️ 弹簧调用点**不需要**它 —— 弹簧自己就知道系统关了动画。
+     *
+     * 同样**不加 `@Composable`**：合成内与 `transitionSpec` 等非合成上下文都要能用。
      */
-    @Composable
     fun durationFor(ms: Int): Int = if (reduceMotion()) 0 else ms
 }
 
