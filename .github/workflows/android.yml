@@ -3,6 +3,8 @@ name: Android CI
 on:
   push:
     branches: [main]
+    # 打 v* tag 时同时触发：走到 publish job 会把签名 APK 发到 GitHub Releases
+    tags: ['v*']
   pull_request:
     branches: [main]
   # 允许在 GitHub 网页手动触发
@@ -193,6 +195,58 @@ jobs:
           path: app/build/outputs/apk/release/*.apk
           retention-days: 90
 
+      # R8 混淆映射表：排查 release 崩溃时用它把混淆堆栈还原成源码名。
+      # 刻意只作为 Actions artifact（不上传进 Release 附件），避免把内部符号名公开出去。
+      - name: Upload R8 mapping
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pixelcake-mapping-${{ github.sha }}
+          path: app/build/outputs/mapping/release/mapping.txt
+          if-no-files-found: ignore
+          retention-days: 90
+
       - name: Clean up keystore
         if: always()
         run: rm -f "$RUNNER_TEMP/pixelcake.p12"
+
+  # 只有打 tag（v*）时才发布：把「同一次构建」产出的签名 APK 挂到 GitHub Releases。
+  # 用 needs 串起 build/lint/release ⇒ 「单测或 lint 没过就不发布」，也不重复构建。
+  # permissions 只给这个 job 最小必要权限（contents: write 才能创建 Release）。
+  publish:
+    name: Publish GitHub Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [build, lint, release]
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+
+    steps:
+      # 轻量 checkout：让 gh 有 git 上下文（tag 名 / 远端），避免「not a git repository」
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download signed release APK
+        uses: actions/download-artifact@v4
+        with:
+          name: pixelcake-release-${{ github.sha }}
+          path: dist
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          ls -l dist
+          APK=$(find dist -name '*.apk' | head -1)
+          # --verify-tag：tag 必须已存在（本例由 push tag 触发），不让 gh 顺手新建
+          # --generate-notes：按提交自动生成 release notes
+          gh release create "$GITHUB_REF_NAME" "$APK" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes \
+            --verify-tag
+          echo "### 🍰 Release $GITHUB_REF_NAME 已发布" >> "$GITHUB_STEP_SUMMARY"
+          echo "- APK: \`$(basename "$APK")\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- 页面: https://github.com/$GITHUB_REPOSITORY/releases/tag/$GITHUB_REF_NAME" >> "$GITHUB_STEP_SUMMARY"
