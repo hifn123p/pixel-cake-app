@@ -130,12 +130,18 @@ object Beauty {
         val br = (b shr 16) and 0xff; val bg = (b shr 8) and 0xff; val bb = b and 0xff
         val cr = (c shr 16) and 0xff; val cg = (c shr 8) and 0xff; val cb = c and 0xff
         val dr = (d shr 16) and 0xff; val dg = (d shr 8) and 0xff; val db = d and 0xff
-        val lerp = { p: Int, q: Int -> ((p * (1 - tx) + q * tx)).toInt().coerceIn(0, 255) }
-        val tr = lerp(ar, br); val tg = lerp(ag, bg); val tb = lerp(ab, bb)
-        val br2 = lerp(cr, dr); val bg2 = lerp(cg, dg); val bb2 = lerp(cb, db)
-        val rr = ((tr * (1 - ty) + br2 * ty)).toInt().coerceIn(0, 255)
-        val gg = ((tg * (1 - ty) + bg2 * ty)).toInt().coerceIn(0, 255)
-        val bb3 = ((tb * (1 - ty) + bb2 * ty)).toInt().coerceIn(0, 255)
+        // lerp 抽成私有 inline 函数，而不是局部 lambda：lambda 会捕获 tx ⇒ **每个像素一次对象分配**
+        // （33MP 液化 ≈ 3300 万次），与 F06「逐像素零分配」的纪律冲突。
+        // 逐位等价：先 Float 运算、再 toInt() 截断、最后 clamp 到 0..255（与旧 lambda 完全一致）。
+        val tr = lerp1(ar, br, tx); val tg = lerp1(ag, bg, tx); val tb = lerp1(ab, bb, tx)
+        val br2 = lerp1(cr, dr, tx); val bg2 = lerp1(cg, dg, tx); val bb2 = lerp1(cb, db, tx)
+        val rr = lerp1(tr, br2, ty)
+        val gg = lerp1(tg, bg2, ty)
+        val bb3 = lerp1(tb, bb2, ty)
         return 0xff000000.toInt() or (rr shl 16) or (gg shl 8) or bb3
     }
+
+    /** 单通道线性插值；[t] ∈ [0,1]。inline + 无捕获 ⇒ 调用点不产生任何分配。 */
+    private inline fun lerp1(p: Int, q: Int, t: Float): Int =
+        (p * (1f - t) + q * t).toInt().coerceIn(0, 255)
 }
