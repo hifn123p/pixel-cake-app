@@ -1,12 +1,16 @@
 package com.hifn.pixelcake.ui.theme
 
+import android.app.Activity
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
 
 /**
  * 浅色普通主题（首页 / 设置）。
@@ -60,6 +64,8 @@ fun PixelCakeTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit
 ) {
+    // 系统栏图标明暗必须跟**生效主题**走（理由见 SystemBarIcons）
+    SystemBarIcons(lightBars = !darkTheme)
     // 同时下发 LocalDarkTheme：容器色/玻璃色必须跟随**生效**主题，不能各自按系统 uiMode 猜
     // （编辑页强制深色时，系统浅色会让它们取错色板 —— 详见 LocalDarkTheme 的文档）。
     CompositionLocalProvider(LocalDarkTheme provides darkTheme) {
@@ -68,6 +74,38 @@ fun PixelCakeTheme(
             typography = Typography,
             content = content
         )
+    }
+}
+
+/**
+ * 把系统栏（状态栏 / 导航栏）图标的明暗对齐到**生效主题**。
+ *
+ * ## 为什么非做不可
+ *
+ * `MainActivity` 用 `enableEdgeToEdge()` 做沉浸式，而它按**系统 `uiMode`** 决定图标明暗
+ * （`SystemBarStyle.auto`）。但编辑页由 [PixelCakeWorkspaceTheme] **强制深色**、并不改变系统 `uiMode` ——
+ * 于是系统处于浅色模式时，编辑页会拿到**深色图标压在深色工作台上**：时钟、电量几乎看不见。
+ * （`res/values/themes.xml` 里那句 `android:windowLightStatusBar=true` 同样是硬编码的「浅底」假设，
+ * 运行时被 `enableEdgeToEdge()` 覆盖，纠正不了这种情况。）
+ *
+ * 判据与 [LocalDarkTheme] 完全一致：**按生效主题**下发，绝不按系统猜。
+ *
+ * 用 [LaunchedEffect]（而非 `SideEffect`）是刻意的：后者每次重组都会重设一遍；
+ * 而编辑页参数一变就会重组，重复写系统栏属性是白费功夫 —— 只在明暗真正翻转时才写一次。
+ *
+ * @param lightBars 系统栏是否为「浅底」→ `true` 表示**深色图标**（浅色主题用）。
+ *   深色主题、以及强制深色的编辑页一律传 `false`（浅色图标）。
+ */
+@Composable
+private fun SystemBarIcons(lightBars: Boolean) {
+    val view = LocalView.current
+    // IDE 预览没有真实 Window，跳过；也不要在预览里触发系统调用。
+    if (view.isInEditMode) return
+    LaunchedEffect(lightBars) {
+        val window = (view.context as? Activity)?.window ?: return@LaunchedEffect
+        val controller = WindowCompat.getInsetsController(window, view)
+        controller.isAppearanceLightStatusBars = lightBars
+        controller.isAppearanceLightNavigationBars = lightBars
     }
 }
 
@@ -110,6 +148,9 @@ private val WorkspaceColors = darkColorScheme(
  */
 @Composable
 fun PixelCakeWorkspaceTheme(content: @Composable () -> Unit) {
+    // 编辑页恒为深色 ⇒ 系统栏必须是**浅色图标**：否则系统浅色模式下会拿到深色图标压在
+    // 深色工作台上（时钟 / 电量看不清）。见 SystemBarIcons。
+    SystemBarIcons(lightBars = false)
     CompositionLocalProvider(LocalDarkTheme provides true) {
         MaterialTheme(
             colorScheme = WorkspaceColors,

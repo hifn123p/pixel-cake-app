@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.FilterChip
@@ -73,7 +74,10 @@ fun SettingsScreen(
     }
 
     LazyColumn(
-        modifier = modifier.fillMaxSize(),
+        // ⚠️ `statusBarsPadding()` 不可省：`MainActivity` 开了 `enableEdgeToEdge()`，页面从 y=0 起画。
+        // 只靠 `contentPadding.top` 是**固定 32dp**，不随真实状态栏高度变化 —— 挖孔屏/高状态栏机型
+        // （ColorOS 常见 36~44dp）上标题会被状态栏压住。首屏顶栏用的就是同一个 Insets 修饰符。
+        modifier = modifier.fillMaxSize().statusBarsPadding(),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(
             start = Spacing.page,
             end = Spacing.page,

@@ -4,12 +4,15 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -19,10 +22,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import com.hifn.pixelcake.ui.theme.LocalDarkTheme
 import com.hifn.pixelcake.ui.theme.Motion
 import com.hifn.pixelcake.ui.theme.Radius
+import com.hifn.pixelcake.ui.theme.SliderThumbShadow
+import com.hifn.pixelcake.ui.theme.SliderTrackDark
+import com.hifn.pixelcake.ui.theme.SliderTrackLight
 import com.hifn.pixelcake.ui.theme.Spacing
 import kotlin.math.round
 
@@ -42,6 +51,17 @@ import kotlin.math.round
  * - **缩放** → [Motion.springSpatialFast]（空间属性，跟手）。
  *
  * 这两行正好是「按属性分族」的最小示例：同一个「正在拖动」的布尔量，驱动两个不同族的动画。
+ *
+ * ## 拇指改成「白色实心圆 + 投影」（UI-6）
+ *
+ * M3 默认拇指是一颗**强调色小圆**（本项目的深色档 #9C86F7）。它的问题是读起来像「一个彩色
+ * 状态点」而不是「一个可以抓住的实体」，而且在深色工作台上与强调色描边、选中态混成一片。
+ * iOS 的滑块拇指是**纯白 + 柔和投影**：白色在深底上天然最高对比（一眼看到「手柄在哪」），
+ * 投影则把它从轨道上「抬」起来，给出可拖拽的物理暗示。
+ *
+ * 白色是**主题相关**的，必须走 [LocalDarkTheme] 而不是 `isSystemInDarkTheme()` ——
+ * 本控件目前只在编辑页（强制深色）使用，但浅色页面里纯白拇指会直接消失，
+ * 所以这里不写死白色（硬约定见 `LocalDarkTheme` 的文档）。
  *
  * ## 拖动状态上报（[onDraggingChange]）
  *
@@ -66,6 +86,7 @@ fun ParamSlider(
 ) {
     var dragging by remember { mutableStateOf(false) }
     val accent = MaterialTheme.colorScheme.primary
+    val dark = LocalDarkTheme.current
 
     val valueColor by animateColorAsState(
         targetValue = if (dragging) accent else MaterialTheme.colorScheme.onSurfaceVariant,
@@ -77,6 +98,9 @@ fun ParamSlider(
         animationSpec = Motion.springSpatialFast(),
         label = "paramValueScale"
     )
+
+    val thumbColor = if (dark) Color.White else MaterialTheme.colorScheme.onSurface
+    val trackInactive = if (dark) SliderTrackDark else SliderTrackLight
 
     Column(modifier = modifier.fillMaxWidth().padding(vertical = Spacing.xs)) {
         Row(
@@ -113,6 +137,30 @@ fun ParamSlider(
                 dragging = false
                 onDraggingChange(false)
                 onValueChangeFinished()
+            },
+            // thumbColor 只对默认拇指生效；这里仍然显式写出来，是为了「万一回退到默认拇指」
+            // 时不会悄悄退回强调色小圆（自定义拇指见下）。轨道两色必须一起给：
+            // 只改 active 会让未选中的轨道继续用主题默认色，在深色工作台上明显偏亮。
+            colors = SliderDefaults.colors(
+                thumbColor = thumbColor,
+                activeTrackColor = accent,
+                inactiveTrackColor = trackInactive
+            ),
+            thumb = {
+                // 圆用 Radius.pill 表达而不是 CircleShape：圆角阶梯只允许「四档 + 胶囊」，
+                // 给等宽高的方块套胶囊就是正圆（与 GlassCircleButton 同一套约定）。
+                Box(
+                    modifier = Modifier
+                        .size(18.dp)
+                        .shadow(
+                            elevation = 3.dp,
+                            shape = Radius.pill,
+                            clip = false,
+                            ambientColor = SliderThumbShadow,
+                            spotColor = SliderThumbShadow
+                        )
+                        .background(thumbColor, Radius.pill)
+                )
             }
         )
     }

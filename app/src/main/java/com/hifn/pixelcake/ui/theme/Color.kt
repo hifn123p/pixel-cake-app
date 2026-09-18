@@ -58,14 +58,72 @@ val Gray4 = Color(0xFF7A7A83) // 辅助文字（浅色主题）
 val Gray5 = Color(0xFF3A3A40) // 次级正文（浅色主题）
 // Gray6 == Ink（0xFF1B1B1F）标题色，不重复定义
 
-/** 玻璃高光描边 */
-val GlassBorderLight = Color(0x59FFFFFF) // α 0.35
+/** 玻璃高光描边（**实心降级**路径专用；浮层的液态描边见下面的 `LiquidEdge*`） */
 val GlassBorderDark = Color(0x24FFFFFF) // α 0.14
 val GlassBorderLightOpaque = Color(0x14000000) // α 0.08，实心降级时改用深色描边
 
-/** 玻璃底 */
-val GlassTintLight = Color(0xB8FFFFFF) // α 0.72
-val GlassTintDark = Color(0xB81C1C22) // α 0.72
+// ———————————————————————————————————————————————————————————————
+// 液态玻璃（UI 方案 B「克制液态」；方案对比见 docs/UI_DESIGN.md §2.1）
+//
+// 与旧版「一块平色 tint」的区别：**明度在同一个面内自上而下变化**。
+// 平色的半透明面板只会被读成「磨砂亚克力」—— 因为它没有厚度；玻璃之所以像液体，
+// 靠的是顶亮底暗的那圈**边缘受光** + 面内渐变。模糊只负责「让下层不干扰读数」，不负责「贵」。
+//
+// 方向约定：光从上方来 ⇒ 顶亮底暗。明暗两套主题都遵守，调用点不需要按主题翻转。
+// α 刻意都压得很低：没有可透的下层，玻璃就只是一块灰塑料。
+//
+// ⚠️ 这组值取代了旧的 `GlassTintLight` / `GlassTintDark` / `GlassBorderLight`（已删除）。
+// ———————————————————————————————————————————————————————————————
+
+/** 液态玻璃本体：顶亮 → 中透 → 底回光（三段，0 / 0.48 / 1） */
+val LiquidTopDark = Color(0x26FFFFFF) // α 0.15
+val LiquidMidDark = Color(0x0BFFFFFF) // α 0.045
+val LiquidBottomDark = Color(0x16FFFFFF) // α 0.085
+
+val LiquidTopLight = Color(0xC4FFFFFF) // α 0.77
+val LiquidMidLight = Color(0xADFFFFFF) // α 0.68
+val LiquidBottomLight = Color(0xBAFFFFFF) // α 0.73
+
+/**
+ * 液态玻璃描边：**一条渐变描边同时承担「外描边 + 顶部镜面高光 + 底部反光」**。
+ *
+ * 为什么合并成一条：在 Compose 里把「外描边 + 两条 inset 高光」画成三层，要么自定义 Shape
+ * 轮廓、要么嵌套 padding 挤布局；而这三者在视觉上本就只表达同一件事 —— **边缘受光**。
+ * 一条顶亮底暗的渐变描边就能得到同样的「厚度」，且仍是一次 O(1) 绘制。
+ */
+val LiquidEdgeTopDark = Color(0x5CFFFFFF) // α 0.36
+val LiquidEdgeBottomDark = Color(0x1AFFFFFF) // α 0.10
+
+/**
+ * 浅色主题的描边必须**压暗**：白玻璃上再叠白描边等于没描边，
+ * 而旧的 α.35 白描边在浅底上会显脏（方案 B 风险点②）⇒ 改用 α.18 深色。
+ */
+val LiquidEdgeTopLight = Color(0x2E000000) // α 0.18
+val LiquidEdgeBottomLight = Color(0x12000000) // α 0.07
+
+/** 外投影：没有它，浮层是「贴」在工作台上而不是「浮」着 */
+val LiquidShadowDark = Color(0x66000000) // α 0.40
+val LiquidShadowLight = Color(0x1F000000) // α 0.12
+
+/**
+ * 分段控件（TabBar / 一级工具条）的选中指示块。
+ *
+ * 深色下用**白渐变**：iOS 的选中态是「一个被光打到的实体」，而平色的强调色块读起来只是
+ * 「一块高亮」。浅色下不能用白（白底白块 = 不可见）⇒ 退回强调色淡染，只保留顶部那条亮线。
+ */
+val SegmentFillTopDark = Color(0x4DFFFFFF) // α 0.30
+val SegmentFillBottomDark = Color(0x1FFFFFFF) // α 0.12
+val SegmentEdgeDark = Color(0x70FFFFFF) // α 0.44，顶部 inset 高光
+val SegmentShadowDark = Color(0x52000000) // α 0.32
+val SegmentEdgeLight = Color(0xE6FFFFFF) // α 0.90，浅色下顶部亮线改白
+val SegmentShadowLight = Color(0x1A000000) // α 0.10
+
+/** 滑块轨道。深色下压亮档：轨道要比玻璃面**略亮**才看得出来，但又不能抢过拇指 */
+val SliderTrackDark = Color(0x1CFFFFFF) // α 0.11
+val SliderTrackLight = Color(0x17000000) // α 0.09
+
+/** 白色拇指的投影。拇指是纯白实心圆，没有它会在浅色轨道上「飘」起来 */
+val SliderThumbShadow = Color(0x70000000) // α 0.44
 
 // ———————————————————————————————————————————————————————————————
 // 容器色阶（M3E `surfaceContainerLowest` ~ `surfaceContainerHighest` 的本地化）。

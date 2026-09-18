@@ -1,7 +1,6 @@
 package com.hifn.pixelcake.ui.components
 
 import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.PaddingValues
@@ -28,6 +27,7 @@ import com.hifn.pixelcake.ui.theme.Radius
 import com.hifn.pixelcake.ui.theme.Spacing
 import com.hifn.pixelcake.ui.theme.glassSurface
 import com.hifn.pixelcake.ui.theme.rememberGlassTint
+import com.hifn.pixelcake.ui.theme.segmentIndicator
 
 /**
  * 分段玻璃条：底部 TabBar 与编辑器的一级工具条**共用同一个控件**。
@@ -41,6 +41,13 @@ import com.hifn.pixelcake.ui.theme.rememberGlassTint
  *
  * 指示块位移是**空间属性** → [Motion.springSpatial]（阻尼 0.6，滑动到位时轻微回弹）。
  * 强调色取 `colorScheme.primary`（深色主题下是降饱和版本），不直接写 `Seed`。
+ *
+ * ## 指示块的材质走共享 modifier（UI-6）
+ *
+ * 原先这里与 `AppShell.GlassTabBar` 各写了一遍「强调色平色块 + 圆角」，
+ * 属于审计 L3 记的两套近似实现 —— 现在统一走 [segmentIndicator]
+ * （白渐变 + 顶部亮线 + 投影，浅色主题自动退回强调色淡染）。
+ * 这样「选中态长什么样」全 App 只有一处定义。
  *
  * @param items    分段项
  * @param selected 当前项
@@ -83,7 +90,7 @@ fun <T> GlassSegmentedBar(
                 .offset(x = indicatorX)
                 .width(itemWidth)
                 .fillMaxHeight()
-                .background(accent.copy(alpha = 0.18f), Radius.pill)
+                .segmentIndicator(Radius.pill)
         )
 
         Row(modifier = Modifier.fillMaxSize()) {

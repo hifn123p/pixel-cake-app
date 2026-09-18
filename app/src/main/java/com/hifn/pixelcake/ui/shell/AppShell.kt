@@ -7,7 +7,6 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
@@ -33,6 +32,7 @@ import com.hifn.pixelcake.ui.theme.Radius
 import com.hifn.pixelcake.ui.theme.Spacing
 import com.hifn.pixelcake.ui.theme.glassSurface
 import com.hifn.pixelcake.ui.theme.rememberGlassTint
+import com.hifn.pixelcake.ui.theme.segmentIndicator
 
 /**
  * 一级导航项（`docs/UI_DESIGN.md` §3.3 方案 A）。
@@ -109,6 +109,10 @@ fun AppShell(
  * 指示块位移是**空间属性** → 走 [Motion.springSpatial]（阻尼 0.6，滑动到位时轻微回弹）。
  * 强调色一律取 `colorScheme.primary`，不直接写 `Seed` —— 深色主题下 primary 是
  * 降饱和版本，直接写 `Seed` 会既刺眼又对比度不足。
+ *
+ * 指示块材质走共享的 [segmentIndicator]（UI-6）：原先这里与 `GlassSegmentedBar`
+ * 各写了一遍强调色平色块，是审计 L3 记的两套近似实现；收敛后「选中态长什么样」
+ * 全 App 只有一处定义。
  */
 @Composable
 private fun GlassTabBar(
@@ -146,7 +150,7 @@ private fun GlassTabBar(
                     .width(itemWidth)
                     .fillMaxHeight()
                     .padding(Spacing.xs)
-                    .background(accent.copy(alpha = 0.14f), Radius.pill)
+                    .segmentIndicator(Radius.pill)
             )
 
             Row(modifier = Modifier.fillMaxSize()) {

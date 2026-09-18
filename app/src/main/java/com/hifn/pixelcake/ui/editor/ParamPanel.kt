@@ -19,7 +19,6 @@ import com.hifn.pixelcake.core.edit.EditParams
 import com.hifn.pixelcake.core.edit.RetouchState
 import com.hifn.pixelcake.core.edit.ToneCurve
 import com.hifn.pixelcake.core.edit.preset.Preset
-import com.hifn.pixelcake.ui.components.GlassCard
 import com.hifn.pixelcake.ui.components.GlassChipRow
 import com.hifn.pixelcake.ui.components.ParamSlider
 import com.hifn.pixelcake.ui.components.PresetThumbRow
@@ -64,6 +63,12 @@ private val LUT_OPTIONS = listOf(
  * 它们**本身就是一级分类的内容**，再弹一层 Sheet 等于同一个概念套两层壳。
  * 小到面板能装下就放在面板里 —— 判据是「内容量」而不是「概念上够不够独立」。
  *
+ * ## 卡片底由**调用方**提供（本控件不自带 `GlassCard`）
+ *
+ * 上层用 `Crossfade` 淡换分类内容，而 `Crossfade` 在过渡期会**同时组合新旧两份**。
+ * 若卡片包在这里，两张不透明容器卡会互相叠加（合成覆盖率仅 0.75），面板会发闪且文字互为鬼影 ——
+ * 所以「表面」必须留在 `Crossfade` **之外**，本控件只负责内容。详见 `EditorScreen` 第 4 段的说明。
+ *
  * @param onDraggingChange 任一滑块开始/结束拖动。上层据此隐藏非参数 UI（隐形式交互）。
  */
 @Composable
@@ -91,23 +96,20 @@ fun ParamPanel(
     onClearInpaint: () -> Unit,
     onAutoMaskChange: (Boolean) -> Unit,
     onPreset: (Preset) -> Unit,
-    onDraggingChange: (Boolean) -> Unit,
-    modifier: Modifier = Modifier
+    onDraggingChange: (Boolean) -> Unit
 ) {
-    GlassCard(modifier = modifier) {
-        when (category) {
-            EditorCategory.Portrait -> PortraitParams(
-                retouch, retouchTool, brushRadius, inpaintRadius, inpaintCount,
-                autoMaskEnabled, onRetouchChange, onRetouchCommit, onToolChange,
-                onBrushRadiusChange, onInpaintRadiusChange, onClearMask, onClearInpaint,
-                onAutoMaskChange, onDraggingChange
-            )
+    when (category) {
+        EditorCategory.Portrait -> PortraitParams(
+            retouch, retouchTool, brushRadius, inpaintRadius, inpaintCount,
+            autoMaskEnabled, onRetouchChange, onRetouchCommit, onToolChange,
+            onBrushRadiusChange, onInpaintRadiusChange, onClearMask, onClearInpaint,
+            onAutoMaskChange, onDraggingChange
+        )
 
-            EditorCategory.Tone -> ToneParams(params, onParamChange, onParamCommit, onDraggingChange)
-            EditorCategory.Curve -> CurveParams(params, onParamChange, onParamCommit, onDraggingChange)
-            EditorCategory.Lut -> LutParams(params, onParamChange, onParamCommit, onDraggingChange)
-            EditorCategory.Preset -> PresetParams(presets, activePresetId, presetThumbs, onPreset)
-        }
+        EditorCategory.Tone -> ToneParams(params, onParamChange, onParamCommit, onDraggingChange)
+        EditorCategory.Curve -> CurveParams(params, onParamChange, onParamCommit, onDraggingChange)
+        EditorCategory.Lut -> LutParams(params, onParamChange, onParamCommit, onDraggingChange)
+        EditorCategory.Preset -> PresetParams(presets, activePresetId, presetThumbs, onPreset)
     }
 }
 

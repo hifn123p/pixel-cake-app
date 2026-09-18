@@ -2,28 +2,44 @@ package com.hifn.pixelcake.ui.theme
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 /**
- * 一套玻璃材质的三个色值。
+ * 一套玻璃材质的色值。
  *
- * @param surface 半透明底（叠在下层内容之上）
- * @param border  高光描边（模拟玻璃边缘受光）
- * @param content 该材质上推荐的正文色
+ * ## 为什么 `surface` / `border` 是 [Brush] 而不是 [Color]
+ *
+ * 平色的半透明面板只会被读成「磨砂亚克力」—— 它没有厚度。液态玻璃之所以像液体，
+ * 靠的是**明度在同一个面内自上而下变化**（顶亮底暗）+ 边缘那圈受光线。
+ * 这两件事都必须用渐变表达，所以底与描边都是 [Brush]。
+ *
+ * 明暗两套主题的方向一致（顶亮底暗，光从上方来），调用点不需要按主题翻转。
+ *
+ * @param surface   渐变底（叠在下层内容之上）。降级路径传 [SolidColor] 即得到实心底
+ * @param border    渐变描边，同时承担「外描边 + 顶部镜面高光 + 底部反光」
+ * @param content   该材质上推荐的正文色
+ * @param shadow    外投影色（含 α）。传 [Color.Transparent] 表示不投影
+ * @param elevation 外投影高度。0 表示不投影（实心降级路径）
  */
 @Immutable
 data class GlassTint(
-    val surface: Color,
-    val border: Color,
-    val content: Color
+    val surface: Brush,
+    val border: Brush,
+    val content: Color,
+    val shadow: Color,
+    val elevation: Dp
 )
 
 /**
@@ -34,10 +50,16 @@ data class GlassTint(
  * 真模糊需要把下层内容渲染进一层再采样，在大图上极贵；而修图 App 的玻璃永远浮在
  * 一张**静止的预览图**之上 —— 所以正确做法是：
  *
- * 1. 玻璃层只做「半透明 + 1px 高光描边」（O(1)，滚动拖动零成本）；
- * 2. 需要模糊质感时，模糊交给**导入时一次性生成的静态模糊底图**（UI-5 性能阶段落地）。
+ * 1. 玻璃层只做「渐变底 + 边缘受光 + 外投影」（O(1)，滚动拖动零成本）；
+ * 2. 需要模糊质感时，模糊交给**导入时一次性生成的静态模糊底图**（[blurredBackdrop]，UI-5 落地）。
  *
  * 这样滚动、拖动滑块、切页签时都不会触发 blur 重算 —— 这是整个改版最重要的性能约定。
+ *
+ * **补充（UI-6）：为什么液态观感不需要真模糊。**
+ * 玻璃的「贵」八成来自高光与描边，不是模糊 —— 模糊只负责「让下层不干扰读数」。
+ * 而 Compose 没有 backdrop blur：`Modifier.blur()` / `graphicsLayer { renderEffect = ... }`
+ * 模糊的是**自己的内容**，不是背后的画面。把模糊加在这四类浮层上，会把浮层里的文字一起糊掉 ——
+ * 那正是「方案 A 全面玻璃化」被判死的理由（读数发虚）。所以这里**刻意不引入任何真模糊**。
  *
  * ## 用途已被收敛（§1.6）：玻璃 = **浮层专用**，不是整套设计语言
  *
@@ -49,13 +71,59 @@ object Glass {
     /** 高光描边宽度。1px 在两个主题下都成立 */
     val borderWidth: Dp = 1.dp
 
-    /** 浮层玻璃（半透明）：顶栏、悬浮工具条、底部 Sheet */
-    private val PanelLight = GlassTint(GlassTintLight, GlassBorderLight, Ink)
-    private val PanelDark = GlassTint(GlassTintDark, GlassBorderDark, OnDarkSurface)
+    /**
+     * 浮层玻璃（液态）：渐变底 + 顶亮底暗的渐变描边 + 外投影。
+     *
+     * ⚠️ [Brush] 必须在 object 初始化时**建一次**就缓存住：`glassSurface` 在十几个组件里
+     * 每帧被调用，若在 modifier 里现场 `Brush.verticalGradient(...)` 会每帧新建对象
+     * （渐变对象不小），这正是「逐像素零分配」纪律在 UI 层的对应要求。
+     */
+    private val PanelLight = GlassTint(
+        surface = Brush.verticalGradient(
+            0f to LiquidTopLight,
+            0.48f to LiquidMidLight,
+            1f to LiquidBottomLight
+        ),
+        border = Brush.verticalGradient(
+            0f to LiquidEdgeTopLight,
+            1f to LiquidEdgeBottomLight
+        ),
+        content = Ink,
+        shadow = LiquidShadowLight,
+        elevation = 6.dp
+    )
+
+    private val PanelDark = GlassTint(
+        surface = Brush.verticalGradient(
+            0f to LiquidTopDark,
+            0.48f to LiquidMidDark,
+            1f to LiquidBottomDark
+        ),
+        border = Brush.verticalGradient(
+            0f to LiquidEdgeTopDark,
+            1f to LiquidEdgeBottomDark
+        ),
+        content = OnDarkSurface,
+        shadow = LiquidShadowDark,
+        elevation = 8.dp
+    )
 
     /** 实心底（降级用）：高对比度模式、低端设备、内容密集的长列表 */
-    private val OpaqueLight = GlassTint(Gray1, GlassBorderLightOpaque, Ink)
-    private val OpaqueDark = GlassTint(ContainerDarkHigh, GlassBorderDark, OnDarkSurface)
+    private val OpaqueLight = GlassTint(
+        surface = SolidColor(Gray1),
+        border = SolidColor(GlassBorderLightOpaque),
+        content = Ink,
+        shadow = Color.Transparent,
+        elevation = 0.dp
+    )
+
+    private val OpaqueDark = GlassTint(
+        surface = SolidColor(ContainerDarkHigh),
+        border = SolidColor(GlassBorderDark),
+        content = OnDarkSurface,
+        shadow = Color.Transparent,
+        elevation = 0.dp
+    )
 
     /**
      * 取一组玻璃色值。
@@ -104,15 +172,24 @@ fun rememberGlassTint(opaque: Boolean = false): GlassTint =
     Glass.of(LocalDarkTheme.current, opaque || LocalLowTransparency.current)
 
 /**
- * 把玻璃材质应用到任意组件：裁剪 + 半透明底 + 高光描边。
+ * 把玻璃材质应用到任意组件：外投影 + 裁剪 + 渐变底 + 渐变描边。
  *
- * 这是「无边框分层」的载体 —— 层次靠**底色差 + 描边受光**表达，而不是靠粗边框分割线。
+ * 这是「无边框分层」的载体 —— 层次靠**底色差 + 边缘受光**表达，而不是靠粗边框分割线。
+ *
+ * 绘制顺序不能调：投影必须在最外层（先画的在最底下），否则会被自己的底盖住。
  */
 fun Modifier.glassSurface(
     tint: GlassTint,
     shape: Shape = Radius.card,
     borderWidth: Dp = Glass.borderWidth
 ): Modifier = this
+    .shadow(
+        elevation = tint.elevation,
+        shape = shape,
+        clip = false,
+        ambientColor = tint.shadow,
+        spotColor = tint.shadow
+    )
     .clip(shape)
     .background(tint.surface, shape)
     .border(borderWidth, tint.border, shape)
@@ -174,3 +251,56 @@ fun Modifier.containerSurface(
         .background(fill, shape)
         .border(borderWidth, border, shape)
 }
+
+// ———————————————————————————————————————————————————————————————
+// 分段控件（TabBar / 一级工具条）
+// ———————————————————————————————————————————————————————————————
+
+/**
+ * 分段控件的**选中指示块**材质。
+ *
+ * 从「强调色平色块」改成「白渐变 + 顶部亮线 + 投影」：平色块读起来是「一块高亮」，
+ * 白色渐变块读起来是「一个被光打到的实体」—— 这是「像不像 iOS」性价比最高的两笔之一
+ * （另一笔是 `ParamSlider` 的白色滑块）。
+ *
+ * ## 抽成共享 modifier 的直接原因
+ *
+ * `AppShell.GlassTabBar` 与 `GlassSegmentedBar` 此前各写了一遍同样的指示块
+ * （审计 L3 记的就是这两套近似实现），改一处必漏另一处 —— 收敛到这里之后，
+ * 两者只差外部修饰符。
+ *
+ * ⚠️ 浅色主题下**不能用白**（白底白块 = 不可见）⇒ 退回强调色淡染，只保留顶部亮线；
+ * 深色判定必须走 [LocalDarkTheme]，不能按系统 `uiMode` 猜。
+ */
+@Composable
+fun Modifier.segmentIndicator(shape: Shape = Radius.pill): Modifier =
+    if (LocalDarkTheme.current) {
+        this
+            .shadow(
+                elevation = 3.dp,
+                shape = shape,
+                clip = false,
+                ambientColor = SegmentShadowDark,
+                spotColor = SegmentShadowDark
+            )
+            .background(
+                Brush.verticalGradient(
+                    0f to SegmentFillTopDark,
+                    1f to SegmentFillBottomDark
+                ),
+                shape
+            )
+            .border(Glass.borderWidth, SolidColor(SegmentEdgeDark), shape)
+    } else {
+        val accent = MaterialTheme.colorScheme.primary
+        this
+            .shadow(
+                elevation = 2.dp,
+                shape = shape,
+                clip = false,
+                ambientColor = SegmentShadowLight,
+                spotColor = SegmentShadowLight
+            )
+            .background(accent.copy(alpha = 0.18f), shape)
+            .border(Glass.borderWidth, SolidColor(SegmentEdgeLight), shape)
+    }

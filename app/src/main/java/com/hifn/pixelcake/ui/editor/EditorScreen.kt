@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
@@ -56,6 +57,7 @@ import com.hifn.pixelcake.core.edit.EditParams
 import com.hifn.pixelcake.core.edit.RetouchState
 import com.hifn.pixelcake.core.edit.preset.Preset
 import com.hifn.pixelcake.ui.components.CapsuleNote
+import com.hifn.pixelcake.ui.components.GlassCard
 import com.hifn.pixelcake.ui.theme.Motion
 import com.hifn.pixelcake.ui.theme.Radius
 import com.hifn.pixelcake.ui.theme.Spacing
@@ -180,8 +182,14 @@ fun EditorScreen(
     var dragging by remember { mutableStateOf(false) }
 
     // renderVersion 每次重渲自增，确保本可组合项重组并重绘当前(已被原位修改的)Bitmap。
-    val display: ImageBitmap? = run {
-        val _v = renderVersion
+    //
+    // ⚠️ 必须用 `remember(...)` 钉住包装对象，不能裸调 `asImageBitmap()`：
+    // `asImageBitmap()` 每次都 new 一个 `AndroidImageBitmap`，而本页在拖动期间每帧都会重组
+    // （`chromeAlpha` 透明度动画 + 参数变化），裸调就等于**每帧给 `Image` 换一个新位图实例**，
+    // `BitmapPainter` 随之每帧失效并重绘 —— 画面据此发闪/掉帧。
+    // 包装对象只是「指向同一张 Bitmap 的壳」，不需要复制像素，所以钉住它是零成本的。
+    // （`PresetThumbRow` 早就是这个口径，这里是把它对齐回来。）
+    val display: ImageBitmap? = remember(renderVersion, showOriginal, original, rendered) {
         if (showOriginal) original.asImageBitmap() else rendered?.asImageBitmap()
     }
 
@@ -283,44 +291,58 @@ fun EditorScreen(
 
         // ———— 4. 参数面板 ————
         // 面板**常驻**（不收起）：它是高频操作区，收起来等于每次调参都多一次点击。
-        // 切分类时用 Crossfade 淡换内容 —— 直接硬切会让面板「闪一下」，而且用户会以为点错了。
+        //
+        // ## 卡片在 Crossfade **外面**
+        //
+        // `Crossfade` 在过渡期会**同时组合新旧两份内容**。若把 `GlassCard`（不透明容器）包在里面，
+        // 两张卡各以 ~50% alpha 叠加，合成覆盖率只有 0.75
+        // （0.75·`ContainerDark` + 0.25·`WorkspaceBg` ≈ 23.8 < 27）—— 深色工作台会透出来，
+        // 面板先变暗再回亮，观感就是「闪一下」；同时两层文字互为鬼影。
+        // 表面只该有一份、只让**内容**淡换，所以卡片提到 `Crossfade` 之外。
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(max = 320.dp)
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = Spacing.page, vertical = Spacing.s)
+                // ⚠️ `navigationBarsPadding()` 必须落在 **verticalScroll 之内**（即放在末尾）：
+                // 编辑器不套 `AppShell`，拿不到它那层底部兜底；全屏 + edge-to-edge 下，
+                // 最后一个滑块会被系统导航条 / 手势条压住。放在滚动内容内 → 背景仍沉浸到屏幕底，
+                // 而内容能被滚到导航条之上，两者兼得。
+                .navigationBarsPadding()
         ) {
-            Crossfade(
-                targetState = category,
-                animationSpec = tween(Motion.durationFor(Motion.base), easing = Motion.easingOut),
-                label = "paramCategory"
-            ) { cat ->
-                ParamPanel(
-                    category = cat,
-                    params = params,
-                    retouch = retouch,
-                    retouchTool = retouchTool,
-                    brushRadius = brushRadius,
-                    inpaintRadius = inpaintRadius,
-                    inpaintCount = inpaintCount,
-                    autoMaskEnabled = autoMaskEnabled,
-                    presets = presets,
-                    activePresetId = activePresetId,
-                    presetThumbs = presetThumbs,
-                    onParamChange = onParamChange,
-                    onParamCommit = onParamCommit,
-                    onRetouchChange = onRetouchChange,
-                    onRetouchCommit = onRetouchCommit,
-                    onToolChange = onToolChange,
-                    onBrushRadiusChange = onBrushRadiusChange,
-                    onInpaintRadiusChange = onInpaintRadiusChange,
-                    onClearMask = onClearMask,
-                    onClearInpaint = onClearInpaint,
-                    onAutoMaskChange = onAutoMaskChange,
-                    onPreset = onPreset,
-                    onDraggingChange = { dragging = it }
-                )
+            GlassCard {
+                Crossfade(
+                    targetState = category,
+                    animationSpec = tween(Motion.durationFor(Motion.base), easing = Motion.easingOut),
+                    label = "paramCategory"
+                ) { cat ->
+                    ParamPanel(
+                        category = cat,
+                        params = params,
+                        retouch = retouch,
+                        retouchTool = retouchTool,
+                        brushRadius = brushRadius,
+                        inpaintRadius = inpaintRadius,
+                        inpaintCount = inpaintCount,
+                        autoMaskEnabled = autoMaskEnabled,
+                        presets = presets,
+                        activePresetId = activePresetId,
+                        presetThumbs = presetThumbs,
+                        onParamChange = onParamChange,
+                        onParamCommit = onParamCommit,
+                        onRetouchChange = onRetouchChange,
+                        onRetouchCommit = onRetouchCommit,
+                        onToolChange = onToolChange,
+                        onBrushRadiusChange = onBrushRadiusChange,
+                        onInpaintRadiusChange = onInpaintRadiusChange,
+                        onClearMask = onClearMask,
+                        onClearInpaint = onClearInpaint,
+                        onAutoMaskChange = onAutoMaskChange,
+                        onPreset = onPreset,
+                        onDraggingChange = { dragging = it }
+                    )
+                }
             }
         }
     }
