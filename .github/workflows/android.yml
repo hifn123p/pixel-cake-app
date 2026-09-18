@@ -34,6 +34,12 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          # ⚠️ 必须显式传 packages。该 action 的默认值是 `'tools platform-tools'`，而 Google 已下架
+          # 遗留的 `tools` 包 ⇒ `sdkmanager tools` 报 `Failed to find package 'tools'` 并让 job 直接红
+          # （2026-09-18 runner 镜像升到 cmdline-tools 16.0 后触发）。这里只装 platform-tools；
+          # 真正需要的 SDK 平台 / NDK / CMake 由下面的 composite action 负责安装。
+          packages: 'platform-tools'
 
       # F14：抽出的公共安装步骤（SDK/NDK/CMake），三 job 复用同一 composite action
       - name: Install toolchain (SDK / NDK / CMake)
@@ -109,6 +115,12 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          # ⚠️ 必须显式传 packages。该 action 的默认值是 `'tools platform-tools'`，而 Google 已下架
+          # 遗留的 `tools` 包 ⇒ `sdkmanager tools` 报 `Failed to find package 'tools'` 并让 job 直接红
+          # （2026-09-18 runner 镜像升到 cmdline-tools 16.0 后触发）。这里只装 platform-tools；
+          # 真正需要的 SDK 平台 / NDK / CMake 由下面的 composite action 负责安装。
+          packages: 'platform-tools'
 
       - name: Install toolchain (SDK / NDK / CMake)
         uses: ./.github/actions/setup-android-toolchain
@@ -165,6 +177,12 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          # ⚠️ 必须显式传 packages。该 action 的默认值是 `'tools platform-tools'`，而 Google 已下架
+          # 遗留的 `tools` 包 ⇒ `sdkmanager tools` 报 `Failed to find package 'tools'` 并让 job 直接红
+          # （2026-09-18 runner 镜像升到 cmdline-tools 16.0 后触发）。这里只装 platform-tools；
+          # 真正需要的 SDK 平台 / NDK / CMake 由下面的 composite action 负责安装。
+          packages: 'platform-tools'
 
       - name: Install toolchain (SDK / NDK / CMake)
         uses: ./.github/actions/setup-android-toolchain
