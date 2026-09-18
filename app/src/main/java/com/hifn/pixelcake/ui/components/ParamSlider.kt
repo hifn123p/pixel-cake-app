@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -72,6 +73,10 @@ import kotlin.math.round
  * @param onValueChangeFinished 松手回调。撤销栈只应在这里入栈一次，
  *        否则一次拖动会往历史里塞几十条（FIX_LIST F08）。
  */
+// Slider 的「自定义 thumb / track」重载在本项目的 Material3 版本里被标记为实验性 API
+// （报错原文：This material API is experimental and is likely to change or to be removed in the future）⇒ 必须显式 opt-in。
+// 这里是有意使用：白色圆拇指 + 投影是「像 iOS」的关键一笔（见上方 KDoc），不因一个 opt-in 注解放弃该设计。
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ParamSlider(
     label: String,
