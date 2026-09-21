@@ -14,8 +14,10 @@ android {
         applicationId = "com.hifn.pixelcake"
         minSdk = libs.versions.minSdk.get().toInt()
         targetSdk = libs.versions.targetSdk.get().toInt()
-        versionCode = 1
-        versionName = "0.1.0"
+        // 与 GitHub Release tag 一一对应：打 v0.2.0 时同步抬这里，
+        // 否则「关于」页(AboutSheet 显示 v${versionName} (${versionCode}))会与 Release 页对不上。
+        versionCode = 2
+        versionName = "0.2.0"
 
         // 刻意**不声明** testInstrumentationRunner（审计 M8）：本项目没有 androidTest 源集、
         // 也没有 androidx.test 依赖，裸声明是死配置 —— 一旦有人加仪器测试会因缺依赖直接红；
