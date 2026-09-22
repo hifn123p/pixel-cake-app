@@ -29,20 +29,16 @@ import com.hifn.pixelcake.ui.theme.Spacing
  * 但它**必须有** —— `NOTICE` 里列了 LibRaw 等弱 copyleft 组件的静态链接义务，
  * 以及两个 MediaPipe 模型的 Apache-2.0 署名要求，法律上需要一个用户可达的展示位。
  *
- * 版本号走 `PackageManager` 读取，**不用 `BuildConfig`** ——
+ * 版本号走 [appVersionLabel]（内部用 `PackageManager` 读取），**不用 `BuildConfig`** ——
  * AGP 8 起 `buildConfig` 默认关闭，本项目并未开启，引用它编译不过。
+ * 抽成共享函数是为了让设置页与这里显示**同一个口径**的版本号。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AboutSheet(onDismiss: () -> Unit) {
     val context = LocalContext.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val version = remember {
-        runCatching {
-            val info = context.packageManager.getPackageInfo(context.packageName, 0)
-            "v${info.versionName} (${info.longVersionCode})"
-        }.getOrNull() ?: "v?"
-    }
+    val version = remember(context) { appVersionLabel(context) }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,

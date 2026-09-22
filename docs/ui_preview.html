@@ -242,7 +242,7 @@
     <div class="badge">UI 改版 · 静态预览 · 未提交（等你看完再 commit）</div>
     <h1>PixelCake UI 改版预览</h1>
     <p>这是按 <code>docs/UI_DESIGN.md</code> 与 <code>ui/theme/</code> 真实 token 复刻的静态预览，用于在无法本地构建的情况下肉眼验收版式、层次与密度。颜色 / 间距 / 圆角 / 字号全部取自代码里的 token 真值。</p>
-    <p style="margin-top:var(--s2)">首页已按反馈<strong>二次修订为极简</strong>：整屏只有<strong>一个展示位 + 右上角「＋」</strong>；说明文案、设备规格表、工程信息已全部删除（「首页介绍不对」）。见屏 ①与⑤。</p>
+    <p style="margin-top:var(--s2)">首页按反馈<strong>二次修订为极简</strong>：整屏只有<strong>一个展示位</strong>——它本身就是唯一入口（顶栏那个重复的「＋」已在 2026-09-22 删除）；设备规格表、工程信息已全部删除（「首页介绍不对」）。见屏 ①与⑤。</p>
     <p style="margin-top:var(--s2)"><strong>UI-4b 趋势对齐已落地</strong>（<code>UI_DESIGN.md</code> §1.6.1）：弹簧按属性分族、深色强调色降饱和、<strong>玻璃收敛为浮层专用</strong>（卡片默认实心容器）。本页 mockup 因此全部改用<strong>实心容器底 + 深色档强调色</strong>。</p>
     <p style="margin-top:var(--s2)"><strong>后续补做已落地</strong>（<code>UI_DESIGN.md</code> §1.6.2）：① 预设卡片改为<strong>真实缩略图</strong>（屏⑥）；② 新增 <code>LocalDarkTheme</code> 修掉「强制深色主题下取错色板」的真 bug；③ 半径滑块纳入渲染监听。</p>
   </div>
@@ -251,16 +251,16 @@
 
     <!-- ══════════ 1. 调色台 ══════════ -->
     <div class="phone-wrap">
-      <div class="phone-label">① 调色台（Tab 1）· 极简：一个展示位 + 一个动作</div>
+      <div class="phone-label">① 调色台（Tab 1）· 极简：展示位即唯一入口（顶栏不再有「＋」）</div>
       <div class="phone">
         <div class="topbar" style="padding:0 var(--s5)">
           <div class="tb strong">调色台</div>
-          <div style="flex:1"></div>
-          <div class="circle">＋</div>
         </div>
         <div class="scroll" style="padding-top:var(--s2)">
-          <div class="hero" style="flex:1;min-height:340px">
-            <div style="font-size:24px;color:var(--gray3)">＋</div>
+          <div class="hero" style="flex:1;min-height:340px;flex-direction:column;justify-content:center;align-items:center;gap:var(--s3)">
+            <div class="circle big" style="width:72px;height:72px">＋</div>
+            <div style="font-size:16px;font-weight:500">导入照片</div>
+            <div style="font-size:11px;color:var(--gray3)">相册 / 文件 / 相机直连</div>
           </div>
         </div>
         <div class="fade"></div>
@@ -273,7 +273,7 @@
 
     <!-- ══════════ 2. 编辑器 ══════════ -->
     <div class="phone-wrap">
-      <div class="phone-label">② 编辑器（全屏 · 强制深色 · 四段式）</div>
+      <div class="phone-label">② 编辑器（全屏 · 强制深色 · 五段式，含可拖分隔条）</div>
       <div class="phone">
         <div class="topbar">
           <div class="tb">‹</div>
@@ -290,6 +290,11 @@
           <div class="subject"></div>
           <div class="vignette"></div>
           <div class="note">自动蒙版已启用（GPU）· 液化锚点：人脸检测 · 1 张脸</div>
+        </div>
+
+        <!-- 可拖分隔条：上下拖动即改「预览 : 工具区」高度比（预览区/参数区是一对权重） -->
+        <div style="height:28px;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+          <div style="width:40px;height:4px;border-radius:999px;background:var(--gray3);opacity:.35"></div>
         </div>
 
         <div class="toolwrap">
@@ -328,10 +333,29 @@
     <div class="phone-wrap">
       <div class="phone-label">③ 拖动滑块时 · 非参数 UI 全部让位（隐形式）</div>
       <div class="phone">
-        <div class="preview" style="margin:0 var(--s3) 0;flex:1;min-height:300px">
+        <!-- ⚠️ 顶栏**仍在布局里**，只是 alpha→0（`pointer-events:none` 对应 inertUnless）。
+             这是 2026-09-22 的修正：旧版把顶栏收掉高度，预览区的权重分母随之变大 56dp，
+             照片会放大一次、松手再缩回 ⇒ 每次调参抖两下（UI_DESIGN.md §4.0.2 #1）。
+             对比 ② 与 ③：**除透明度外，其余尺寸必须完全一致**。 -->
+        <div class="topbar" style="opacity:.06;pointer-events:none">
+          <div class="tb">‹</div>
+          <div class="tb strong">编辑</div>
+          <div style="flex:1"></div>
+          <div class="tb">撤销</div>
+          <div class="tb off">重做</div>
+          <div class="tb">重置</div>
+          <div class="tb cta">导出</div>
+        </div>
+
+        <div class="preview">
           <div class="photo"></div>
           <div class="subject"></div>
           <div class="vignette"></div>
+        </div>
+
+        <!-- 分隔条同样只降 alpha、高度不变（它连拖拽都一并禁用，否则 28dp 的热区会误抓） -->
+        <div style="height:28px;display:flex;align-items:center;justify-content:center;flex-shrink:0;opacity:.06">
+          <div style="width:40px;height:4px;border-radius:999px;background:var(--gray3);opacity:.35"></div>
         </div>
 
         <div class="toolwrap" style="opacity:.12">
@@ -365,7 +389,7 @@
 
     <!-- ══════════ 4. 设置 + 关于 ══════════ -->
     <div class="phone-wrap">
-      <div class="phone-label">④ 设置（Tab 2）· 关于做 Sheet 不做页面</div>
+      <div class="phone-label">④ 设置（Tab 2）· 六组：外观 / 导出 / AI 与性能 / 存储 / 关于 / 高级</div>
       <div class="phone">
         <div class="scroll">
           <div>
@@ -374,11 +398,34 @@
           </div>
 
           <div class="card">
-            <div class="sec-title">导出默认值</div>
-            <div class="sec-sub">决定编辑器里「导出」的初始格式</div>
+            <div class="sec-title">外观</div>
+            <div class="sec-sub">编辑页始终使用深色工作台，不受这里影响</div>
             <div class="divider"></div>
-            <div class="chips"><div class="chip on">JPEG</div><div class="chip">PNG</div></div>
-            <div class="cap" style="margin-top:var(--s2)">JPEG 体积小，适合直接发出去。</div>
+            <div style="margin-bottom:var(--s3)">
+              <div class="body">主题模式</div>
+              <div class="cap">首页与设置页的明暗；编辑页恒为深色</div>
+              <div class="chips" style="margin-top:var(--s2)"><div class="chip on">跟随系统</div><div class="chip">浅色</div><div class="chip">深色</div></div>
+            </div>
+            <div class="row-between">
+              <div><div class="body">降低透明度</div><div class="cap">毛玻璃换成实心底，提升文字可读性</div></div>
+              <div style="width:40px;height:22px;border-radius:999px;background:rgba(255,255,255,.16);position:relative;flex-shrink:0"><b style="position:absolute;left:2px;top:2px;width:18px;height:18px;border-radius:50%;background:#fff"></b></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="sec-title">导出</div>
+            <div class="sec-sub">决定编辑器里「导出」的初始选择</div>
+            <div class="divider"></div>
+            <div style="margin-bottom:var(--s3)">
+              <div class="body">默认格式</div>
+              <div class="cap">JPEG 体积小，适合直接发出去</div>
+              <div class="chips" style="margin-top:var(--s2)"><div class="chip on">JPEG</div><div class="chip">PNG</div></div>
+            </div>
+            <div>
+              <div class="body">JPEG 质量</div>
+              <div class="cap">默认，画质与体积平衡</div>
+              <div class="chips" style="margin-top:var(--s2)"><div class="chip">高</div><div class="chip on">标准</div><div class="chip">小</div></div>
+            </div>
           </div>
 
           <div class="card">
@@ -390,16 +437,6 @@
               <div style="width:40px;height:22px;border-radius:999px;background:var(--seed);position:relative;flex-shrink:0"><b style="position:absolute;right:2px;top:2px;width:18px;height:18px;border-radius:50%;background:#fff"></b></div>
             </div>
           </div>
-
-          <div class="card">
-            <div class="sec-title">外观</div>
-            <div class="sec-sub">编辑页始终使用深色工作台</div>
-            <div class="divider"></div>
-            <div class="row-between">
-              <div><div class="body">降低透明度</div><div class="cap">毛玻璃换成实心底，提升文字可读性</div></div>
-              <div style="width:40px;height:22px;border-radius:999px;background:rgba(255,255,255,.16);position:relative;flex-shrink:0"><b style="position:absolute;left:2px;top:2px;width:18px;height:18px;border-radius:50%;background:#fff"></b></div>
-            </div>
-          </div>
         </div>
 
         <div class="dim"></div>
@@ -407,7 +444,7 @@
           <div class="grab"></div>
           <div>
             <div style="font-size:24px;font-weight:500">像素蛋糕 PixelCake</div>
-            <div class="cap">v0.1.0 (1)</div>
+            <div class="cap">v0.2.0 (2)</div>
             <div class="mut" style="margin-top:var(--s1)">本地 RAW 调色 · 人像精修</div>
           </div>
           <div class="card">
@@ -627,7 +664,7 @@
       <li><span class="ok">✔</span><span>圆角只用 4 档 + 胶囊<em> · chip 强制 Radius.chip</em></span></li>
       <li><span class="ok">✔</span><span>卡片无粗边框无投影，层次靠<strong>容器底差 + 1px 极淡描边</strong></span></li>
       <li><span class="ok">✔</span><span><strong>玻璃只用于浮层</strong>，承载型容器走实心<em> · GlassCard 默认 CardMaterial.Container</em></span></li>
-      <li><span class="ok">✔</span><span>拖动参数时隐藏非参数 UI<em> · 顶栏收起，工具条只淡出</em></span></li>
+      <li><span class="ok">✔</span><span>拖动参数时隐藏非参数 UI<em> · 顶栏/分隔条/工具条统一只降 alpha（不收高度，否则预览会跳）；inertUnless 保证淡出即不可点</em></span></li>
       <li><span class="ok">✔</span><span>动效<strong>按属性分族</strong>：空间 0.6 / 颜色 1.0 / 透明度 tween<em> · Motion.kt</em></span></li>
       <li><span class="ok">✔</span><span><strong>不做实时 backdrop 模糊</strong><em> · 静态模糊底图一次生成</em></span></li>
       <li><span class="ok">✔</span><span>无障碍：系统关动画时位移 / 缩放 / 淡入淡出全部坍缩<em> · 弹簧自带；7 处 tween 补 durationFor（修 bug）</em></span></li>

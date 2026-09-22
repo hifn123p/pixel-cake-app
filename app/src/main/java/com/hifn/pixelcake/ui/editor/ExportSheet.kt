@@ -55,6 +55,12 @@ data class EditorStatus(
  *
  * 导出期间 Sheet 保持展开，因为**进度与取消都需要一个停靠位**；关掉 Sheet 就不该再显示进度，
  * 所以进度文案留在 Sheet 里而不是浮在画面上。
+ *
+ * ## 按钮必须反映「已经导出过了」
+ *
+ * 这是本 Sheet 唯一一处**状态回写**：`status.kind == Success` 时主按钮从「导出到相册（JPEG）」
+ * 换成「再导一次」并降级为描边材质。理由见下方调用点的注释 —— 简言之，
+ * 状态行是弱信号，按钮外观才是用户判断「刚才那下成功了没有」的依据。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -141,6 +147,27 @@ fun ExportSheet(
                 OutlinedButton(onClick = onCancelExport, modifier = Modifier.fillMaxWidth()) {
                     Text("取消导出")
                 }
+            } else if (status.kind == StatusKind.Success) {
+                // ⚠️ 导出成功后按钮**必须换形态**（真机反馈：「点击导出按钮，已导出后，
+                // 底部按钮还是导出，容易误触误判，多次重复导出」）。
+                //
+                // 原来只有 `status.text` 变成了「已导出」，而**按钮本身毫无变化** ——
+                // 用户是凭按钮外观 + 肌肉记忆操作的，状态行是「读过才知道」的弱信号，
+                // 于是再点一次就又多存一张（而且 RAW 全分辨率导出一次要几十秒，代价不小）。
+                //
+                // 现在同时改三件事：文案（「再导一次」）、材质（实心 → 描边，降低视觉权重）、
+                // 并补一行「不必重复导出」的说明。任何一项都能单独拦住误触，三项叠加几乎不可能误判。
+                OutlinedButton(
+                    onClick = onExport,
+                    modifier = Modifier.fillMaxWidth().height(Spacing.controlHeight)
+                ) {
+                    Text("再导一次")
+                }
+                Text(
+                    "已经导出过了。不需要副本的话，直接关掉本面板即可。",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             } else {
                 Button(
                     onClick = onExport,

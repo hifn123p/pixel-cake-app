@@ -31,11 +31,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.hifn.pixelcake.ui.components.CardMaterial
 import com.hifn.pixelcake.ui.components.GlassCard
-import com.hifn.pixelcake.ui.components.GlassCircleButton
 import com.hifn.pixelcake.ui.components.ImportSheet
 import com.hifn.pixelcake.ui.theme.Glass
 import com.hifn.pixelcake.ui.theme.Radius
 import com.hifn.pixelcake.ui.theme.Spacing
+import com.hifn.pixelcake.ui.theme.glassSurface
 import com.hifn.pixelcake.ui.theme.pressScale
 import com.hifn.pixelcake.ui.theme.rememberGlassTint
 import java.io.File
@@ -48,18 +48,27 @@ import java.io.File
  * 首页**不介绍产品**。说明性文字、规格罗列、设备参数，放在这里都会被读成「产品说明书」——
  * 而首屏应该是**作品**的位置。所以整屏只剩两样东西：
  *
- * 1. **展示位**：一块占满余下高度的玻璃，承载唯一的视觉重心（[StartHero]）；
- * 2. **唯一动作**：右上角「＋」（[HomeTopBar]），点了才问「照片 / 文件 / 连接设备」。
+ * 1. **展示位**：一块占满余下高度与**整个内容宽**的玻璃，承载唯一的视觉重心（[StartHero]）；
+ * 2. **唯一动作**：展示位本身。点它才问「照片 / 文件 / 连接设备」。
  *
  * 曾经的「这台设备能做什么」2×2 规格表与「工程信息」折叠区**已删除**（用户口径：
  * 「首页介绍不对，删了吧，极简风格」）。设备能力仍在需要处直接计算 —— 相机 Sheet 要用
  * [ResolutionProfile.fullResLongEdge]，那条链路没动；只是**不再往首屏摆**。
  *
- * ## 减少的入口数量
+ * ## 减少的入口数量：全屏只有**一个**「＋」
  *
  * 从「三个等价选项 → 用户每次重新做决定」变成「一个动作 → 想清楚再给选项」。
- * [StartHero] 与右上角「＋」是**同一个语义**（都开 [ImportSheet]）：一个随时可达，
- * 一个在视觉重心上。不做第二个语义不同的入口。
+ * ⚠️ 这里踩过一次真机反馈的坑：顶栏曾经**也**挂了一个「＋」，与展示位的「＋」是同一个语义，
+ * 于是首屏出现两个加号 —— 用户读到的不是「随时可达」，而是「重复且不知道该点哪个」。
+ * **同一个语义只允许有一个落点**，所以顶栏那个已删除，展示位成为唯一入口。
+ *
+ * ## `fillMaxWidth()` 不能省（真机 bug 的根因）
+ *
+ * [StartHero] 是 `Column` 里带 `weight(1f)` 的**唯一**子项：`weight` 只分配**高度**，
+ * 不分配宽度。缺 `fillMaxWidth()` 时 `Box` 的宽度退化为「内容宽度」（即那个「＋」字形的宽度），
+ * 于是首屏出现「左边一条竖着的窄玻璃条 + 右边一整片空白」—— 这正是用户报的
+ * 「首页大面积空白，加号挤在左侧一长条」。宽度必须由组件**自己**申明，
+ * 不能指望父级：父级给的是高度约束，不是宽度。
  *
  * ## 这一页保留了两处玻璃（§1.6 允许的浮层用法）
  *
@@ -87,7 +96,7 @@ fun HomeScreen(
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
-            HomeTopBar(enabled = !loading, onAdd = { showImport = true })
+            HomeTopBar()
 
             // 状态消息只在「解码失败」这类真需要看见的场景出现，因此不占固定高度。
             // 它是**瞬时提示**、浮在其他内容之上，故保留玻璃材质。
@@ -149,13 +158,21 @@ fun HomeScreen(
 // ———————————————————————————————————————————————————————————————
 
 /**
- * 首页顶栏：左侧标题，右侧「＋」。
+ * 首页顶栏：**只有标题**。
  *
- * 刻意**不随内容滚动**（放在可滚动内容之外）：主操作在任何滚动位置都必须一点即达 ——
- * 这是「显而易见优先」的直接体现（§1.4 信条 1）。
+ * ## 为什么这里没有「＋」（真机反馈修正）
+ *
+ * 顶栏曾经也挂一个 [GlassCircleButton]「＋」，理由是「主操作在任何滚动位置都一点即达」。
+ * 但首屏**根本不可滚动**，那个「随时可达」是伪需求；而它与展示位的「＋」是**同一个语义**，
+ * 结果首屏出现两个加号，用户先要判断「这两个是不是一回事」——多一次犹豫就是纯损失。
+ *
+ * 所以顶栏退化成纯标题：**标题栏只负责说明「这是哪一页」，动作归内容区**。
+ * 唯一入口 [StartHero] 就长在视觉重心上，不需要第二个。
+ *
+ * `statusBarsPadding()` 不可省（`enableEdgeToEdge()` 后内容从 y=0 起画）。
  */
 @Composable
-private fun HomeTopBar(enabled: Boolean, onAdd: () -> Unit) {
+private fun HomeTopBar() {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -165,8 +182,6 @@ private fun HomeTopBar(enabled: Boolean, onAdd: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text("调色台", style = MaterialTheme.typography.titleMedium)
-        Spacer(Modifier.weight(1f))
-        GlassCircleButton(label = "＋", onClick = onAdd, enabled = enabled, size = 40.dp)
     }
 }
 
@@ -175,7 +190,13 @@ private fun HomeTopBar(enabled: Boolean, onAdd: () -> Unit) {
 // ———————————————————————————————————————————————————————————————
 
 /**
- * 展示位：一块占满余下高度的玻璃，中心一个「＋」。
+ * 展示位：一块占满余下高度、**且占满整个内容宽度**的玻璃，中心是唯一入口。
+ *
+ * ## ⚠️ `fillMaxWidth()` 是这个组件的生存条件
+ *
+ * 调用方把它放进 `Column` 并只给了 `weight(1f)` —— `weight` 分配的是**高度**。
+ * 少了 `fillMaxWidth()`，`Box` 宽度退化为内容宽度（≈ 一个「＋」字的宽度），
+ * 首屏就会变成「左侧一条窄玻璃条 + 右侧一整片空白」。宽度必须组件自己申明。
  *
  * ## 为什么保留一层几乎看不见的光晕
  *
@@ -185,10 +206,16 @@ private fun HomeTopBar(enabled: Boolean, onAdd: () -> Unit) {
  * 光晕取 `colorScheme.primary` 而不是 [com.hifn.pixelcake.ui.theme.Seed]：深色主题下
  * primary 是降饱和版本，直接写 `Seed` 会让首屏浮起一块过饱和的紫。
  *
- * ## 为什么只有符号、没有文案
+ * ## 文案口径（真机反馈修正）
  *
- * 「开始一张新的作品」这类句子是**产品在解释自己**，恰恰是首版被读成说明书的原因。
- * 一个「＋」已经足够表达「从这里开始」，不需要再说一遍。
+ * 曾经只有符号、没有文案，理由是「『开始一张新的作品』这类句子是产品在解释自己」。
+ * 但纯符号 + 大面积留白被读成**页面没加载出来**（用户原话：「首页大面积空白」）。
+ * 现在只补**一行动作标签 + 一行极短的范围说明**（「相册 / 文件 / 相机直连」）——
+ * 它回答的是「点了会发生什么」，不是「这是什么产品」，与「不写说明书」并不冲突。
+ * 依旧不写任何一句话以上的叙述。
+ *
+ * 「＋」放在 72dp 玻璃圆里，是为了让它从一个**孤立的字符**变成一个**可点的实体**：
+ * 裸字符在空态里读起来像装饰，圆形实体才读起来像按钮。
  */
 @Composable
 private fun StartHero(
@@ -201,6 +228,7 @@ private fun StartHero(
 
     Box(
         modifier = modifier
+            .fillMaxWidth()
             .pressScale(interaction)
             .clickable(
                 interactionSource = interaction,
@@ -225,11 +253,34 @@ private fun StartHero(
         if (loading) {
             CircularProgressIndicator(modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp)
         } else {
-            Text(
-                "＋",
-                style = MaterialTheme.typography.displaySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Box(
+                    modifier = Modifier
+                        .size(72.dp)
+                        .glassSurface(tint, Radius.pill, Glass.borderWidth),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        "＋",
+                        style = MaterialTheme.typography.displaySmall,
+                        // 用材质自带的正文色，而不是猜一个 colorScheme 槽位 ——
+                        // 玻璃的推荐前景色由 GlassTint 定义（见 GlassTint.content）。
+                        color = tint.content
+                    )
+                }
+                Spacer(Modifier.height(Spacing.l))
+                Text(
+                    "导入照片",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = tint.content
+                )
+                Spacer(Modifier.height(Spacing.xs))
+                Text(
+                    "相册 / 文件 / 相机直连",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = tint.content.copy(alpha = 0.72f)
+                )
+            }
         }
     }
 }
