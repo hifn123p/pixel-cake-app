@@ -74,8 +74,23 @@ import com.hifn.pixelcake.ui.theme.pressScale
 import com.hifn.pixelcake.ui.theme.rememberGlassTint
 import kotlinx.coroutines.delay
 
-/** 顶栏高度。56dp 是 Material 的工具栏标准高度，也是「一眼认出这是标题栏」的最小代价。 */
-private val TOP_BAR_HEIGHT = 56.dp
+/**
+ * 顶栏高度。
+ *
+ * ## 为什么是 44dp，而不是 Material 标准的 56dp（真机反馈修正）
+ *
+ * 56dp 是「工具栏」的高度，它服务的是**有标题栏语义的页面**（`TopAppBar` 要用 56dp 装下
+ * 标题 + 副标题 + 若干图标）。而这里只有一行文字动作，56dp 会让动作上下各空出 18dp ——
+ * 真机反馈的原话是「topbar 过于明显，因为上下距离过大」：在深色工作台上它读起来像一条
+ * **压住照片的带子**，而不是一层可以忽略的控制面。
+ *
+ * 取 44dp = [Spacing.controlHeight]（全 App 可点控件的最小高度），于是顶栏与一级工具条
+ * **同高**，一上一下互相呼应；动作按钮 36dp 在里面上下各留 4dp，仍然按得住。
+ *
+ * ⚠️ 这里**不写死 44.dp，而是绑定 `Spacing.controlHeight`** —— 否则「顶栏与工具条同高」
+ * 只是这一行注释里的一句愿望，任何人改了 `Spacing.controlHeight` 都会让它悄悄失真。
+ */
+private val TOP_BAR_HEIGHT = Spacing.controlHeight
 
 /** 胶囊提示自动淡出前的停留时长。够读完一句话，又不至于长期糊在照片上。 */
 private const val NOTE_VISIBLE_MS = 3200L
@@ -83,11 +98,15 @@ private const val NOTE_VISIBLE_MS = 3200L
 /**
  * 预览 / 参数区高度比的可拖拽范围。
  *
- * 下限保证参数面板始终装得下至少一个滑块，上限保证照片不被挤成一条缝 ——
- * 两端都不是「随便留点余量」：越过下限面板会退化成一条不可用的窄缝，
- * 越过上限则违背 §4「预览主体占比 ≥55%」。
+ * 下限保证参数面板至少装得下「一个分组标题 + 两三个滑块」，上限保证照片不被挤成一条缝 ——
+ * 两端都不是「随便留点余量」。
+ *
+ * ⚠️ 下限从 0.28 放宽到 0.22（真机反馈修正）：0.28 时参数区在 6.8" 机型上只有约 260dp，
+ * 连一个分组（标题 + 3 个滑块 ≈ 260dp）都装不满，用户表达成「无法使用」。
+ * 放宽下限的代价只是「照片变小」，而那是用户主动拖出来的一次性选择 ——
+ * 不像默认值那样必须照顾「第一眼观感」，所以可以放心让到底。
  */
-private const val SPLIT_MIN = 0.28f
+private const val SPLIT_MIN = 0.22f
 private const val SPLIT_MAX = 0.78f
 
 /**
@@ -95,13 +114,26 @@ private const val SPLIT_MAX = 0.78f
  *
  * ## 为什么从「面板固定 320dp」改成按比例
  *
- * 旧版给参数面板写死 `heightIn(max = 320.dp)`。在矮屏（或状态栏/导航栏吃掉较多高度的机型）上，
- * 固定 320dp + 工具条 44dp + 顶栏 56dp 会把预览挤到只剩一条缝 —— 真机反馈的原话是
- * 「底部所有菜单栏都挤到了一起，完全无法使用」。**固定高度永远会在某块屏幕上错**，
- * 因为屏幕高度不是我们能控制的常量。按比例分配后，无论屏幕多高，
- * 照片都稳定压过工具区（0.62 满足「主体占比 ≥55%」）。
+ * 旧版给参数面板写死 `heightIn(max = 320.dp)`。在矮屏（或状态栏 / 导航栏吃掉较多高度的机型）上，
+ * 固定 320dp + 工具条 44dp + 顶栏 44dp 会把预览挤到只剩一条缝。
+ * **固定高度永远会在某块屏幕上错**，因为屏幕高度不是我们能控制的常量。
+ *
+ * ## 为什么默认值又从 0.62 降到 0.45（真机反馈：「参数全部挤在一起，无法使用」）
+ *
+ * 因为 **0.62 分给预览的高度里有大半是空气**。关键在 [fitContentRect]：照片是**按宽度贴合**的，
+ * 3:2 横构图在 6.8" 机型上只需约 285dp 高，而 0.62 给了约 489dp —— **204dp 是空的**；
+ * 与此同时参数区只有约 260dp，而一个分类的内容有 500dp（调色）/ 900dp（人像），**要滚三屏**。
+ *
+ * 也就是说 §4 那条「预览主体占比 ≥55%」从一开始就定错了口径：它假设预览区的每一 dp 都花在
+ * 照片上，而贴合之后并不是。**预览区的合理高度是「装得下照片 + 一点余量」**，不是固定占比。
+ * 取 0.45 后照片尺寸**完全不变**（横构图仍被宽度限制，355dp > 285dp），
+ * 而参数区可视高度多出约 135dp（+50%）。
+ *
+ * ⚠️ 别把它当成「照片变小了」调回去：**先看照片实际尺寸有没有变**，那是唯一判据。
+ * 竖构图（3:2 竖）确实会比 0.62 时小一些 —— 那类照片想铺满屏幕高度就必须牺牲参数区，
+ * 交给分隔条（用户可拖）而不是默认值来承担。
  */
-private const val SPLIT_DEFAULT = 0.62f
+private const val SPLIT_DEFAULT = 0.45f
 
 /**
  * 分隔条热区高度。
@@ -125,7 +157,7 @@ private const val BACKDROP_ALPHA = 0.26f
  * ## 五段式布局
  *
  * ```
- * ┌─ 顶栏 56dp ── 返回 / 撤销 重做 重置 / 导出          ← 一次性动作
+ * ┌─ 顶栏 44dp ── 返回 / 撤销 重做 重置 / 导出          ← 一次性动作
  * ├─ 预览区 weight(previewFraction) ── 照片 + 手势 + 胶囊提示
  * ├─ 分隔条 28dp ── 上下拖动即改「预览 : 工具区」比例     ← 用户可调（真机反馈新增）
  * ├─ 一级工具条 44dp ── 人像 调色 曲线 LUT 预设          ← 分类导航
@@ -258,7 +290,7 @@ fun EditorScreen(
     // 是否有滑块正在被拖动（隐形式交互的开关）
     var dragging by remember { mutableStateOf(false) }
 
-    // 预览区占「预览 + 参数区」这块空间的比例。0.62 的理由见 SPLIT_DEFAULT。
+    // 预览区占「预览 + 参数区」这块空间的比例。SPLIT_DEFAULT 的取值理由见其 KDoc。
     var previewFraction by remember { mutableStateOf(SPLIT_DEFAULT) }
     // 外层 Column 的实测高度，用来把拖拽位移（px）换算成比例。
     // 实测而非常量：状态栏 / 导航栏 Insets 会让「屏幕高度」与实际可用高度相差几十 dp，
@@ -391,12 +423,19 @@ fun EditorScreen(
                         )
                         // 圆角改由**照片自己**承担：预览容器已经没有背景了，
                         // 再让容器去 clip 就等于「裁一块没有内容的圆角」。
-                        .clip(Radius.shell)
+                        //
+                        // ⚠️ 取最小的 14dp（`Radius.chip`），**不能**沿用容器的 40dp（`Radius.shell`）。
+                        // 真机反馈：「预览窗口圆角过大，丢失边缘细节」。
+                        // 这是一条很容易搞反的规则 —— 圆角阶梯是给**容器**定的（大容器配大圆角），
+                        // 而照片是**内容**：40dp 在 428dp 宽的照片上会啃掉四角一大块，
+                        // 而照片四角常常正好是有用信息（天空、地面、人物肩线）。**内容一律取最小档。**
+                        .clip(Radius.chip)
                         // 1px 极淡描边：照片现在是直接落在模糊底图上的，需要一个边界兜底 ——
                         // 否则浅色照片的边缘会与底图糊在一起，读起来像「没装进框里」。
                         // 取 `outlineVariant`（工作台主题里是 #33313A）：只兜底、不装饰，
                         // 与 §2.2「不画粗边框」是同一条规矩。
-                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, Radius.shell)
+                        // ⚠️ 形状必须与上面的 `clip` 一致，否则描边会画在照片**已经被裁掉**的角上。
+                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, Radius.chip)
                         .previewGestures(
                             retouchTool = retouchTool,
                             // 预览矩形 == 内容矩形 ⇒ 直接把 Fit 的结果当基准传下去，
@@ -713,7 +752,11 @@ private fun ExportPill(
 
     Box(
         modifier = Modifier
-            .height(40.dp)
+            // 36dp：与次级动作（[TopBarAction]）同高，在 44dp 的顶栏里上下各留 4dp。
+            // 顶栏降到 44dp 后它不能再是 40dp（只剩 2dp 余量，胶囊会显得「顶到栏边」）。
+            // 主次之分靠**材质**（玻璃胶囊 vs 无背景 ghost）而不是靠高度差 ——
+            // 一个栏里两种高度的控件，比两种材质更容易读成「没对齐」。
+            .height(36.dp)
             .pressScale(interaction)
             .clickable(
                 interactionSource = interaction,

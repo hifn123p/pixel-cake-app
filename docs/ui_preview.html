@@ -21,7 +21,7 @@
     --border:rgba(255,255,255,.14);    /* GlassBorderDark */
     --border-strong:rgba(255,255,255,.22);
 
-    --r-chip:12px; --r-card:20px; --r-sheet:28px; --r-shell:36px;
+    --r-chip:14px; --r-card:22px; --r-sheet:28px; --r-shell:40px;
 
     --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:32px; --s7:48px;
   }
@@ -168,13 +168,13 @@
   }
 
   /* 编辑器 */
-  .topbar{display:flex;align-items:center;gap:2px;height:56px;padding:0 var(--s3);flex-shrink:0}
+  .topbar{display:flex;align-items:center;gap:2px;height:44px;padding:0 var(--s3);flex-shrink:0}
   .tb{font-size:12px;letter-spacing:.5px;color:var(--gray3);padding:8px 9px;border-radius:var(--r-chip)}
   .tb.strong{font-size:16px;color:var(--on-dark);letter-spacing:0}
   .tb.cta{background:var(--seed);color:#fff;font-size:12px;padding:8px 14px;border-radius:var(--r-chip)}
   .tb.off{opacity:.35}
   .preview{
-    margin:0 var(--s3);flex:1;border-radius:var(--r-shell);position:relative;overflow:hidden;
+    margin:0 var(--s3);flex:1;border-radius:var(--r-chip);position:relative;overflow:hidden;
     background:#000;min-height:250px
   }
   .photo{
@@ -245,6 +245,7 @@
     <p style="margin-top:var(--s2)">首页按反馈<strong>二次修订为极简</strong>：整屏只有<strong>一个展示位</strong>——它本身就是唯一入口（顶栏那个重复的「＋」已在 2026-09-22 删除）；设备规格表、工程信息已全部删除（「首页介绍不对」）。见屏 ①与⑤。</p>
     <p style="margin-top:var(--s2)"><strong>UI-4b 趋势对齐已落地</strong>（<code>UI_DESIGN.md</code> §1.6.1）：弹簧按属性分族、深色强调色降饱和、<strong>玻璃收敛为浮层专用</strong>（卡片默认实心容器）。本页 mockup 因此全部改用<strong>实心容器底 + 深色档强调色</strong>。</p>
     <p style="margin-top:var(--s2)"><strong>后续补做已落地</strong>（<code>UI_DESIGN.md</code> §1.6.2）：① 预设卡片改为<strong>真实缩略图</strong>（屏⑥）；② 新增 <code>LocalDarkTheme</code> 修掉「强制深色主题下取错色板」的真 bug；③ 半径滑块纳入渲染监听。</p>
+    <p style="margin-top:var(--s2)"><strong>v0.3.0 真机反馈第三轮已落地</strong>（<code>UI_DESIGN.md</code> §4.0.3）：① 顶栏 56 → <strong>44dp</strong>（= <code>Spacing.controlHeight</code>，导出胶囊 40 → 36dp 齐平）；② 预览 : 参数权重默认 <strong>0.62 → 0.45</strong>、<code>SPLIT_MIN</code> <strong>0.28 → 0.22</strong>，且 <code>GroupLabel</code> 从 <code>labelMedium</code>+<code>onSurfaceVariant</code> 改 <strong><code>titleMedium</code>+<code>onSurface</code></strong>（此前与滑块右侧数值完全同款，面板层级等于不存在）；③ 预览框圆角从容器级 <code>shell</code>(40dp) 收到内容级 <strong><code>chip</code>(14dp)</strong>。<br><span style="color:var(--gray4)">本页 mockup 已同步：顶栏 44px、预览圆角 <code>--r-chip</code>、Radius 表 14 / 22 / 28 / 40。</span></p>
   </div>
 
   <div class="phones">
@@ -334,7 +335,7 @@
       <div class="phone-label">③ 拖动滑块时 · 非参数 UI 全部让位（隐形式）</div>
       <div class="phone">
         <!-- ⚠️ 顶栏**仍在布局里**，只是 alpha→0（`pointer-events:none` 对应 inertUnless）。
-             这是 2026-09-22 的修正：旧版把顶栏收掉高度，预览区的权重分母随之变大 56dp，
+             这是 2026-09-22 的修正：旧版把顶栏收掉高度，预览区的权重分母随之变大一个顶栏高，
              照片会放大一次、松手再缩回 ⇒ 每次调参抖两下（UI_DESIGN.md §4.0.2 #1）。
              对比 ② 与 ③：**除透明度外，其余尺寸必须完全一致**。 -->
         <div class="topbar" style="opacity:.06;pointer-events:none">

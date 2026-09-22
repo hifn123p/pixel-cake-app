@@ -443,13 +443,29 @@ private fun ToneSlider(
     )
 }
 
-/** 面板内的分组小标题。层次靠字重 + 颜色，不靠加字号（字号全 App 封顶 5 级）。 */
+/**
+ * 面板内的分组小标题（「影调」「色彩」「美型」…）。
+ *
+ * ## ⚠️ 2026-09-22 真机反馈修正：它原先与「数值标签」长得一模一样
+ *
+ * 原先用 `labelMedium` + `onSurfaceVariant` —— 而滑块右侧的**数值**用的也是
+ * `labelMedium` + `onSurfaceVariant`。也就是说，面板里**唯一**表达层级的东西
+ * 与最不重要的东西同规格，于是「影调 / 色彩」这些标题完全读不出来，
+ * 整块面板被看成一坨平铺的控件。真机反馈的原话是「参数全部挤在一起，无法使用」。
+ *
+ * 现在改用 [SectionHeader]（`ui/components/GlassCard.kt`）的**同一套规格**：
+ * `titleMedium` + `onSurface`。理由不是「大一点好看」，而是**同一个概念在全 App 只能有一套样式** ——
+ * 设置页的分组标题走 `SectionHeader`，参数面板的分组标题没有理由另立一套。
+ *
+ * 代价是每个分组标题高 8dp（16sp/24 行高 vs 12sp/16），一个分类 2~5 个分组 ⇒ 最多 +40dp。
+ * 这次面板同时多拿到约 135dp（见 `EditorScreen.SPLIT_DEFAULT`），净赚。
+ */
 @Composable
 private fun GroupLabel(text: String) {
     Text(
         text = text,
-        style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        style = MaterialTheme.typography.titleMedium,
+        color = MaterialTheme.colorScheme.onSurface,
         modifier = Modifier.padding(top = Spacing.m, bottom = Spacing.xs)
     )
 }

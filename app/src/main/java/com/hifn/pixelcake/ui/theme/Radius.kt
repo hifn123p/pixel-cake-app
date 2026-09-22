@@ -37,7 +37,13 @@ object Radius {
     /** 28dp：抽屉 —— 底部参数面板 / ModalBottomSheet（与屏幕圆角对齐，勿改） */
     val sheet: Shape = RoundedCornerShape(28.dp)
 
-    /** 40dp：外壳 —— 大容器 / 预览框 / 首屏展示位 */
+    /**
+     * 40dp：外壳 —— 大容器 / 首屏展示位。
+     *
+     * ⚠️ **不含照片预览框**。预览框的圆角走 [chip]（14dp），因为照片是**内容**、
+     * 不是容器 —— 给内容套容器半径，等于用装饰啃掉画面四角（边角常带有效信息）。
+     * 见 `EditorScreen` 预览区的 KDoc 与 `docs/UI_DESIGN.md` §4.0.3 #3。
+     */
     val shell: Shape = RoundedCornerShape(40.dp)
 
     /** 胶囊：悬浮工具条 / 提示条 / 滑块轨道 / 圆形按钮。不参与圆角层级，单独成类 */
