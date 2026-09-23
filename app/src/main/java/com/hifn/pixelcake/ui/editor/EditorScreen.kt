@@ -286,6 +286,12 @@ fun EditorScreen(
     var showOriginal by remember { mutableStateOf(false) }
     // 一级工具条当前分类。**默认落在「人像」**：这是本 App 的主场景。
     var category by remember { mutableStateOf(EditorCategory.Portrait) }
+    // 面板内部的二级分组 / 组内选中格（见 [PanelSelection]）。
+    //
+    // ⚠️ 必须挂在**这一层**：面板内容在下面的 `Crossfade` 里，切一级分类时旧内容会被销毁，
+    // 面板自己 `remember` 的状态会跟着清零 ⇒ 用户看到的是「去曲线看一眼再切回来，
+    // 混色又跳回红色通道」。挂高一层是唯一可靠的解法。
+    var selection by remember { mutableStateOf(PanelSelection()) }
     var showExport by remember { mutableStateOf(false) }
     // 是否有滑块正在被拖动（隐形式交互的开关）
     var dragging by remember { mutableStateOf(false) }
@@ -523,53 +529,73 @@ fun EditorScreen(
                 .weight(1f - previewFraction)
                 .padding(horizontal = Spacing.page, vertical = Spacing.s)
         ) {
-            // contentPadding 传 0 并把内边距交给滚动层：卡片负责「边界与材质」，
+            // contentPadding 传 0 并把内边距交给两层子容器：卡片负责「边界与材质」，
             // 滚动层负责「内容与 Insets」，两者各管一件事。
             GlassCard(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(0.dp)
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .verticalScroll(rememberScrollState())
-                        .padding(horizontal = Spacing.cardInner, vertical = Spacing.m)
-                        // ⚠️ `navigationBarsPadding()` 必须落在 **verticalScroll 之内**（即放在末尾）：
-                        // 编辑器不套 `AppShell`，拿不到它那层底部兜底；全屏 + edge-to-edge 下，
-                        // 最后一个滑块会被系统导航条 / 手势条压住。放在滚动内容内 → 背景仍沉浸到屏幕底，
-                        // 而内容能被滚到导航条之上，两者兼得。
-                        .navigationBarsPadding()
-                ) {
-                    Crossfade(
-                        targetState = category,
-                        animationSpec = tween(Motion.durationFor(Motion.base), easing = Motion.easingOut),
-                        label = "paramCategory"
-                    ) { cat ->
-                        ParamPanel(
-                            category = cat,
-                            params = params,
-                            retouch = retouch,
-                            retouchTool = retouchTool,
-                            brushRadius = brushRadius,
-                            inpaintRadius = inpaintRadius,
-                            inpaintCount = inpaintCount,
-                            autoMaskEnabled = autoMaskEnabled,
-                            presets = presets,
-                            activePresetId = activePresetId,
-                            presetThumbs = presetThumbs,
-                            onParamChange = onParamChange,
-                            onParamCommit = onParamCommit,
-                            onRetouchChange = onRetouchChange,
-                            onRetouchCommit = onRetouchCommit,
-                            onToolChange = onToolChange,
-                            onBrushRadiusChange = onBrushRadiusChange,
-                            onInpaintRadiusChange = onInpaintRadiusChange,
-                            onClearMask = onClearMask,
-                            onClearInpaint = onClearInpaint,
-                            onAutoMaskChange = onAutoMaskChange,
-                            onPreset = onPreset,
-                            onDraggingChange = { dragging = it }
-                        )
+                Column(modifier = Modifier.fillMaxSize()) {
+                    // 二级分组 chip 行：**钉在滚动之外**。
+                    //
+                    // 「影调」分组就有 7 个滑块，面板必然要滚；chip 行若跟着滚，切分组的入口
+                    // 就会滚出屏幕，用户只能先滚回顶部 —— 80 项参数下这是最容易迷路的地方。
+                    // 代价是它不在下面的 `Crossfade` 内，切一级分类时它立刻换成新分类的分组，
+                    // 而内容还在淡出；这是有意的取舍（导航该立刻响应，内容才需要过渡）。
+                    ParamSubBar(
+                        category = category,
+                        selection = selection,
+                        onSelectionChange = { selection = it }
+                    )
+
+                    // 内容区：weight(1f) 吃掉剩下的高度。
+                    // ⚠️ `weight` 只分配高度、**不给宽度** ⇒ 必须自己 `fillMaxWidth()`，
+                    // 否则宽度会退化成内容宽度（真机表现为「左边一条竖窄条 + 右边一大片空白」）。
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .verticalScroll(rememberScrollState())
+                            .padding(horizontal = Spacing.cardInner, vertical = Spacing.m)
+                            // ⚠️ `navigationBarsPadding()` 必须落在 **verticalScroll 之内**（即放在末尾）：
+                            // 编辑器不套 `AppShell`，拿不到它那层底部兜底；全屏 + edge-to-edge 下，
+                            // 最后一个滑块会被系统导航条 / 手势条压住。放在滚动内容内 → 背景仍沉浸到屏幕底，
+                            // 而内容能被滚到导航条之上，两者兼得。
+                            .navigationBarsPadding()
+                    ) {
+                        Crossfade(
+                            targetState = category,
+                            animationSpec = tween(Motion.durationFor(Motion.base), easing = Motion.easingOut),
+                            label = "paramCategory"
+                        ) { cat ->
+                            ParamPanel(
+                                category = cat,
+                                params = params,
+                                retouch = retouch,
+                                retouchTool = retouchTool,
+                                brushRadius = brushRadius,
+                                inpaintRadius = inpaintRadius,
+                                inpaintCount = inpaintCount,
+                                autoMaskEnabled = autoMaskEnabled,
+                                presets = presets,
+                                activePresetId = activePresetId,
+                                selection = selection,
+                                presetThumbs = presetThumbs,
+                                onSelectionChange = { selection = it },
+                                onParamChange = onParamChange,
+                                onParamCommit = onParamCommit,
+                                onRetouchChange = onRetouchChange,
+                                onRetouchCommit = onRetouchCommit,
+                                onToolChange = onToolChange,
+                                onBrushRadiusChange = onBrushRadiusChange,
+                                onInpaintRadiusChange = onInpaintRadiusChange,
+                                onClearMask = onClearMask,
+                                onClearInpaint = onClearInpaint,
+                                onAutoMaskChange = onAutoMaskChange,
+                                onPreset = onPreset,
+                                onDraggingChange = { dragging = it }
+                            )
+                        }
                     }
                 }
             }

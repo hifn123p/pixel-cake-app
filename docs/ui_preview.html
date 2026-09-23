@@ -246,6 +246,9 @@
     <p style="margin-top:var(--s2)"><strong>UI-4b 趋势对齐已落地</strong>（<code>UI_DESIGN.md</code> §1.6.1）：弹簧按属性分族、深色强调色降饱和、<strong>玻璃收敛为浮层专用</strong>（卡片默认实心容器）。本页 mockup 因此全部改用<strong>实心容器底 + 深色档强调色</strong>。</p>
     <p style="margin-top:var(--s2)"><strong>后续补做已落地</strong>（<code>UI_DESIGN.md</code> §1.6.2）：① 预设卡片改为<strong>真实缩略图</strong>（屏⑥）；② 新增 <code>LocalDarkTheme</code> 修掉「强制深色主题下取错色板」的真 bug；③ 半径滑块纳入渲染监听。</p>
     <p style="margin-top:var(--s2)"><strong>v0.3.0 真机反馈第三轮已落地</strong>（<code>UI_DESIGN.md</code> §4.0.3）：① 顶栏 56 → <strong>44dp</strong>（= <code>Spacing.controlHeight</code>，导出胶囊 40 → 36dp 齐平）；② 预览 : 参数权重默认 <strong>0.62 → 0.45</strong>、<code>SPLIT_MIN</code> <strong>0.28 → 0.22</strong>，且 <code>GroupLabel</code> 从 <code>labelMedium</code>+<code>onSurfaceVariant</code> 改 <strong><code>titleMedium</code>+<code>onSurface</code></strong>（此前与滑块右侧数值完全同款，面板层级等于不存在）；③ 预览框圆角从容器级 <code>shell</code>(40dp) 收到内容级 <strong><code>chip</code>(14dp)</strong>。<br><span style="color:var(--gray4)">本页 mockup 已同步：顶栏 44px、预览圆角 <code>--r-chip</code>、Radius 表 14 / 22 / 28 / 40。</span></p>
+    <p style="margin-top:var(--s2)"><strong>调色范围扩展批次 1+2 已落地</strong>（<code>TONING_DESIGN.md</code> §10 · 代码未提交）：可调项 <strong>10 → 64</strong>；一级分类仍是 5 个，但 <code>LUT</code> 换成 <strong><code>颜色</code></strong>（LUT 降为它的二级）——本页三处分段条已同步改名。面板新增<strong>二级分组 chip 行</strong>（调色 → 影调 / 白平衡 / 偏好；颜色 → 混色 / 分级 / LUT；曲线 → 亮度 / 红 / 绿 / 蓝），它<strong>钉在滚动之外</strong>；混色 / 分级的分组内选择用<strong>带色块的 chip</strong>。<br><span style="color:var(--gray4)">屏 ⑤ / ⑥ 的分段条已同步；新增的二级 chip 行尚未补 mockup，以 <code>TONING_DESIGN.md</code> §10 为准。</span></p>
+    <p style="margin-top:var(--s2)"><strong>调色范围扩展批次 3 已落地</strong>（<code>TONING_DESIGN.md</code> §11 · 代码未提交）：可调项 <strong>64 → 71</strong>，新增一级分类 <strong><code>效果</code></strong>（<strong>5 → 6 个</strong>，排在<code>曲线</code>之后、<code>预设</code>之前 —— <code>预设</code>留在最右端当肌肉记忆锚点）。二级为 <code>暗角</code>（强度 / 起点 / 过渡 / 圆度）与 <code>颗粒</code>（强度 / 尺寸 / 对比）。<br><span style="color:var(--gray4)">本页三处分段条与「导航」表已同步为六段；<code>效果</code>的面板未补 mockup（它是一组普通滑块，形态与屏 ② / ③ 一致）。⚠️ 这一批是本项目<strong>第一次需要像素坐标</strong>的参数 —— 暗角与颗粒的几何一律走<strong>长边归一化坐标</strong>，否则「预览所见 = 导出所得」会断。6 个一级分类曾被认为触到硬上限（<strong>2026-09-23 已更正</strong>：上限其实是 7，见下段）。</span></p>
+    <p style="margin-top:var(--s2)"><strong>调色范围扩展批次 4 已落地</strong>（<code>TONING_DESIGN.md</code> §12 · 代码未提交）：可调项 <strong>71 → 81</strong>，新增一级分类 <strong><code>细节</code></strong>（<strong>6 → 7 个</strong>，排在<code>曲线</code>之后、<code>效果</code>之前 —— 细节改的是画面的<strong>结构与质感</strong>，效果是往这个结构上<strong>再加一层</strong>）。二级为 <code>锐化</code>（4 项）、<code>降噪</code>（4 项）、<code>质感</code>（2 项）。<br><span style="color:var(--gray4)">本页三处分段条与「导航」表已同步为七段。<code>细节</code>的面板未补 mockup（同样是普通滑块，形态与屏 ② / ③ 一致）。⚠️ 这一批与前三批<strong>性质不同</strong>：它是全项目唯一的<strong>邻域</strong>算子（输出依赖「一个像素周围长什么样」），所以只能承诺「预览与导出<strong>观感一致</strong>」，<strong>不能</strong>承诺逐位相同 —— 别拿逐位断言去卡它。它还必须排在<strong>人像精修之后</strong>（锐化晚于磨皮，否则磨皮会把刚锐出来的边缘糊掉，表现为「锐化滑块只有一半量程」）。<strong>一级上限由 6 更正为 7</strong>（`312/7 = 44.6dp` 够、`312/8 = 39dp` 不够）⇒ <strong>加到第 8 个才必须让工具条横向可滚</strong>。</span></p>
   </div>
 
   <div class="phones">
@@ -300,9 +303,9 @@
 
         <div class="toolwrap">
           <div class="seg">
-            <div class="ind" style="left:4px;width:calc((100% - 8px)/5)"></div>
+            <div class="ind" style="left:4px;width:calc((100% - 8px)/7)"></div>
             <div class="items">
-              <span class="on">人像</span><span>调色</span><span>曲线</span><span>LUT</span><span>预设</span>
+              <span class="on">人像</span><span>调色</span><span>颜色</span><span>曲线</span><span>细节</span><span>效果</span><span>预设</span>
             </div>
           </div>
         </div>
@@ -361,9 +364,9 @@
 
         <div class="toolwrap" style="opacity:.12">
           <div class="seg">
-            <div class="ind" style="left:4px;width:calc((100% - 8px)/5)"></div>
+            <div class="ind" style="left:4px;width:calc((100% - 8px)/7)"></div>
             <div class="items">
-              <span class="on">人像</span><span>调色</span><span>曲线</span><span>LUT</span><span>预设</span>
+              <span class="on">人像</span><span>调色</span><span>颜色</span><span>曲线</span><span>细节</span><span>效果</span><span>预设</span>
             </div>
           </div>
         </div>
@@ -504,9 +507,9 @@
 
         <div class="toolwrap">
           <div class="seg">
-            <div class="ind" style="left:calc(4px + (100% - 8px)/5*4);width:calc((100% - 8px)/5)"></div>
+            <div class="ind" style="left:calc(4px + (100% - 8px)/7*6);width:calc((100% - 8px)/7)"></div>
             <div class="items">
-              <span>人像</span><span>调色</span><span>曲线</span><span>LUT</span><span class="on">预设</span>
+              <span>人像</span><span>调色</span><span>颜色</span><span>曲线</span><span>细节</span><span>效果</span><span class="on">预设</span>
             </div>
           </div>
         </div>
@@ -647,7 +650,7 @@
         <tr><td class="k">全屏（不套外壳）</td><td class="v">编辑器</td></tr>
         <tr><td class="k">Sheet</td><td class="v">导出 · 关于</td></tr>
         <tr><td class="k">卡片</td><td class="v">相机直连</td></tr>
-        <tr><td class="k">面板内</td><td class="v">曲线 · LUT</td></tr>
+        <tr><td class="k">面板内</td><td class="v">人像 · 调色 · 颜色 · 曲线 · 细节 · 效果 · 预设（7 段）</td></tr>
       </table>
     </div>
   </div>
@@ -681,7 +684,7 @@
 
   <div class="foot">
     <p>对应代码：<code>ui/theme/*</code>（token · 玻璃 + 实心容器 + LocalDarkTheme）、<code>ui/components/*</code>（GlassCard / GlassSegmentedBar / GlassChipRow / PresetThumbRow / ParamSlider / ActionTile）、<code>ui/shell/AppShell.kt</code>、<code>ui/home/HomeScreen.kt</code>、<code>ui/settings/*</code>、<code>ui/editor/*</code>（EditorScreen / EditorToolbar / ParamPanel / ExportSheet）、<code>MainActivity.kt</code>（含 <code>buildPresetThumbs</code>）。</p>
-    <p style="margin-top:var(--s2)">本页为静态预览，用于版式与密度评审；真实动效与手势需在真机上核对。<code>core/edit/**</code>、<code>core/camera/**</code>、<code>ml/**</code> 全程未改动。</p>
+    <p style="margin-top:var(--s2)">本页为静态预览，用于版式与密度评审；真实动效与手势需在真机上核对。<code>core/edit/**</code>、<code>core/camera/**</code>、<code>ml/**</code> 在 UI 改版期间未改动（<strong>2026-09-23 注</strong>：其后「调色能力」<strong>批次 1+2+3+4</strong> 已改动 <code>core/edit/**</code> —— 批次 1+2 影调 / 白平衡 / 偏好 / HSL / 分级 / 曲线；批次 3 新增暗角 / 颗粒并让像素程序接收归一化坐标；批次 4 新增细节（锐化 / 降噪 / 质感）—— 它是<strong>邻域</strong>算子，被实现成「在目标位图上再跑一遍」的独立 pass，因此 <code>PixelProgram</code> 的签名在批次 4 <strong>没有再动</strong>；<code>core/camera/**</code>、<code>ml/**</code> 仍未动）。</p>
   </div>
 
 </div>
