@@ -152,3 +152,13 @@ dependencies {
     // M0b：纯 Kotlin ARW 预览解析的 JVM 单测
     testImplementation("junit:junit:4.13.2")
 }
+
+// 本项目「本地无编译器」⇒ CI 是唯一的编译器，测试失败必须能**从 CI 日志直接读到断言差值**。
+// 默认的 Gradle 控制台只打异常类名 + 行号（SHORT 格式），拿不到 `assertArrayEquals` 的
+// 「第几个元素、期望多少、实际多少」。2026-09-24 定位 `DetailPass` 的 halo 缺项时，
+// 正因为这条看不见差值，只能靠离线逐行复刻去挖 —— 这行配置就是为了不再付那笔账。
+tasks.withType<Test>().configureEach {
+    testLogging {
+        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+    }
+}

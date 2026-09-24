@@ -113,12 +113,19 @@ class DetailPassTest {
         )
     }
 
-    /** `haloRows` 与 `radii` 必须是同一个口径（中性时为 0 ⇒ 调用方不必分带）。 */
+    /**
+     * `haloRows` 与 `radii` 必须是同一个口径（中性时为 0 ⇒ 调用方不必分带）。
+     *
+     * ⚠️ 口径是 `rFine + rCoarse`，**不是** `rCoarse`：粗层 `b2 = blur(blur(raw, rFine), rCoarse)`
+     * 是复合核，纵向支撑 = 两层半径之和。这一条与 `everySizeMatchesNaiveReference` 是同一件事的
+     * 两种表述 —— 前者测「口径声明」，后者测「实际窗口」；只改一个足以让另一条红。
+     */
     @Test
     fun haloRowsFollowsRadius() {
         assertEquals(0, DetailPass.haloRows(100, 100, EditParams()))
+        val r = DetailPass.radii(4000, 3000, P)
         assertEquals(
-            DetailPass.radii(4000, 3000, P)[1],
+            r[0] + r[1],
             DetailPass.haloRows(4000, 3000, P)
         )
     }
@@ -154,10 +161,14 @@ class DetailPassTest {
     }
 
     /**
-     * ⭐ 跨过 `h <= band + 2·rMax` 分流线的一串高度，两条路径都必须与朴素参照逐位相同。
+     * ⭐ 跨过 `h <= band + 2·halo` 分流线的一串高度，两条路径都必须与朴素参照逐位相同。
      *
-     * 高度集合刻意在 130..136 之间密集取值 —— 那是 `band(128) + 2·rMax` 的分界附近
-     * （`rMax = 3` 时为 134）。宽度取 17（质数）以避开任何「宽度是 2 的幂」的隐含假设。
+     * 高度集合刻意在 130..137 之间密集取值 —— 那是 `band(128) + 2·halo` 的分界附近
+     * （本用例里 `rFine = 1`、`rCoarse = 2` ⇒ `halo = 3` ⇒ 分界在 134）。
+     * 宽度取 17（质数）以避开任何「宽度是 2 的幂」的隐含假设。
+     *
+     * ⚠️ 这条抓到过一个真实缺陷：halo 曾按 `rCoarse` 取值（少了 `rFine`），
+     * 失败**只**出现在每两条带的接缝两侧各一行，且只差 1~2 级 —— 真机上绝对看不出来。
      */
     @Test
     fun everySizeMatchesNaiveReference() {
@@ -167,7 +178,7 @@ class DetailPassTest {
             val expected = naiveDetail(px, w, h, P)
             val actual = px.copyOf()
             DetailPass.apply(actual, w, h, P)
-            assertArrayEquals("h=$h（分歧点应在 134 附近）", expected, actual)
+            assertArrayEquals("h=$h（分流线在 134：<=134 走整幅，>=135 走分带）", expected, actual)
         }
     }
 

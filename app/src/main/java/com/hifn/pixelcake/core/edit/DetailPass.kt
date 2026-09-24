@@ -49,8 +49,8 @@ import kotlin.math.roundToInt
  *
  * 分带处理，跨带**复用**临时缓冲（不每带新分配）。33MP（7008×4672）默认参数下
  * `rFine = round(7008/1000) = 7`、`rCoarse = round(7008/120) = 58`，
- * 带高 `max(128, 58) = 128`，窗口 = `128 + 2×58 = 244` 行：
- *  - 单个 `IntArray(244×7008) ≈ 6.8MB`，同时在世 5 个（窗口 + b1 + b2 + tmp + 输出）≈ **34MB**；
+ * halo = `rFine + rCoarse = 65`，带高 `max(128, 65) = 128`，窗口 = `128 + 2×65 = 258` 行：
+ *  - 单个 `IntArray(258×7008) ≈ 7.2MB`，同时在世 5 个（窗口 + b1 + b2 + tmp + 输出）≈ **36MB**；
  *  - 相对 131MB 的目标位图是**加分项而非主导项**，与 `NeutralGray` 的分带收益同量级。
  *
  * ⚠️ **默认零成本**：10 个参数全中性 ⇒ [isNeutral] 为真 ⇒ [apply] 立刻返回，
@@ -62,9 +62,11 @@ object DetailPass {
      * 分带行数。
      *
      * 与 `retouch/NeutralGray` 的 256 不同，这里取 128 是因为本阶段的核半径更大
-     * （`rCoarse` 是长边的 1/120，33MP 下 58 行）：带高越大，每条带的窗口 `带高 + 2·r` 越胖。
-     * 128 行时 halo 开销占比 `2×58/128 ≈ 91%`，再往上加只会换来「重复计算变少、
+     * （`rCoarse` 是长边的 1/120，33MP 下 58 行，halo = `rFine + rCoarse` = 65 行）：
+     * 带高越大，每条带的窗口 `带高 + 2·halo` 越胖。
+     * 128 行时 halo 开销占比 `2×65/128 ≈ 102%`，再往上加只会换来「重复计算变少、
      * 单带内存变大」，而内存在这里才是硬约束。
+     * ⚠️ 带高还必须 >= `halo`（否则末带的 halo 凑不出来），故实际取 `max(BAND_ROWS, halo)`。
      */
     private const val BAND_ROWS = 128
 
@@ -133,9 +135,12 @@ object DetailPass {
         return intArrayOf(rFine, rCoarse)
     }
 
-    /** 本阶段需要上下各留多少**原始**行（= 最大半径）。中性时为 0。 */
-    fun haloRows(w: Int, h: Int, p: EditParams): Int =
-        if (isNeutral(p)) 0 else radii(w, h, p)[1]
+    /** 本阶段需要上下各留多少**原始**行（= 粗层支撑半径 = `rFine + rCoarse`）。中性时为 0。 */
+    fun haloRows(w: Int, h: Int, p: EditParams): Int {
+        if (isNeutral(p)) return 0
+        val r = radii(w, h, p)
+        return r[0] + r[1]
+    }
 
     /**
      * 可随机读写的像素平面。
@@ -175,7 +180,7 @@ object DetailPass {
     /**
      * 在任意平面上跑一遍细节。
      *
-     * 小图（`h <= 带高 + 2·r`）走整幅、否则走分带；两条路径共用同一个 [core]，
+     * 小图（`h <= 带高 + 2·halo`）走整幅、否则走分带；两条路径共用同一个 [core]，
      * 因此它们的差异只在「窗口怎么来」，不在算法 —— 这也是分带等价性可证的原因。
      */
     fun apply(plane: Plane, p: EditParams) {
@@ -185,14 +190,19 @@ object DetailPass {
         val r = radii(w, h, p)
         val rFine = r[0]
         val rMax = r[1]
-        // 带高必须 >= 半径：下一带的顶部 halo 要从「本带核心的末尾 r 行」里留，
-        // 核心行数不足 r 时那条 halo 根本凑不出来。这是分带实现唯一的硬约束。
-        val band = maxOf(BAND_ROWS, rMax)
+        // ⚠️ halo **不是** `rMax`：粗层是 `blur(blur(raw, rFine), rCoarse)` 的**复合**核，
+        // 支撑半径 = rFine + rCoarse。少留 rFine 行会让接缝两侧各一行拿到「被 clamp 掉的邻居」
+        // 而不是真数据 —— 画面看起来完全正常，只是接缝处对比度差一两级（真机发现不了，
+        // 由 `DetailPassTest.everySizeMatchesNaiveReference` 钉死）。
+        val halo = rFine + rMax
+        // 带高必须 >= halo：下一带的顶部 halo 要从「本带核心的末尾 halo 行」里留，
+        // 核心行数不足 halo 时那条 halo 根本凑不出来。这是分带实现唯一的硬约束。
+        val band = maxOf(BAND_ROWS, halo)
 
-        if (h <= band + 2 * rMax) {
+        if (h <= band + 2 * halo) {
             applyWhole(plane, w, h, rFine, rMax, p)
         } else {
-            applyBanded(plane, w, h, rFine, rMax, band, p)
+            applyBanded(plane, w, h, rFine, rMax, halo, band, p)
         }
     }
 
@@ -210,33 +220,37 @@ object DetailPass {
     // ————————————————————— 分带路径（大图）—————————————————————
 
     /**
-     * 逐带处理。每带的窗口 = `上一带留存的 r 行` + `本带核心行及其下方 r 行`。
+     * 逐带处理。每带的窗口 = `上一带留存的 halo 行` + `本带核心行及其下方 halo 行`。
      *
      * 为什么必须留存上一带的原始行：核心行是**写回平面**的，上一带写过之后，
-     * 本带顶部 halo（`[y-r, y)`）在平面里已经是**处理过**的值，不能再当源用。
+     * 本带顶部 halo（`[y-halo, y)`）在平面里已经是**处理过**的值，不能再当源用。
      * 这些行在本带之前还是原始值，所以上一带顺手留下来即可 —— 这也是本实现
      * 把窗口 `[win]` 做成**只读**（结果另写 `out`）的原因：窗口一旦不被就地修改，
      * 「读到已写过的值」这类错误在结构上就不存在了。
      *
-     * 等价性：`boxPass` 的边界 clamp 落在 `[top, bot]`；对核心行来说窗口恒完全落在
-     * `[top, bot]` 内 ⇒ 与整幅版的 `[0, h-1]` clamp 结果一致 ⇒ 逐位相同。
-     * 由 `DetailPassTest.bandedMatchesWholeFrame` 用测试内**独立**写的朴素参照钉死。
+     * ⚠️ halo 取 `rFine + rCoarse`（不是 `rCoarse`）：`b2` 是 `blur(blur(raw, rFine), rCoarse)`
+     * 的**复合**核，其纵向支撑 = 两层半径之和。少留 `rFine` 行 ⇒ 接缝两侧各一行的
+     * `b2` 会从 clamp 边界取到「被复制出来的邻居」而非真数据 ⇒ 与整幅版差一两级。
+     *
+     * 等价性：`boxPass` 的边界 clamp 落在 `[top, bot]`；对核心行来说，它需要的原始行
+     * （±`halo`）恒完全落在 `[top, bot]` 内 ⇒ 与整幅版的 `[0, h-1]` clamp 结果一致 ⇒ 逐位相同。
+     * 由 `DetailPassTest.everySizeMatchesNaiveReference` 用测试内**独立**写的朴素参照钉死。
      */
     private fun applyBanded(
         plane: Plane, w: Int, h: Int,
-        rFine: Int, rMax: Int, band: Int, p: EditParams
+        rFine: Int, rMax: Int, halo: Int, band: Int, p: EditParams
     ) {
         var y = 0
         var carry = IntArray(0)
         // 跨带复用：窗口尺寸只在**末带**变小，所以下面这个分支整趟最多触发一次。
-        // 不这么做的话，33MP 导出会为每带新分配约 34MB 的临时数组（37 带 ≈ 1.2GB 垃圾）。
+        // 不这么做的话，33MP 导出会为每带新分配约 36MB 的临时数组（37 带 ≈ 1.3GB 垃圾）。
         var win = IntArray(0)
         var s = Scratch(0, 0)
 
         while (y < h) {
             val rows = minOf(band, h - y)
-            val top = (y - rMax).coerceAtLeast(0)
-            val bot = (y + rows - 1 + rMax).coerceAtMost(h - 1)
+            val top = (y - halo).coerceAtLeast(0)
+            val bot = (y + rows - 1 + halo).coerceAtMost(h - 1)
             val headRows = y - top
             val winRows = bot - top + 1
             val need = winRows * w
@@ -246,7 +260,7 @@ object DetailPass {
                 s = Scratch(need, rows * w)
             }
 
-            // 不变式：`carry` 恒有 `rMax` 行，而 `headRows = min(rMax, y) ≤ rMax` ⇒ 这里绝不越界。
+            // 不变式：`carry` 恒有 `halo` 行，而 `headRows = min(halo, y) ≤ halo` ⇒ 这里绝不越界。
             // 一旦哪天被破坏，会以数组越界**响亮地**失败，而不是静默降质。
             if (headRows > 0) System.arraycopy(carry, 0, win, 0, headRows * w)
             plane.readRows(y, bot - y + 1, win, headRows * w)
@@ -254,10 +268,10 @@ object DetailPass {
             core(win, w, winRows, headRows, rows, s, rFine, rMax, p, s.out)
             plane.writeRows(y, rows, s.out, 0)
 
-            // 下一带的顶部 halo = 本带核心末尾的 rMax 行；此刻 win 里仍是**原始**值，先留存。
-            if (y + rows < h && rows >= rMax) {
-                if (carry.size != rMax * w) carry = IntArray(rMax * w)
-                System.arraycopy(win, (headRows + rows - rMax) * w, carry, 0, rMax * w)
+            // 下一带的顶部 halo = 本带核心末尾的 halo 行；此刻 win 里仍是**原始**值，先留存。
+            if (y + rows < h && rows >= halo) {
+                if (carry.size != halo * w) carry = IntArray(halo * w)
+                System.arraycopy(win, (headRows + rows - halo) * w, carry, 0, halo * w)
             }
             y += rows
         }
