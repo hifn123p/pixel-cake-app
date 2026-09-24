@@ -323,17 +323,30 @@ data class EditParams(
 )
 
 /**
- * 一次可撤销的**完整编辑快照**：tonal 参数 [EditParams] + 人像精修 [RetouchState]。
+ * 一次可撤销的**完整编辑快照**：tonal 参数 [EditParams] + 人像精修 [RetouchState]
+ * + 对象作用域图层 [layers]（批次 5，`docs/OBJECT_TONE_DESIGN.md` §4.3）。
  *
  * P1b 之前撤销栈只存 [EditParams]，导致「磨皮/液化/追色」等 retouch 改动不可撤销（P1 要求
  * 非破坏编辑栈可撤销/重做）。改为以快照为粒度后，一次 undo/redo 会同时回退调色与人像精修，
- * 语义与「一步操作」一致。
+ * 语义与「一步操作」一致。批次 5 引入对象层后同理 —— 若不进快照，撤销一次就会把用户建好的
+ * 作用域层全丢掉：**作用域是编辑的一部分，不是工具态**。
  *
  * 注：画笔蒙版/瑕疵描迹属「工具选择态」，由 UI 层单独持有，不入此快照（撤销不回退画笔轨迹）。
+ * 「当前正在编辑哪个作用域」同样是**选择态**（见 `EditorScreen.activeScope`），也不入快照。
+ *
+ * ## ⚠️ [layers] 有默认值 ⇒ 位置参数调用必须逐个补上
+ *
+ * `EditSnapshot(params, retouch)` 这种写法在新字段落地后**依然编译通过**，
+ * 却会把 `layers` 悄悄丢成空列表 —— 表现为「撤销一次，全部对象层消失」，
+ * 而且**不报错、不崩溃**，只是用户的东西没了。所以本批必须把仓库里每一处
+ * `EditSnapshot(` 调用点都补上第三个实参，并由 `ObjectLayersTest` 钉一条断言。
+ * （与 `kotlin-offline-syntax-gate` 技能第 8 条同类：加成员后必须扫消费点 ——
+ * 只不过这次消费点是**位置参数**而不是 `when` 分支。）
  */
 data class EditSnapshot(
     val params: EditParams = EditParams(),
-    val retouch: RetouchState = RetouchState()
+    val retouch: RetouchState = RetouchState(),
+    val layers: List<ObjectLayer> = emptyList()
 )
 
 /** 撤销/重做历史：持有当前 [EditSnapshot]，push 新状态即记录旧状态。 */

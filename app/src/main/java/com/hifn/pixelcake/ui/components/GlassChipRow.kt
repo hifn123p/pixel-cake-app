@@ -41,6 +41,12 @@ import com.hifn.pixelcake.ui.theme.Spacing
  * @param items    选项
  * @param selected 当前选中项；传 null 表示「无选中」（例如未选任何预设）
  * @param swatch   可选的色块取值函数；为 null 时就是纯文字 chip（绝大多数调用点如此）
+ * @param enabled  整行统一开关
+ * @param itemEnabled 逐项开关（批次 5 新增）。与 [enabled] 是**与**关系，默认 `null` = 全部可点。
+ *   存在的理由：作用域 chip 行里「整图」永远可用，而 8 个对象作用域在模型不可用时必须逐个禁用 ——
+ *   用整行的 [enabled] 会把「整图」也一起灰掉，那就等于告诉用户「这个功能坏了」。
+ *   **禁用态是必须的**：若让用户点进一个不会生效的作用域，他调半天的滑块一个像素都不会变，
+ *   而界面上没有任何东西解释为什么。
  */
 @Composable
 fun <T> GlassChipRow(
@@ -50,6 +56,7 @@ fun <T> GlassChipRow(
     onSelect: (T) -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    itemEnabled: ((T) -> Boolean)? = null,
     swatch: ((T) -> Color)? = null
 ) {
     Row(
@@ -62,7 +69,7 @@ fun <T> GlassChipRow(
             FilterChip(
                 selected = item == selected,
                 onClick = { onSelect(item) },
-                enabled = enabled,
+                enabled = enabled && (itemEnabled?.invoke(item) ?: true),
                 shape = Radius.chip,
                 label = {
                     Row(verticalAlignment = Alignment.CenterVertically) {

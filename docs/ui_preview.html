@@ -249,6 +249,7 @@
     <p style="margin-top:var(--s2)"><strong>调色范围扩展批次 1+2 已落地</strong>（<code>TONING_DESIGN.md</code> §10 · 代码未提交）：可调项 <strong>10 → 64</strong>；一级分类仍是 5 个，但 <code>LUT</code> 换成 <strong><code>颜色</code></strong>（LUT 降为它的二级）——本页三处分段条已同步改名。面板新增<strong>二级分组 chip 行</strong>（调色 → 影调 / 白平衡 / 偏好；颜色 → 混色 / 分级 / LUT；曲线 → 亮度 / 红 / 绿 / 蓝），它<strong>钉在滚动之外</strong>；混色 / 分级的分组内选择用<strong>带色块的 chip</strong>。<br><span style="color:var(--gray4)">屏 ⑤ / ⑥ 的分段条已同步；新增的二级 chip 行尚未补 mockup，以 <code>TONING_DESIGN.md</code> §10 为准。</span></p>
     <p style="margin-top:var(--s2)"><strong>调色范围扩展批次 3 已落地</strong>（<code>TONING_DESIGN.md</code> §11 · 代码未提交）：可调项 <strong>64 → 71</strong>，新增一级分类 <strong><code>效果</code></strong>（<strong>5 → 6 个</strong>，排在<code>曲线</code>之后、<code>预设</code>之前 —— <code>预设</code>留在最右端当肌肉记忆锚点）。二级为 <code>暗角</code>（强度 / 起点 / 过渡 / 圆度）与 <code>颗粒</code>（强度 / 尺寸 / 对比）。<br><span style="color:var(--gray4)">本页三处分段条与「导航」表已同步为六段；<code>效果</code>的面板未补 mockup（它是一组普通滑块，形态与屏 ② / ③ 一致）。⚠️ 这一批是本项目<strong>第一次需要像素坐标</strong>的参数 —— 暗角与颗粒的几何一律走<strong>长边归一化坐标</strong>，否则「预览所见 = 导出所得」会断。6 个一级分类曾被认为触到硬上限（<strong>2026-09-23 已更正</strong>：上限其实是 7，见下段）。</span></p>
     <p style="margin-top:var(--s2)"><strong>调色范围扩展批次 4 已落地</strong>（<code>TONING_DESIGN.md</code> §12 · 代码未提交）：可调项 <strong>71 → 81</strong>，新增一级分类 <strong><code>细节</code></strong>（<strong>6 → 7 个</strong>，排在<code>曲线</code>之后、<code>效果</code>之前 —— 细节改的是画面的<strong>结构与质感</strong>，效果是往这个结构上<strong>再加一层</strong>）。二级为 <code>锐化</code>（4 项）、<code>降噪</code>（4 项）、<code>质感</code>（2 项）。<br><span style="color:var(--gray4)">本页三处分段条与「导航」表已同步为七段。<code>细节</code>的面板未补 mockup（同样是普通滑块，形态与屏 ② / ③ 一致）。⚠️ 这一批与前三批<strong>性质不同</strong>：它是全项目唯一的<strong>邻域</strong>算子（输出依赖「一个像素周围长什么样」），所以只能承诺「预览与导出<strong>观感一致</strong>」，<strong>不能</strong>承诺逐位相同 —— 别拿逐位断言去卡它。它还必须排在<strong>人像精修之后</strong>（锐化晚于磨皮，否则磨皮会把刚锐出来的边缘糊掉，表现为「锐化滑块只有一半量程」）。<strong>一级上限由 6 更正为 7</strong>（`312/7 = 44.6dp` 够、`312/8 = 39dp` 不够）⇒ <strong>加到第 8 个才必须让工具条横向可滚</strong>。</span></p>
+    <p style="margin-top:var(--s2)"><strong>对象作用域调色（批次 5）已落地</strong>（<code>OBJECT_TONE_DESIGN.md</code> · 代码未提交）：可调项仍是 <strong>81 项</strong> —— 这一批<strong>不新增参数</strong>，而是把同一套参数扩展成<strong>作用域化</strong>：整图 + 8 个识别对象（人物 / 皮肤 / 面部 / 身体 / 头发 / 衣服 / 配饰 / 背景）<strong>各一层、层可叠加</strong>。本页新增<strong>屏 ②b</strong>。<br><span style="color:var(--gray4)">① 作用域行钉在二级 chip 行<strong>之上</strong>、也在滚动之外 —— 它决定「下面这些滑杆改的是谁」，滚出去就会变成「照片被改坏了但没人知道是哪一步干的」；② <code>细节</code> / <code>效果</code> 下这一行仍在，但面板整体换成空态（暗角是画面几何、锐化是邻域算子，都只作用于整图）；<code>人像</code> / <code>预设</code> 不渲染这一行；③ 选中非「整图」时面板顶部出现<strong>层头部</strong>（作用域名 + 移除 + 层强度），而<strong>滑杆一字不改</strong>（分组标题 / 量程 / 重置 / Hint 全部自动跟随 ⇒ 批次 1~4 的 81 项面板零改动）；④ 层是<strong>叠加量</strong>：整图 +0.5EV 之上再叠人物 +1EV ⇒ 人物比「只开整图」再亮一档（不是回到 +1EV）。<strong>数据基础早已在包里</strong>：MediaPipe 六类分割模型此前只用了「皮肤」一路，另外 4 类算完即弃 ⇒ 本批<strong>推理成本零增长</strong>。</span></p>
   </div>
 
   <div class="phones">
@@ -327,6 +328,85 @@
             <div class="slider active">
               <div class="lab"><span>笔刷大小</span><span class="val">0.040</span></div>
               <div class="track"><i style="width:38%"></i><b style="left:38%"></b></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════ 2b. 编辑器 · 对象作用域（批次 5） ══════════ -->
+    <div class="phone-wrap">
+      <div class="phone-label">②b 编辑器 · <strong>对象作用域</strong>（批次 5 · 代码未提交）：作用域行钉在二级 chip 行之上；选中非「整图」时面板顶部出现层头部</div>
+      <div class="phone">
+        <div class="topbar">
+          <div class="tb">‹</div>
+          <div class="tb strong">编辑</div>
+          <div style="flex:1"></div>
+          <div class="tb">撤销</div>
+          <div class="tb off">重做</div>
+          <div class="tb">重置</div>
+          <div class="tb cta">导出</div>
+        </div>
+
+        <div class="preview">
+          <div class="photo"></div>
+          <div class="subject"></div>
+          <div class="vignette"></div>
+          <div class="note">对象蒙版已就绪（GPU）· 人物 +1.0EV / 背景 −1.0EV</div>
+        </div>
+
+        <div style="height:28px;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+          <div style="width:40px;height:4px;border-radius:999px;background:var(--gray3);opacity:.35"></div>
+        </div>
+
+        <div class="toolwrap">
+          <div class="seg">
+            <div class="ind" style="left:calc(4px + (100% - 8px)/7);width:calc((100% - 8px)/7)"></div>
+            <div class="items">
+              <span>人像</span><span class="on">调色</span><span>颜色</span><span>曲线</span><span>细节</span><span>效果</span><span>预设</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 作用域行：钉在滚动之外（UI_DESIGN §4.4 规则 1）—— 它决定「下面这些滑杆改的是谁」 -->
+        <div style="flex-shrink:0;padding:var(--s1) 0">
+          <div class="chips" style="padding:0 var(--s3);overflow-x:auto;overflow-y:hidden;flex-wrap:nowrap">
+            <div class="chip">整图</div>
+            <div class="chip on">人物</div>
+            <div class="chip">皮肤</div>
+            <div class="chip">面部</div>
+            <div class="chip">身体</div>
+            <div class="chip">头发</div>
+            <div class="chip">衣服</div>
+            <div class="chip">配饰</div>
+            <div class="chip">背景 •</div>
+          </div>
+        </div>
+
+        <div class="panelwrap">
+          <div class="card">
+            <!-- 层头部：作用域名 + 移除 + 该层整体强度（批次 5） -->
+            <div style="display:flex;align-items:center;gap:var(--s2);margin-bottom:var(--s2)">
+              <div class="cap" style="flex:1;margin:0">人物</div>
+              <div class="tb">移除</div>
+            </div>
+            <div class="slider active">
+              <div class="lab"><span>层强度</span><span class="val">1.00</span></div>
+              <div class="track"><i style="width:100%"></i><b style="left:100%"></b></div>
+            </div>
+
+            <!-- 二级 chip 行：分组标题 / 量程 / 重置 / Hint 全部由「当前作用域那一层的参数」驱动 -->
+            <div class="chips" style="margin:var(--s3) 0 var(--s2)">
+              <div class="chip on">影调</div><div class="chip">白平衡</div><div class="chip">偏好</div>
+            </div>
+
+            <div class="slider active drag">
+              <div class="lab"><span>曝光</span><span class="val">+1.00</span></div>
+              <div class="track"><i style="width:75%"></i><b style="left:75%"></b></div>
+            </div>
+            <div class="slider active">
+              <div class="lab"><span>对比度</span><span class="val">0.00</span></div>
+              <div class="track"><i style="width:50%"></i><b style="left:50%"></b></div>
             </div>
           </div>
         </div>

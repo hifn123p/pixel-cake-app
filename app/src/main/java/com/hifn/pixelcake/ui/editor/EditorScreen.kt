@@ -61,7 +61,13 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.hifn.pixelcake.core.decode.ExportFormat
 import com.hifn.pixelcake.core.edit.EditParams
+import com.hifn.pixelcake.core.edit.ObjectLayer
+import com.hifn.pixelcake.core.edit.ObjectScope
 import com.hifn.pixelcake.core.edit.RetouchState
+import com.hifn.pixelcake.core.edit.hasScope
+import com.hifn.pixelcake.core.edit.isAdjusted
+import com.hifn.pixelcake.core.edit.upsert
+import com.hifn.pixelcake.core.edit.without
 import com.hifn.pixelcake.core.edit.preset.Preset
 import com.hifn.pixelcake.ui.components.CapsuleNote
 import com.hifn.pixelcake.ui.components.GlassCard
@@ -255,6 +261,11 @@ fun EditorScreen(
     activePresetId: String,
     // 预设 id → 缩略图（按**原图**渲染，见 `MainActivity.buildPresetThumbs`）。缺省即无缩略图。
     presetThumbs: Map<String, Bitmap> = emptyMap(),
+    // ———— 对象作用域（批次 5，`docs/OBJECT_TONE_DESIGN.md` §9）————
+    // 对象识别是否可用（模型是否成功加载）。false ⇒ 8 个对象 chip 逐个禁用、渲染只有整图层。
+    objectScopesAvailable: Boolean = false,
+    // 已建立的对象图层（每作用域至多一层，由 `upsert` / `without` 保证）。
+    layers: List<ObjectLayer> = emptyList(),
     canUndo: Boolean,
     canRedo: Boolean,
     // 状态行：类别 + 文案一起传（见 [EditorStatus]）。**不要改回 String** ——
@@ -275,6 +286,11 @@ fun EditorScreen(
     onClearInpaint: () -> Unit,
     onAutoMaskChange: (Boolean) -> Unit,
     onPreset: (Preset) -> Unit,
+    // 图层变更（拖动中，不进撤销栈）与图层提交（离散动作，进撤销栈）。
+    // 这两个**刻意不给默认值**：给默认值就等于允许调用方「忘掉」它们，
+    // 而漏掉 `onLayersChange` 的表现是「滑块拖了画面不动」——一个不会崩、只会让人怀疑 App 的失效。
+    onLayersChange: (List<ObjectLayer>) -> Unit,
+    onLayersCommit: () -> Unit,
     onReset: () -> Unit,
     onUndo: () -> Unit,
     onRedo: () -> Unit,
@@ -286,6 +302,45 @@ fun EditorScreen(
     var showOriginal by remember { mutableStateOf(false) }
     // 一级工具条当前分类。**默认落在「人像」**：这是本 App 的主场景。
     var category by remember { mutableStateOf(EditorCategory.Portrait) }
+    // 当前作用域（批次 5）。`null` = 整图。这是**选择态**（与 [PanelSelection] 同类），
+    // 不进 `EditSnapshot` —— 撤销不该把用户「正在看哪个作用域」也回退掉。
+    //
+    // ⚠️ `remember` 的 key 必须是 `original`（换图时是新 `Bitmap` 实例）：换图时 MainActivity 会
+    // 清空 `layers`、复位全部编辑状态，而本组件**不会**被重建（`editorOpen` 仍为 true）。
+    // 裸 `remember` 于是会让上一张照片选中的作用域留在界面上 —— 那正是本批最危险的错配。
+    var activeScope by remember(original) { mutableStateOf<ObjectScope?>(null) }
+
+    // 作用域的**有效值**：它必须有对应的层才算数。
+    //
+    // 这一层防御不是多余的：`activeScope` 与 `layers` 是两处状态，只要有一处与另一处不同步
+    // （换图、撤销回退到没有该层的快照、将来的「移除本层」忘复位），就会出现
+    // 「chip 显示『面部』但面板在改整图」——用户会认为「这个作用域坏了」，
+    // 而真正的原因是两处状态各自为政。以 `layers` 为准，不一致时**一致地**退回整图。
+    val scope: ObjectScope? = activeScope?.takeIf { layers.hasScope(it) }
+    val activeLayer: ObjectLayer? = scope?.let { sc -> layers.firstOrNull { it.scope == sc } }
+
+    // 面板要读写的参数：整图就是 `params`，对象作用域就是该层的参数。
+    //
+    // ## 这是本批 UI 侧最省事、也最不容易错的一点：**参数面板本身一个字都不用改**
+    //
+    // 因为「分组标题右侧的重置、每个滑块的量程与格式、Hint 文案」本来就只是「读写一个 [EditParams]」。
+    // 把「读谁写谁」提到这一层之后，面板里不存在任何一处需要判断「我在改谁」——
+    // 也就没有「某个滑块忘了跟着作用域切」的可能。
+    val shownParams: EditParams = activeLayer?.params ?: params
+    val writeParams: (EditParams) -> Unit = { np ->
+        val layer = activeLayer
+        if (layer == null) onParamChange(np) else onLayersChange(layers.upsert(layer.copy(params = np)))
+    }
+    val selectScope: (ObjectScope?) -> Unit = { sc ->
+        activeScope = sc
+        // 选中即建层（已存在则不动）：否则用户点完 chip 面板里没东西可调，还得再去找一个「新建层」按钮。
+        // 新建的是**全中性**层 ⇒ `buildLayerStack` 会把它过滤掉
+        // ⇒ **「选中作用域」这个动作本身不改变任何像素**，误触 chip 不会改照片。
+        if (sc != null && !layers.hasScope(sc)) {
+            onLayersChange(layers.upsert(ObjectLayer(sc)))
+            onLayersCommit()
+        }
+    }
     // 面板内部的二级分组 / 组内选中格（见 [PanelSelection]）。
     //
     // ⚠️ 必须挂在**这一层**：面板内容在下面的 `Crossfade` 里，切一级分类时旧内容会被销毁，
@@ -536,6 +591,31 @@ fun EditorScreen(
                 contentPadding = PaddingValues(0.dp)
             ) {
                 Column(modifier = Modifier.fillMaxSize()) {
+                    // 作用域 chip 行（批次 5）：钉在滚动之外，且排在二级分组行**之上**。
+                    //
+                    // 为什么它比二级分组行更靠上：一级分类决定「调哪些参数」、二级分组决定
+                    // 「其中的哪几个」，而作用域决定这些参数**落在画面的哪儿**。三者里最基础的是作用域 ——
+                    // 用户必须先确认「我在改谁」，否则下面调的一切都可能作用在一个他不想要的对象上。
+                    //
+                    // 只在 5 个逐像素分类下显示（人像有自己的蒙版口径、预设是一整套参数栈，
+                    // 见 `ScopeMode`）：少显示 3 个分类，就省下 3 个分类的约 48dp 常驻高度。
+                    //
+                    // ⚠️ 这里**不挂 `chromeAlpha` / `inertUnless`**：它们服务的是「拖动滑块时让非参数 UI
+                    // 隐身」，而这一行是**参数的一部分**（它决定滑块改谁），跟着淡出就违背了它存在的理由
+                    // （见 `ParamScopeBar` 的 KDoc）。二级分组行是同一个口径。
+                    if (category.scopeMode.showsScopeBar) {
+                        ParamScopeBar(
+                            current = scope,
+                            available = objectScopesAvailable,
+                            adjusted = { sc -> layers.isAdjusted(sc) },
+                            onSelect = selectScope,
+                            modifier = Modifier.padding(
+                                horizontal = Spacing.cardInner,
+                                vertical = Spacing.s
+                            )
+                        )
+                    }
+
                     // 二级分组 chip 行：**钉在滚动之外**。
                     //
                     // 「影调」分组就有 7 个滑块，面板必然要滚；chip 行若跟着滚，切分组的入口
@@ -570,7 +650,9 @@ fun EditorScreen(
                         ) { cat ->
                             ParamPanel(
                                 category = cat,
-                                params = params,
+                                // ⚠️ 传的是 `shownParams`（按作用域挑好的），**不是** `params`；
+                                // 写回同理走 `writeParams`。面板本身对作用域一无所知 —— 见它们的定义处说明。
+                                params = shownParams,
                                 retouch = retouch,
                                 retouchTool = retouchTool,
                                 brushRadius = brushRadius,
@@ -580,9 +662,11 @@ fun EditorScreen(
                                 presets = presets,
                                 activePresetId = activePresetId,
                                 selection = selection,
+                                activeScope = scope,
+                                activeLayer = activeLayer,
                                 presetThumbs = presetThumbs,
                                 onSelectionChange = { selection = it },
-                                onParamChange = onParamChange,
+                                onParamChange = writeParams,
                                 onParamCommit = onParamCommit,
                                 onRetouchChange = onRetouchChange,
                                 onRetouchCommit = onRetouchCommit,
@@ -593,6 +677,20 @@ fun EditorScreen(
                                 onClearInpaint = onClearInpaint,
                                 onAutoMaskChange = onAutoMaskChange,
                                 onPreset = onPreset,
+                                // 层强度拖动：只改状态、不进撤销栈（与滑块同一个口径），松手时由
+                                // `onLayerCommit` 统一入栈。
+                                onLayerChange = { onLayersChange(layers.upsert(it)) },
+                                onLayerCommit = onLayersCommit,
+                                onRemoveLayer = {
+                                    // 移除后**必须**把选择态收回整图：否则面板还停在一个没有层的作用域上，
+                                    // 而 `scope` 的兜底会把它显示成整图 —— 用户看到的是「点了移除，
+                                    // 滑块突然改起整图来了」。主动复位比依赖兜底清楚。
+                                    scope?.let { sc ->
+                                        onLayersChange(layers.without(sc))
+                                        activeScope = null
+                                        onLayersCommit()
+                                    }
+                                },
                                 onDraggingChange = { dragging = it }
                             )
                         }

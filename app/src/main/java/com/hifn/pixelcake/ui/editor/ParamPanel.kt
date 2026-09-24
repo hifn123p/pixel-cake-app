@@ -21,6 +21,8 @@ import com.hifn.pixelcake.core.edit.ColorMath
 import com.hifn.pixelcake.core.edit.EditParams
 import com.hifn.pixelcake.core.edit.GradingBand
 import com.hifn.pixelcake.core.edit.HslBands
+import com.hifn.pixelcake.core.edit.ObjectLayer
+import com.hifn.pixelcake.core.edit.ObjectScope
 import com.hifn.pixelcake.core.edit.RetouchState
 import com.hifn.pixelcake.core.edit.ToneCurve
 import com.hifn.pixelcake.core.edit.preset.Preset
@@ -263,6 +265,11 @@ fun ParamPanel(
     presets: List<Preset>,
     activePresetId: String,
     selection: PanelSelection,
+    // 当前作用域（批次 5）：`null` = 整图。**`params` 已经由 `EditorScreen` 按作用域挑好了**
+    // —— 于是本控件里没有任何一处需要判断「我在改谁」，滑块、量程、重置、Hint 全部自动跟着切。
+    activeScope: ObjectScope?,
+    // 当前对象层（`activeScope != null` 时非 null）。只用来读「层强度」并写回。
+    activeLayer: ObjectLayer?,
     // 预设 id → 缩略图（由上层按**原图**渲染一次，见 `MainActivity.buildPresetThumbs`）。缺失即占位。
     presetThumbs: Map<String, Bitmap> = emptyMap(),
     onSelectionChange: (PanelSelection) -> Unit,
@@ -277,8 +284,37 @@ fun ParamPanel(
     onClearInpaint: () -> Unit,
     onAutoMaskChange: (Boolean) -> Unit,
     onPreset: (Preset) -> Unit,
+    onLayerChange: (ObjectLayer) -> Unit,
+    onLayerCommit: () -> Unit,
+    onRemoveLayer: () -> Unit,
     onDraggingChange: (Boolean) -> Unit
 ) {
+    // ⚠️ 层管理区排在**分类内容之前**，而且**空态分支也必须经过它** —— 否则用户在「细节」分类下
+    // 会被困住：他既调不了参数，也看不到「移除本层」，只能先切回别的分类再回来。
+    activeLayer?.let { layer ->
+        LayerHeader(
+            layer = layer,
+            onChange = onLayerChange,
+            onCommit = onLayerCommit,
+            onRemove = onRemoveLayer,
+            onDraggingChange = onDraggingChange
+        )
+    }
+
+    // 对象作用域下的「细节 / 效果」：它们是**整幅阶段**，按对象施加讲不通
+    // （`docs/OBJECT_TONE_DESIGN.md` §7）。显示说明而不是**灰掉的滑块** ——
+    // 灰控件会让人以为是「暂时不可用」，于是反复找开关；一句话 + 明确的出口才诚实。
+    if (activeScope != null && category.scopeMode == ScopeMode.WholeImageOnly) {
+        WholeImageStageNotice(activeScope)
+        return
+    }
+
+    // 人像 / 预设与作用域无关（画笔/美型有自己的蒙版，预设是一整套参数）。这里只留一句说明，
+    // 不让用户以为自己在一个「不生效的作用域」里调参数。
+    if (activeScope != null && category.scopeMode == ScopeMode.NotApplicable) {
+        Hint("「${category.label}」是整幅操作，不受当前作用域影响。")
+    }
+
     when (category) {
         EditorCategory.Portrait -> PortraitParams(
             retouch, retouchTool, brushRadius, inpaintRadius, inpaintCount,
@@ -309,6 +345,125 @@ fun ParamPanel(
 
         EditorCategory.Preset -> PresetParams(presets, activePresetId, presetThumbs, onPreset)
     }
+}
+
+/** 作用域行里「整图」那一格的文案。**与 `EditorScreen` 无关**：整图不是一个 `ObjectScope`，只是栈底。 */
+private const val WHOLE_IMAGE_LABEL = "整图"
+
+/** 作用域行的全部选项：`整图` + 8 个对象作用域。文件级 `val` ⇒ 全进程只建一次。 */
+private val SCOPE_ITEMS: List<ObjectScope?> = listOf(null) + ObjectScope.entries
+
+/**
+ * 作用域 chip 行（批次 5，`docs/OBJECT_TONE_DESIGN.md` §9.1）。
+ *
+ * ## 为什么它必须**钉在滚动之外**（不是排版偏好，是安全约束）
+ *
+ * 这一行决定「下面那些滑块改的是谁」。若它跟着内容滚出屏幕，用户可能以为自己在调整图、
+ * 实际在改背景 —— 这类错误**在画面上是可见的**（只有背景变了），但用户已经调了好几下才发现，
+ * 而且第一个念头是「App 是不是坏了」。让「当前在编辑哪个作用域」永久留在视野里，
+ * 是本批唯一能防住它的办法。代价是钉住高度约 48dp，用「只在 5 个逐像素分类下显示」压到最小
+ * （见 `ScopeMode.showsScopeBar`）。
+ *
+ * ## 为什么没有「作用域」这三个字的标签
+ *
+ * 再加一行标题要多付约 20dp 的常驻高度，而 `整图 | 人物 | 皮肤 | 面部 | 身体 | 头发 | 衣服 | 配饰 | 背景`
+ * 本身已经把语义说完了。取而代之的是：面板内容顶部会重复一次「作用域：面部」
+ * （见 [LayerHeader]），进入对象作用域后不存在「不知道现在在哪个模式」的状态。
+ *
+ * ## 「已调整」用一个尾随圆点表示
+ *
+ * 而不是复用 [GlassChipRow] 的 `swatch` 色块槽：色块槽在**每个** chip 上都会占 12dp
+ * （8dp 圆点 + 4dp 间距），没调整的那些会留出一圈看不懂的空白，而且色块槽的语义是
+ * 「选项的颜色」（HSL 通道用），用来表达「已修改」是错用。文字后缀零 API 改动、也不会误读。
+ *
+ * @param current 当前作用域；`null` = 整图
+ * @param available 对象识别是否可用（模型是否成功加载）。不可用时 8 个对象 chip **逐个禁用**，
+ *   而「整图」保持可用 —— 用整行的 `enabled` 会把「整图」也灰掉，那等于告诉用户「功能坏了」。
+ *   禁用是必须的：让用户点进一个注定不生效的作用域，他调半天的滑块一个像素都不会变。
+ * @param adjusted 该作用域是否已有非中性参数（决定尾随圆点）
+ */
+@Composable
+fun ParamScopeBar(
+    current: ObjectScope?,
+    available: Boolean,
+    adjusted: (ObjectScope) -> Boolean,
+    onSelect: (ObjectScope?) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier = modifier) {
+        GlassChipRow(
+            items = SCOPE_ITEMS,
+            selected = current,
+            label = { sc ->
+                val base = sc?.label ?: WHOLE_IMAGE_LABEL
+                if (sc != null && adjusted(sc)) "$base •" else base
+            },
+            onSelect = onSelect,
+            itemEnabled = { sc -> sc == null || available }
+        )
+        if (!available) {
+            Text(
+                "对象识别不可用，仅支持整图。",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = Spacing.xs)
+            )
+        }
+    }
+}
+
+/**
+ * 对象作用域的层管理区（面板内容的第一块）。
+ *
+ * ## 为什么滑块位置会整体下移，而这是有意的
+ *
+ * 选中对象作用域后，分类内容上方多出约 90dp（标题 + 强度 + 说明）。这会**破坏**
+ * `ParamPanel` 类文档里那条「同一个滑块永远出现在面板的同一个高度」的肌肉记忆。
+ * 换取的是「用户时刻知道自己在改谁」+「一个把整层效果收一点的总旋钮」，
+ * 而作用域本身就是一个**模式**，模式切换理应重新排版。面板头部只有 2 个控件，代价可接受。
+ *
+ * ## 为什么「移除本层」放在标题右侧而不是一个整行大按钮
+ *
+ * 与「重置」同一处位置、同一副样子（见 [GroupHeader]）—— 面板里的次要动作只有这一种形态。
+ * 做成整行按钮的话，它就在滑块正下方，误触一次会丢掉整层的参数（层可以重建，参数不会回来）。
+ */
+@Composable
+private fun LayerHeader(
+    layer: ObjectLayer,
+    onChange: (ObjectLayer) -> Unit,
+    onCommit: () -> Unit,
+    onRemove: () -> Unit,
+    onDraggingChange: (Boolean) -> Unit
+) {
+    GroupHeader(
+        text = "作用域：${layer.scope.label}",
+        showReset = true,
+        actionLabel = "移除本层",
+        onReset = onRemove
+    )
+    ParamSlider(
+        label = "层强度",
+        value = layer.strength,
+        valueRange = 0f..1f,
+        step = 0.05f,
+        format = PERCENT_U,
+        onValueChange = { onChange(layer.copy(strength = it)) },
+        onValueChangeFinished = onCommit,
+        onDraggingChange = onDraggingChange
+    )
+    Hint("层强度 0% = 临时停用（参数保留，不会丢）。层是**叠加量**：作用在整图调色之后，整图 +0.5EV 加本层 +1EV ⇒ 这块共 +1.5EV。")
+}
+
+/**
+ * 「细节 / 效果」在对象作用域下的空态说明（`docs/OBJECT_TONE_DESIGN.md` §7）。
+ *
+ * 说实话比给控件更重要：这两组的实现前提就是整幅的 —— 邻域算子要一张低频参考图，
+ * 暗角是画面几何、颗粒是整幅确定性噪声。**「人脸的暗角」不是「暂未实现」，而是没有定义。**
+ */
+@Composable
+private fun WholeImageStageNotice(scope: ObjectScope) {
+    GroupLabel("整幅阶段")
+    Hint("「细节」（锐化/降噪/清晰度/纹理）与「效果」（暗角/颗粒）作用在整幅画面上 —— 按「${scope.label}」施加讲不通。把上面的作用域切回「整图」即可调整这两组参数。")
 }
 
 // ———————————————————————————————————————————————————————————————
@@ -1022,11 +1177,20 @@ private fun EditSlider(
 }
 
 /**
- * 分组标题 + 右侧「重置」。重置按钮**只在偏离默认值时才出现** ——
+ * 分组标题 + 右侧动作。动作按钮**只在 [showReset] 为真时出现** ——
  * 常显会给面板添一圈永远点不动的灰按钮，那正是「控件很多但都很吵」的观感来源。
+ *
+ * [actionLabel] 默认「重置」（绝大多数分组如此）。批次 5 新增它，是因为作用域层管理区需要
+ * 「移除本层」—— 那个动作与「重置」是**同一处位置、同一副样子**（面板里的次要动作只有这一种形态），
+ * 但文案必须不同：把「移除本层」写成「重置」会让人以为只是清参数，实际整层都没了。
  */
 @Composable
-private fun GroupHeader(text: String, showReset: Boolean, onReset: () -> Unit) {
+private fun GroupHeader(
+    text: String,
+    showReset: Boolean,
+    onReset: () -> Unit,
+    actionLabel: String = "重置"
+) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -1034,7 +1198,7 @@ private fun GroupHeader(text: String, showReset: Boolean, onReset: () -> Unit) {
     ) {
         GroupLabel(text)
         if (showReset) {
-            TextButton(onClick = onReset) { Text("重置") }
+            TextButton(onClick = onReset) { Text(actionLabel) }
         }
     }
 }

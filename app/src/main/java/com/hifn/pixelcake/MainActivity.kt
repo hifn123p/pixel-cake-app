@@ -38,9 +38,11 @@ import com.hifn.pixelcake.core.edit.EditSnapshot
 import com.hifn.pixelcake.core.edit.FullMask
 import com.hifn.pixelcake.core.edit.InpaintStroke
 import com.hifn.pixelcake.core.edit.NeutralGrayParams
+import com.hifn.pixelcake.core.edit.ObjectLayer
 import com.hifn.pixelcake.core.edit.RetouchMask
 import com.hifn.pixelcake.core.edit.RetouchScale
 import com.hifn.pixelcake.core.edit.RetouchState
+import com.hifn.pixelcake.core.edit.buildLayerStack
 import com.hifn.pixelcake.core.edit.preset.Preset
 import com.hifn.pixelcake.core.edit.preset.Presets
 import com.hifn.pixelcake.core.edit.retouch.RetouchLayer
@@ -125,6 +127,42 @@ private fun AppRoot(settings: AppSettings) {
     var srcUri by remember { mutableStateOf<Uri?>(null) }
     val history = remember { EditHistory() }
     var params by remember { mutableStateOf(EditParams()) }
+    // 对象作用域图层（批次 5，`docs/OBJECT_TONE_DESIGN.md` §4）：每作用域至多一层，
+    // 唯一性由 `upsert` / `without` 保证。与 `params` / `retouch` **并列** ——
+    // 它是编辑的一部分（进 `EditSnapshot`，撤销会一起回退），不是工具选择态。
+    var layers by remember { mutableStateOf(emptyList<ObjectLayer>()) }
+    // 对象识别是否可用（模型是否加载成功）。作用域 chip 行据此**逐个禁用** 8 个对象作用域 ——
+    // 见 `ParamScopeBar` 的 KDoc：让用户点进一个注定不生效的作用域，是本批最不能犯的错。
+    var objectScopesAvailable by remember { mutableStateOf(false) }
+
+    // 对象作用域的可用性**预热**（批次 5）。
+    //
+    // ## 为什么要在用户点开之前就探测
+    //
+    // 作用域 chip 行必须先知道「能不能用对象」才能决定禁用与否；若等到用户点了某个作用域再探测，
+    // 就必然出现「点进去 → 转一下 → 弹出不可用」这种把失败当流程的交互。
+    //
+    // ## 为什么这次预热的代价可以忽略
+    //
+    // `MlMaskProvider` 按 key 缓存的是**原始 6 类概率**，皮肤蒙版与对象蒙版都从它构造
+    // ⇒ 这次预热的产物会被之后的预览/导出渲染**直接复用**，不会重复推理。
+    //
+    // ## 为什么放在**独立**的 `LaunchedEffect` 里，而不是塞进渲染协程
+    //
+    // 渲染协程的首帧是用户真正在等的东西（几百毫秒），不该被这次探测（GPU ≈70ms / CPU ≈218ms）
+    // 推后。两者并发进入时，`MlMaskProvider` 的 `@Synchronized` 会把它们串行化，
+    // 后到的那个命中缓存 —— 无论谁先到，结果都只有一次推理。
+    LaunchedEffect(imported) {
+        val src = imported ?: return@LaunchedEffect
+        objectScopesAvailable = false
+        val key = mlCacheKey(srcUri, src.bitmap)
+        val ok = withContext(Dispatchers.Default) {
+            MlMaskProvider.objectMasksFor(context, src.bitmap, key) != null
+        }
+        objectScopesAvailable = ok
+        DebugLog.i(DebugLog.TAG_ML, "object scopes probed", mapOf("available" to ok))
+    }
+
     var rendered by remember { mutableStateOf<Bitmap?>(null) }
     // 状态行：**类别 + 文案一起**存（审计 M2）。UI 侧按 kind 取色，不再拿文案做判断。
     var status by remember { mutableStateOf(EditorStatus()) }
@@ -214,7 +252,11 @@ private fun AppRoot(settings: AppSettings) {
             listOf(
                 // ⚠️ `settings.autoMask` 必须在这里**直接读**（属性读 = 快照读）。
                 // 先取成局部 val 再用的话，snapshotFlow 看不到变化，设置页改了开关编辑器不会重渲。
-                params, retouch, brushStrokes, inpaintStrokes, settings.autoMask,
+                //
+                // ⚠️ `layers`（批次 5）同理必须在列表里：它是**编辑的一部分**，
+                // 漏掉的后果不是「不重渲」，而是「拖对象层的滑块画面完全不动」——
+                // 滑块自己会动、数值也在变，只有照片不变。那比崩溃更难排查。
+                params, retouch, layers, brushStrokes, inpaintStrokes, settings.autoMask,
                 brushRadius, inpaintRadius
             )
         }
@@ -227,6 +269,7 @@ private fun AppRoot(settings: AppSettings) {
                 // 在主线程捕获最新状态，避免在 Dispatchers.Default 内跨线程读快照状态
                 val p = params
                 val rt = retouch
+                val layerList = layers
                 val strokes = brushStrokes
                 val radius = brushRadius
                 val inpStrokes = inpaintStrokes
@@ -262,6 +305,18 @@ private fun AppRoot(settings: AppSettings) {
                         }
                         val mask = buildSkinMask(w, h, strokes, radius, mlMask)
                         val renderRetouch = buildRenderRetouch(rt, w, h, inpStrokes, inpRadius)
+                        // 对象作用域图层（批次 5）：**只在真有层时才去取蒙版** ——
+                        // 没有层的用户（绝大多数）在这里零额外开销，一个作用域网格都不会被构建。
+                        // `objectMasksFor` 与上面的 `skinMaskFor` 共用同一份概率缓存 ⇒ 只推理一次。
+                        val objMasks = if (layerList.isEmpty()) {
+                            null
+                        } else {
+                            MlMaskProvider.objectMasksFor(context, src.bitmap, mlKey)
+                        }
+                        // `buildLayerStack` 会剔掉「强度 0 / 参数全中性 / 拿不到蒙版」的层，
+                        // 并且按**目标尺寸**建好每层的程序与蒙版；全被剔掉时返回 EMPTY
+                        // ⇒ 逐像素路径退回「一次 applySrgb8」，与批次 4 完全一致。
+                        val layerStack = buildLayerStack(layerList, { sc -> objMasks?.maskFor(sc) }, w, h)
                         // 液化锚点（P1p-2c）：**只在真的开了液化参数时**才跑检测 —— 没人碰美型滑块时
                         // 没必要多付一次推理。取最大的一张脸（`facesFor` 已按面积降序）。
                         val beautyOn = beautyActive(renderRetouch.beauty)
@@ -280,10 +335,11 @@ private fun AppRoot(settings: AppSettings) {
                             // 注意：renderIntoLinear 内部已在物化目标 Bitmap 上跑过 retouch 整图 pass，
                             // 这里**不能**再调 RetouchLayer.apply，否则 RAW 预览会重复叠加（与导出不一致）。
                             EditEngine.renderIntoLinear(
-                                bmp, linear, p, renderRetouch, mask, faceAnchor = faceAnchor
+                                bmp, linear, p, renderRetouch, mask,
+                                faceAnchor = faceAnchor, layers = layerStack
                             ) { !renderJob.isActive }
                         } else {
-                            EditEngine.renderIntoSrgb(bmp, src.bitmap, p)
+                            EditEngine.renderIntoSrgb(bmp, src.bitmap, p, layerStack)
                             // 8-bit sRGB 路径的 renderIntoSrgb 不含 retouch，需在此补一趟整图 pass。
                             RetouchLayer.apply(bmp, renderRetouch, mask, faceAnchor)
                         }
@@ -368,6 +424,11 @@ private fun AppRoot(settings: AppSettings) {
                 MlFaceProvider.invalidate()
                 params = EditParams()
                 retouch = RetouchState()
+                // 换图必须清空对象层：它们是**上一张照片**的分割结果上建出来的作用域，
+                // 留在这里会让新图凭空多出几层（而且用的还是旧图的参数口径）。
+                // `objectScopesAvailable` 不需要在这里复位：上面那个探测 effect 自己会先置 false
+                // 再按新图的结果置位。
+                layers = emptyList()
                 brushStrokes = emptyList()
                 retouchTool = "none"
                 inpaintStrokes = emptyList()
@@ -425,6 +486,9 @@ private fun AppRoot(settings: AppSettings) {
                     presets = Presets.ALL,
                     activePresetId = activePresetId,
                     presetThumbs = presetThumbs,
+                    // 对象作用域（批次 5）：可用性来自上面的预热探测；层列表是编辑状态的一部分。
+                    objectScopesAvailable = objectScopesAvailable,
+                    layers = layers,
                     canUndo = history.canUndo,
                     canRedo = history.canRedo,
                     status = status,
@@ -432,15 +496,28 @@ private fun AppRoot(settings: AppSettings) {
                     exportFormat = settings.exportFormat,
                     onParamChange = {
                         // F08：拖动过程中只更新参数，不进撤销栈
+                        //
+                        // ⚠️ 这里收到的**只是整图**参数：对象层的写入走下面的 `onLayersChange`
+                        // （`EditorScreen` 的 `writeParams` 已按当前作用域分好路）。
+                        // 若哪天有人在 `EditorScreen` 里把两者接错，表现是「拖对象层的滑块，
+                        // 整图的参数在变」—— 画面会动，但动的是错的地方。
                         params = it
                         if (activePresetId != "none") activePresetId = "none"
                     },
-                    onParamCommit = { history.push(EditSnapshot(params, retouch)) },
+                    onParamCommit = { history.push(EditSnapshot(params, retouch, layers)) },
                     onRetouchChange = {
                         retouch = it
                         if (activePresetId != "none") activePresetId = "none"
                     },
-                    onRetouchCommit = { history.push(EditSnapshot(params, retouch)) },
+                    onRetouchCommit = { history.push(EditSnapshot(params, retouch, layers)) },
+                    // 图层变更（拖动中）只改状态；离散动作由 `onLayersCommit` 单独入栈
+                    //（两者分开的理由与 `onParamChange` / `onParamCommit` 完全一样：
+                    // 拖动过程中每帧都入栈会把撤销栈撑爆）。
+                    //
+                    // 刻意**不**清 `activePresetId`：预设只描述「整图参数 + 人像精修」，
+                    // 对象层是并列的结构 ⇒ 改层不算「偏离预设」（见 `PresetParams` 的说明）。
+                    onLayersChange = { layers = it },
+                    onLayersCommit = { history.push(EditSnapshot(params, retouch, layers)) },
                     onToolChange = { retouchTool = it },
                     onBrushStroke = { nx, ny ->
                         // 节流：与上一描迹太近则忽略；并设条数上限，防蒙版重建爆炸。
@@ -463,15 +540,21 @@ private fun AppRoot(settings: AppSettings) {
                         params = p.params
                         retouch = p.retouch
                         activePresetId = p.id
-                        history.push(EditSnapshot(params, retouch))
+                        // ⚠️ **刻意不动 `layers`**：预设给的是一套整图参数 + 人像精修，
+                        // 而对象层是用户按**这张图的具体内容**搭出来的结构（「背景压暗」「面部提亮」）。
+                        // 换个调色风格不该把这张图的分区结构拆掉 —— 那与「选一个作为起点」的语义相反。
+                        // 但 `layers` 仍要进快照，否则这一步的撤销会把已有的层抹掉。
+                        history.push(EditSnapshot(params, retouch, layers))
                     },
                     onReset = {
                         params = EditParams()
                         retouch = RetouchState()
+                        // 「重置」= 回到刚导入的状态 ⇒ 对象层也一起清（它同样是编辑的一部分）。
+                        layers = emptyList()
                         brushStrokes = emptyList()
                         inpaintStrokes = emptyList()
                         activePresetId = "none"
-                        history.push(EditSnapshot(params, retouch))
+                        history.push(EditSnapshot(params, retouch, layers))
                     },
                     onUndo = {
                         if (history.undo()) {
@@ -513,6 +596,9 @@ private fun AppRoot(settings: AppSettings) {
                             val img = decoded
                             // 在主线程捕获 retouch/mask 状态，避免跨线程读快照状态
                             val rt = retouch
+                            // 对象作用域图层（批次 5）：导出必须与预览用**同一套层参数**
+                            // —— 这是「预览所见 = 导出所得」在对象层上的前提。
+                            val layerList = layers
                             val strokes = brushStrokes
                             val radius = brushRadius
                             val inpStrokes = inpaintStrokes
@@ -533,6 +619,18 @@ private fun AppRoot(settings: AppSettings) {
                                     val mlMask = if (autoOn) MlMaskProvider.skinMaskFor(context, img.bitmap, mlKey) else null
                                     val mask = buildSkinMask(ew, eh, strokes, radius, mlMask)
                                     val renderRetouch = buildRenderRetouch(rt, ew, eh, inpStrokes, inpRadius)
+                                    // 对象作用域图层（批次 5）：按**导出分辨率**重建。
+                                    // 代价可以忽略：`ObjectMasks.maskFor` 的网格与目标尺寸无关，
+                                    // `resampleTo(ew, eh)` 只换一个分母（零大分配），
+                                    // 而每层只多一个 `PixelProgram`（几 KB 的 LUT）——
+                                    // 换来的是暗角几何等依赖画面尺寸的量在导出尺寸下同样正确。
+                                    val objMasks = if (layerList.isEmpty()) {
+                                        null
+                                    } else {
+                                        MlMaskProvider.objectMasksFor(context, img.bitmap, mlKey)
+                                    }
+                                    val layerStack =
+                                        buildLayerStack(layerList, { sc -> objMasks?.maskFor(sc) }, ew, eh)
                                     // 液化锚点（P1p-2c）：预览阶段若已跑过检测，这里直接命中 MlFaceProvider 缓存
                                     // （同一 mlKey）⇒ 零成本；锚点按**导出分辨率**重新换算（与预览尺寸不同）。
                                     val faceAnchor = if (beautyActive(renderRetouch.beauty)) {
@@ -550,7 +648,8 @@ private fun AppRoot(settings: AppSettings) {
                                         p = params,
                                         retouch = renderRetouch,
                                         mask = mask,
-                                        faceAnchor = faceAnchor
+                                        faceAnchor = faceAnchor,
+                                        layers = layerStack
                                     ) { p ->
                                         if (p % 20 == 0 || p >= 100) {
                                             scope.launch(Dispatchers.Main) {
@@ -576,14 +675,22 @@ private fun AppRoot(settings: AppSettings) {
                                             Decoder.decodeFullRes(context, it, profile.fullResLongEdge)
                                         }
                                         if (fullBase != null) {
-                                            fullTarget = Bitmap.createBitmap(
-                                                fullBase.bitmap.width, fullBase.bitmap.height,
-                                                Bitmap.Config.ARGB_8888
-                                            )
-                                            EditEngine.renderIntoSrgb(fullTarget, fullBase.bitmap, params)
-                                            // tonal 之后在已物化目标 Bitmap 上跑 retouch 整图 pass
+                                            // 尺寸先取出来：对象层要按**导出分辨率**建（见 RAW 分支的说明），
+                                            // 所以「建层」必须排在 `renderIntoSrgb` 之前。
                                             val fw = fullBase.bitmap.width
                                             val fh = fullBase.bitmap.height
+                                            fullTarget = Bitmap.createBitmap(
+                                                fw, fh, Bitmap.Config.ARGB_8888
+                                            )
+                                            val fobjMasks = if (layerList.isEmpty()) {
+                                                null
+                                            } else {
+                                                MlMaskProvider.objectMasksFor(context, img.bitmap, mlKey)
+                                            }
+                                            val flayerStack =
+                                                buildLayerStack(layerList, { sc -> fobjMasks?.maskFor(sc) }, fw, fh)
+                                            EditEngine.renderIntoSrgb(fullTarget, fullBase.bitmap, params, flayerStack)
+                                            // tonal 之后在已物化目标 Bitmap 上跑 retouch 整图 pass
                                             val fmlMask = if (autoOn) MlMaskProvider.skinMaskFor(context, img.bitmap, mlKey) else null
                                             val fmask = buildSkinMask(fw, fh, strokes, radius, fmlMask)
                                             val fretouch = buildRenderRetouch(rt, fw, fh, inpStrokes, inpRadius)
@@ -688,6 +795,9 @@ private fun AppRoot(settings: AppSettings) {
                         imported = null
                         srcUri = null
                         retouch = RetouchState()
+                        // 对象层与 retouch 同口径一起清（下一次导入本来也会清，这里是为了不让
+                        // 「退出编辑器后仍留着一批上一张图的层」这种状态存在哪怕一帧的机会）。
+                        layers = emptyList()
                         brushStrokes = emptyList()
                         retouchTool = "none"
                         inpaintStrokes = emptyList()
