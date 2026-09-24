@@ -60,7 +60,7 @@ object MlMaskProvider {
         DebugLog.i(
             DebugLog.TAG_ML,
             "skin mask ready",
-            mapOf("key" to key, "grid" to mask.gridSide, "accel" to accelerator),
+            mapOf<String, Any>("key" to key, "grid" to mask.gridSide, "accel" to (accelerator ?: "none")),
         )
         return mask
     }
@@ -83,7 +83,7 @@ object MlMaskProvider {
         DebugLog.i(
             DebugLog.TAG_ML,
             "object masks ready",
-            mapOf("key" to key, "side" to masks.gridSide, "accel" to accelerator),
+            mapOf<String, Any>("key" to key, "side" to masks.gridSide, "accel" to (accelerator ?: "none")),
         )
         return masks
     }
