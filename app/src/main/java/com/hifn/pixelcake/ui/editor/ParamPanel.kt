@@ -289,61 +289,77 @@ fun ParamPanel(
     onRemoveLayer: () -> Unit,
     onDraggingChange: (Boolean) -> Unit
 ) {
-    // ⚠️ 层管理区排在**分类内容之前**，而且**空态分支也必须经过它** —— 否则用户在「细节」分类下
-    // 会被困住：他既调不了参数，也看不到「移除本层」，只能先切回别的分类再回来。
-    activeLayer?.let { layer ->
-        LayerHeader(
-            layer = layer,
-            onChange = onLayerChange,
-            onCommit = onLayerCommit,
-            onRemove = onRemoveLayer,
-            onDraggingChange = onDraggingChange
-        )
-    }
+    // ⚠️ 本控件输出的是一串**纵向兄弟节点**（分组标题 / chip 行 / 每个滑块各是一个节点），
+    // 所以它必须**自己**提供一个纵向容器。这不是排版偏好，而是布局正确性的前提 ——
+    // 真机反馈「人像下面的所有菜单和进度条全部挤在一行上，相互覆盖」的根因正是缺了这一层。
+    //
+    // 原因在上层：`EditorScreen` 用 `Crossfade` 淡换分类内容，而 `Crossfade` 的内容容器是
+    // 一个 **`Box`**（`Transition.Crossfade` 的收尾就是 `Box(modifier) { ... }`，**没有**
+    // 「不带动画时直接输出内容」的提前返回分支）。`Box` 会把**所有子节点叠在同一个位置**
+    // ⇒ 上面那一串兄弟会全部落在面板左上角，互相覆盖。
+    //
+    // 包一层 `Column` 之后，`Crossfade` 拿到的就是**一个**节点。`ParamScopeBar` / `ParamSubBar`
+    // 之所以从来没有这个问题，是因为它们在 `Crossfade` **外面**、直接就是滚动 `Column` 的子节点。
+    Column(modifier = Modifier.fillMaxWidth()) {
+        // ⚠️ 层管理区排在**分类内容之前**，而且**空态分支也必须经过它** —— 否则用户在「细节」分类下
+        // 会被困住：他既调不了参数，也看不到「移除本层」，只能先切回别的分类再回来。
+        activeLayer?.let { layer ->
+            LayerHeader(
+                layer = layer,
+                onChange = onLayerChange,
+                onCommit = onLayerCommit,
+                onRemove = onRemoveLayer,
+                onDraggingChange = onDraggingChange
+            )
+        }
 
-    // 对象作用域下的「细节 / 效果」：它们是**整幅阶段**，按对象施加讲不通
-    // （`docs/OBJECT_TONE_DESIGN.md` §7）。显示说明而不是**灰掉的滑块** ——
-    // 灰控件会让人以为是「暂时不可用」，于是反复找开关；一句话 + 明确的出口才诚实。
-    if (activeScope != null && category.scopeMode == ScopeMode.WholeImageOnly) {
-        WholeImageStageNotice(activeScope)
-        return
-    }
+        // 对象作用域下的「细节 / 效果」：它们是**整幅阶段**，按对象施加讲不通
+        // （`docs/OBJECT_TONE_DESIGN.md` §7）。显示说明而不是**灰掉的滑块** ——
+        // 灰控件会让人以为是「暂时不可用」，于是反复找开关；一句话 + 明确的出口才诚实。
+        //
+        // ⚠️ 这里必须用 `else` 分支表达「其余分类」，**不能**用 `return` 提前退出：
+        // 从这一行开始已经在 `Column` 的 lambda 里，而非内联 lambda 不允许非局部返回
+        // （`return` 会直接编译不过 —— 这是唯一语法闸门之外最容易漏掉的一类改动）。
+        if (activeScope != null && category.scopeMode == ScopeMode.WholeImageOnly) {
+            WholeImageStageNotice(activeScope)
+        } else {
+            // 人像 / 预设与作用域无关（画笔/美型有自己的蒙版，预设是一整套参数）。这里只留一句说明，
+            // 不让用户以为自己在一个「不生效的作用域」里调参数。
+            if (activeScope != null && category.scopeMode == ScopeMode.NotApplicable) {
+                Hint("「${category.label}」是整幅操作，不受当前作用域影响。")
+            }
 
-    // 人像 / 预设与作用域无关（画笔/美型有自己的蒙版，预设是一整套参数）。这里只留一句说明，
-    // 不让用户以为自己在一个「不生效的作用域」里调参数。
-    if (activeScope != null && category.scopeMode == ScopeMode.NotApplicable) {
-        Hint("「${category.label}」是整幅操作，不受当前作用域影响。")
-    }
+            when (category) {
+                EditorCategory.Portrait -> PortraitParams(
+                    retouch, retouchTool, brushRadius, inpaintRadius, inpaintCount,
+                    autoMaskEnabled, onRetouchChange, onRetouchCommit, onToolChange,
+                    onBrushRadiusChange, onInpaintRadiusChange, onClearMask, onClearInpaint,
+                    onAutoMaskChange, onDraggingChange
+                )
 
-    when (category) {
-        EditorCategory.Portrait -> PortraitParams(
-            retouch, retouchTool, brushRadius, inpaintRadius, inpaintCount,
-            autoMaskEnabled, onRetouchChange, onRetouchCommit, onToolChange,
-            onBrushRadiusChange, onInpaintRadiusChange, onClearMask, onClearInpaint,
-            onAutoMaskChange, onDraggingChange
-        )
+                EditorCategory.Tone -> ToneParams(
+                    params, selection.toneTab, onParamChange, onParamCommit, onDraggingChange
+                )
 
-        EditorCategory.Tone -> ToneParams(
-            params, selection.toneTab, onParamChange, onParamCommit, onDraggingChange
-        )
+                EditorCategory.Color -> ColorParams(
+                    params, selection, onSelectionChange, onParamChange, onParamCommit, onDraggingChange
+                )
 
-        EditorCategory.Color -> ColorParams(
-            params, selection, onSelectionChange, onParamChange, onParamCommit, onDraggingChange
-        )
+                EditorCategory.Curve -> CurveParams(
+                    params, selection.curveTab, onParamChange, onParamCommit, onDraggingChange
+                )
 
-        EditorCategory.Curve -> CurveParams(
-            params, selection.curveTab, onParamChange, onParamCommit, onDraggingChange
-        )
+                EditorCategory.Detail -> DetailParams(
+                    params, selection.detailTab, onParamChange, onParamCommit, onDraggingChange
+                )
 
-        EditorCategory.Detail -> DetailParams(
-            params, selection.detailTab, onParamChange, onParamCommit, onDraggingChange
-        )
+                EditorCategory.Effect -> EffectParams(
+                    params, selection.effectTab, onParamChange, onParamCommit, onDraggingChange
+                )
 
-        EditorCategory.Effect -> EffectParams(
-            params, selection.effectTab, onParamChange, onParamCommit, onDraggingChange
-        )
-
-        EditorCategory.Preset -> PresetParams(presets, activePresetId, presetThumbs, onPreset)
+                EditorCategory.Preset -> PresetParams(presets, activePresetId, presetThumbs, onPreset)
+            }
+        }
     }
 }
 

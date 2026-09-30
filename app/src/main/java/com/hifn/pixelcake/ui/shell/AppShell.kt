@@ -113,6 +113,21 @@ fun AppShell(
  * 指示块材质走共享的 [segmentIndicator]（UI-6）：原先这里与 `GlassSegmentedBar`
  * 各写了一遍强调色平色块，是审计 L3 记的两套近似实现；收敛后「选中态长什么样」
  * 全 App 只有一处定义。
+ *
+ * ⚠️ **本控件与 `GlassSegmentedBar` 是两份代码**（不是共用）：这里是 TabBar 版，
+ * 多一个 `navigationBarsPadding`、指示块多内缩 `Spacing.xs`；差异未合并，
+ * 所以**改本文件的分段项时请同步检查 `GlassSegmentedBar`，反之亦然** ——
+ * 两处曾同时漏掉 `indication = null`（见下节）。
+ *
+ * ## 按压反馈：**不画涟漪**（`indication = null`）
+ *
+ * `selectable` 只写 `(selected, onClick)` 会落到「取 `LocalIndication`」的那个重载
+ * （机制与三现象的完整对应关系写在 `GlassSegmentedBar` 的 KDoc「按压反馈」一节），
+ * 于是在胶囊玻璃条里画出一块 M3 涟漪：**灰底 + 矩形边界（两端直角）+ 相邻两格矩形共边
+ * （读成两按钮中间一条分割线）**。一条根因、三个现象。
+ *
+ * `interactionSource` 一并传 `null` 是有意的：本项**不做**按下缩放（理由见
+ * `GlassSegmentedBar` 的同一节），没有消费者就不必分配 `MutableInteractionSource`。
  */
 @Composable
 private fun GlassTabBar(
@@ -160,7 +175,16 @@ private fun GlassTabBar(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxHeight()
-                            .selectable(selected = selected, onClick = { onSelect(tab) }),
+                            // ⚠️ 必须显式传 `indication = null`（理由见本控件 KDoc「按压反馈」）。
+                            // 只写 `selectable(selected, onClick)` 会落到「取 LocalIndication」的重载，
+                            // 在胶囊里画出方形灰底 —— 就是用户报的「灰底 + 直角 + 中缝」。
+                            // `interactionSource = null` 见同一节说明（本项不做按下缩放）。
+                            .selectable(
+                                selected = selected,
+                                interactionSource = null,
+                                indication = null,
+                                onClick = { onSelect(tab) }
+                            ),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(

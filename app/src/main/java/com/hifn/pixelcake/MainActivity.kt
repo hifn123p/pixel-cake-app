@@ -164,6 +164,15 @@ private fun AppRoot(settings: AppSettings) {
     }
 
     var rendered by remember { mutableStateOf<Bitmap?>(null) }
+    // 双缓冲的第二块（长注释见渲染协程里选写入目标的那一段）：
+    // `rendered` = 「正在被显示的那一块」，对渲染协程**只读**；`renderSpare` = 「下一批渲染的
+    // 写入目标」。两者**永远不是同一个对象** —— 这条不变量就是「拖动时预览不会被写花」的全部依据。
+    // 稳态下两块互相轮换 ⇒ 零额外分配；为了省内存去复用同一块的旧做法，代价正是屏幕上那根撕裂的横线。
+    //
+    // ⚠️ 一个仍然存在的边界（今天不打算在本次修复里动它）：导出时那条「拿不到全分辨率 ⇒
+    // 直接把 `rendered` 交给编码器」的降级分支仍会读到前台缓冲。双缓冲只把它被改写的时间
+    // 推后了一批（不再是「每批都写」），并没有让那条路径变安全 —— 但它**不会比改之前更差**。
+    var renderSpare by remember { mutableStateOf<Bitmap?>(null) }
     // 状态行：**类别 + 文案一起**存（审计 M2）。UI 侧按 kind 取色，不再拿文案做判断。
     var status by remember { mutableStateOf(EditorStatus()) }
     var exporting by remember { mutableStateOf(false) }
@@ -285,12 +294,31 @@ private fun AppRoot(settings: AppSettings) {
                 var autoMaskNoteOut = ""
                 var liquifyNoteOut = ""
                 val batch = renderMutex.withLock {
-                    val existing = rendered
-                    // 尺寸一致就**复用**同一张全幅缓冲：拖滑块时每一步都重新分配一张代理图
-                    // （约 11MB）会让 GC 变成主要开销。
-                    val bmp = if (existing != null && existing.width == w && existing.height == h) {
-                        existing
+                    // ⚠️ 写入目标**绝不能**是正在被显示的那一块（`rendered`）。
+                    //
+                    // 这条约束比「省内存」硬得多。写入的是**分带**结果：`EditEngine` 每写完一带就
+                    // `Bitmap.setPixels` 一次，而 `setPixels` 会推进位图的 generation id ——
+                    // 正在显示的位图每被推进一次，合成器就会**重新上传一次纹理**。
+                    // 于是屏幕上出现的是一张**写了一半**的图：当前带的边界就是那根
+                    // 「上下颜色不一致的横线」，而每一批渲染它都从顶部重新扫下来，
+                    // 拖动时于是持续闪动（真机反馈：「预览窗口有一根横线，上下颜色不一致，还会闪动」）。
+                    //
+                    // 双缓冲让这件事**结构性地不可能发生**：`rendered` 只读、`renderSpare` 只写，
+                    // 算完再一次性换过来。稳态下**零额外分配**（两块互相轮换），
+                    // 所以「为了省 11MB/批 的 GC 去复用同一块」这个旧做法没有任何必要 ——
+                    // 它换来的正是上面那根横线。
+                    //
+                    // ⚠️ 被换下来的那块要等到**下一批**渲染才会被写，而那时它已经离开画面至少一帧，
+                    // 合成器对它的最后一次读取早已结束 ⇒ 连「刚换下来就被写」的窗口也不存在。
+                    val displayed = rendered
+                    val spare = renderSpare
+                    val bmp = if (spare != null && spare.width == w && spare.height == h && spare !== displayed) {
+                        spare
                     } else {
+                        // 尺寸不符（换图）或还没有备用缓冲 ⇒ 新建一块。
+                        // 旧的那块**不手动回收**：它可能刚离开画面、合成器仍持有它，
+                        // 而这个分支一张图最多走一次（约 11MB）—— 丢掉交 GC，
+                        // 与 `src.bitmap` 同一个口径（见 `onBack` 的说明）。
                         Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
                     }
                     withContext(Dispatchers.Default) {
@@ -346,7 +374,8 @@ private fun AppRoot(settings: AppSettings) {
                     }
                     // `reused` 用引用相等判定，不重算一遍尺寸条件：回收决策完全依赖
                     // 「这张位图是不是借来的」，重算等于多一处可能与上面那次判断不一致的地方。
-                    RenderBatch(bmp = bmp, reused = bmp === existing, epoch = epochAtStart)
+                    // 借来的那一块是双缓冲的备用块（`renderSpare`），**归属权不在本协程**。
+                    RenderBatch(bmp = bmp, reused = bmp === spare, epoch = epochAtStart)
                 }
                 // ⚠️ 出锁后的第一件事是**确认这一批还有没有人要**。
                 // 用户完全可能在渲染的这几百毫秒里退出了编辑器或换了图 —— 那样写回去就等于
@@ -356,15 +385,34 @@ private fun AppRoot(settings: AppSettings) {
                     // 丢弃这一批。⚠️ 回收规则是**不对称**的，别写反：
                     // - `reused == false`：这张位图是本次新建、只有本协程持有 ⇒ 必须自己回收，
                     //   否则「拖完滑块立刻点返回」每来一次就漏一张代理图（约 11MB）；
-                    // - `reused == true`：它就是 `rendered` 本身，归属权不在本协程 ⇒
-                    //   **绝不回收**（此刻它多半已被 `onBack` 在锁内回收掉了）。
+                    // - `reused == true`：它是借来的 `renderSpare`，归属权不在本协程 ⇒
+                    //   **绝不回收** —— 它还要当下一次渲染的写入目标，回收它等于把双缓冲拆成单缓冲。
                     if (!batch.reused) batch.bmp.recycle()
                     return@collectLatest
                 }
                 val target = batch.bmp
-                // 渲染完成后再赋值并递增 stamp：renderInto* 是原位修改同一 Bitmap，
+                // 渲染完成后再赋值并递增 stamp：位图是**原位**被写满的，
                 // 不触发重组的话 Compose 会一直显示赋值时那一帧（预览空白）。
+                //
+                // 双缓冲交换就在这一行：刚算好的那块换到前台，旧的**前台**块降级为下一批的写入目标。
+                //
+                // ⚠️ 这里读 `rendered` 是安全的：能走到这一行说明 `imageEpoch` 没变，而唯一会在
+                // 别处改它的 `onBack` 一定会先推进代次 ⇒ 从进锁前到现在没有别人动过它。
+                // 另外本段全程没有挂起点（`rendered =` / `renderSpare =` 都是快照写），
+                // 所以「读旧值 → 换前台 → 定备用」这三步之间不可能插进另一批渲染。
+                //
+                // 尺寸与本次不符（换图）时干脆置空：那种场合它早已在 `onBack` 里退役并回收，
+                // 这里的置空只是兜底 —— 宁可下一批多分配一次，也不能把一块尺寸不对的缓冲留成写入目标。
+                val previous = rendered
                 rendered = target
+                renderSpare = if (
+                    previous != null && previous !== target &&
+                    previous.width == w && previous.height == h
+                ) {
+                    previous
+                } else {
+                    null
+                }
                 if (baselinePending) {
                     // 首次渲染用的参数就是 `EditParams()`（导入那一刻刚重置过），所以**这一帧本身就是零编辑图**，
                     // 直接留一份副本当对比基准即可 —— 不必为了对比再单独跑一趟渲染（代理图也要几百毫秒）。
@@ -768,11 +816,17 @@ private fun AppRoot(settings: AppSettings) {
                         // 导出期间 `rendered` 还可能被编码路径读（拿不到全分辨率时的降级分支
                         // 会直接拿它去编码）—— 那段时间它的归属权是**共享的**，手动回收必须等导出结束。
                         // 用「导出中就不手动回收」而不是「给导出加锁」：导出要跑几秒，
-                        // 让预览渲染去等它会把编辑器卡成幻灯片；这两张图交给 GC 是更划算的交换。
+                        // 让预览渲染去等它会把编辑器卡成幻灯片；这几张图交给 GC 是更划算的交换。
+                        // ⚠️ `renderSpare` 必须与 `rendered` **同口径**一起退役：它同样是
+                        // 「渲染协程写、生命周期由这一把锁管」的缓冲（见双缓冲那一段）。
+                        // 漏掉它的后果有两层：每退出一次编辑器漏一块 11MB；而且那块缓冲里
+                        // 还留着上一张照片的像素，下一次导入会把它当作写入目标，画面先脏一拍。
                         val retired: List<Bitmap> =
-                            if (exporting) emptyList() else listOfNotNull(rendered, compareBase)
+                            if (exporting) emptyList()
+                            else listOfNotNull(rendered, compareBase, renderSpare)
                         rendered = null
                         compareBase = null
+                        renderSpare = null
                         baselinePending = false
                         if (retired.isNotEmpty()) {
                             scope.launch {
