@@ -1,21 +1,21 @@
 # GitHub Actions CI 结果报告
 
 > 由 push 触发的工作流运行结果整理。本文件每次 CI 后**覆盖重写**（前一次报告已清空）。
-> 生成时间：2026-09-30（本地）
-> 关联提交：`3ffc58ddb930868782db6ee91babecea03670429`（**versionName `0.4.2` / versionCode `7` —— 本轮已发版**）
-> 本轮主题：**真机反馈第四轮 + 第五轮修复，发布 `v0.4.2`**
+> 生成时间：2026-10-01（本地）
+> 关联提交：`ebb894907493090f550f2d61ea9c46b0d79c05f6`（**versionName `0.4.3` / versionCode `8` —— 本轮已发版**）
+> 本轮主题：**真机反馈第六轮 + 第七轮修复，发布 `v0.4.3`**
 
 ## 结论：✅ 一次全绿发版 —— main 跑绿后打 tag，5 job 全过（含 Publish），Release 已发布
 
 | 阶段 | 运行 | ref / 提交 | 结论 |
 |---|---|---|---|
-| ① main 推修复 + 抬版本号 | run **`36663128099`** | `3ffc58d`（main） | ✅ **4 job 全绿**（`Publish` 非 tag 跳过） |
-| ② tag 触发发布 | run **`36663981140`** | `v0.4.2`（`3ffc58d`） | ✅ **5 job 全绿**（含 `Publish GitHub Release`） |
+| ① main 推修复 + 抬版本号 | run **`36810389089`** | `ebb8949`（main） | ✅ **4 job 全绿**（`Publish` 非 tag 跳过） |
+| ② tag 触发发布 | run **`36814801731`** | `v0.4.3`（`ebb8949`） | ✅ **5 job 全绿**（含 `Publish GitHub Release`） |
 
-> 🚀 **Release 已发布**：<https://github.com/hifn123p/pixel-cake-app/releases/tag/v0.4.2>
-> 附件 `pixelcake-v0.4.2-release.apk`（**29.01 MB**），已供真机（一加15）下载验收。
+> 🚀 **Release 已发布**：<https://github.com/hifn123p/pixel-cake-app/releases/tag/v0.4.3>
+> 附件 `pixelcake-v0.4.3-release.apk`（**29.01 MB**），已供真机（一加15）下载验收。
 
-## 任务（Job）总览 — run `36663981140`（tag run，最终绿）
+## 任务（Job）总览 — run `36814801731`（tag run，最终绿）
 
 | Job | 结论 | 说明 |
 |---|---|---|
@@ -25,71 +25,85 @@
 | Signed Release | ✅ success | 解 PKCS12 keystore → `assembleRelease`（R8）→ 签名 APK + mapping |
 | Publish GitHub Release | ✅ success | `v*` tag 触发，上传 release APK 并创建 Release（`contents: write`） |
 
-> 与 main run `36663128099` 的唯一差别：后者为非 tag push，`Publish` 按设计 **⏭️ skip**。
+> 与 main run `36810389089` 的唯一差别：后者为非 tag push，`Publish` 按设计 **⏭️ skip**。
 > 两步走的**闸门设计生效**：只有「main 已绿」的 commit 才被打了 tag。
 
-## 本轮产出物（Artifacts）— run `36663981140` / `36663128099`
+## 本轮产出物（Artifacts）— run `36814801731` / `36810389089`
 
 | Artifact | 大小 | 保留 |
 |---|---|---|
-| `pixelcake-release-3ffc58d…` | 20.79 MB | 90 天 |
-| `pixelcake-debug-3ffc58d…` | 31.12 MB | 90 天 |
-| `pixelcake-mapping-3ffc58d…` | 2.18 MB | 90 天 |
-| `lint-report-3ffc58d…` | 0.03 MB | 7 天 |
+| `pixelcake-release-ebb8949…` | 20.79 MB | 90 天 |
+| `pixelcake-debug-ebb8949…` | 31.12 MB | 90 天 |
+| `pixelcake-mapping-ebb8949…` | 2.18 MB | 90 天 |
+| `lint-report-ebb8949…` | 0.03 MB | 7 天 |
 
-**Release 附件**：`pixelcake-v0.4.2-release.apk`（29.01 MB）。
+**Release 附件**：`pixelcake-v0.4.3-release.apk`（29.01 MB）。
 
 ## 本轮提交
 
 | 提交 | 说明 |
 |---|---|
-| `0d02888` | `fix(ui)`：真机反馈第四轮 + 第五轮修复（6 文件，`+267 / −67`） |
-| `3ffc58d` | `chore(release)`：抬版本 `0.4.1 → 0.4.2`（`versionCode 6 → 7`） |
+| `8c08166` | `fix(ui/preview)`：真机反馈第六轮 + 第七轮修复（4 文件，`+201 / −25`） |
+| `ebb8949` | `chore(release)`：抬版本 `0.4.2 → 0.4.3`（`versionCode 7 → 8`） |
 
-### 真机反馈第四轮（用户报 3 条 → 实为 2 个根因）
+### 真机反馈第六轮（用户报：「工具栏菜单/进度条没有对应文字，且像素过大、占比不合适」）
 
-| 报障 | 根因 | 修法 |
-|---|---|---|
-| ① 人像页「下面的菜单和进度条全部挤在一行、相互覆盖」<br>③「最下面的功能描述也和菜单/进度条挤在一起」 | **同一个根因**：`EditorScreen` 用 `Crossfade` 淡换分类内容，而 `Transition.Crossfade` 的内容容器是 **`Box`**（已核 `compose-animation:1.9.5` 源码，**没有**「不带动画就直接输出」的提前返回分支）；`ParamPanel` 输出的却是一串**纵向兄弟节点** ⇒ 全被叠在面板左上角 | `ParamPanel` body **自带一层 `Column(Modifier.fillMaxWidth())`**（容器该由输出方负责，`ParamScopeBar` 一直这么写）。原先「对象作用域 + 整幅阶段 ⇒ 提前 `return`」改写成 `else` 分支 —— **非内联 lambda 里不允许非局部返回**，直接留 `return` 编译不过 |
-| ② 拖动过程中预览窗口出现**一根横线**、上下颜色不一致且闪动 | 渲染把新一帧写进**正在显示**的那张位图：`MainActivity` 里 `existing = rendered`（屏幕上那张），写发生在 `Dispatchers.Default`；`EditEngine` 是**分带**写（`setPixels` 每带推进一次 generation id）⇒ 合成器据此重传纹理 ⇒ 屏幕上是「写了一半」的图，**当前带边界就是那根横线**；每批从顶部重扫 ⇒ 持续闪动 | 预览改**双缓冲**：新增 `renderSpare`（下一批的写入目标），`rendered` 对渲染协程**只读**；`RenderBatch.reused` 区分「借来的块」（丢弃批次时只回收**新建的**）；提交时交换 `previous=rendered; rendered=target; renderSpare=previous`；`onBack` 把三块一起退役。稳态**零额外分配**（两块互相轮换） |
+**根因不是缺 label，而是颜色。** 证据链（全部取自本工程实际解析版本 `material3:1.4.0`，由 BOM `2025.11.01` 解析）：
 
-**历史台账**：`git log -S "Crossfade("` ⇒ 引入于 `ca5410b`（UI-1b）。⇒ `v0.3.0` 第三轮真机反馈那句
-「调色栏下面的参数菜单全部挤在一起」**就是同一个 bug**，当时的诊断（`docs/UI_DESIGN.md` §4.0.3：
-面板太矮 + 层级丢失）只覆盖了一半。本轮已在 §4.0.3 末尾补 2026-09-25 更正，并新增 **§4.0.4**。
-另外批次 1~4 把渲染明显变慢（81 项参数 + 邻域算子），撕裂窗口被放大 —— 很可能是它到这一轮才被报上来的原因。
+1. `LocalContentColor` 的**默认值就是 `Color.Black`**；
+2. **只有 `Surface` 会 provide 它**（`Surface.kt`：`contentColor = contentColorFor(color)` + `CompositionLocalProvider(...)`）；
+3. **`MaterialTheme` 不下发它** —— 实现体只有 colorScheme / shapes / typography / motionScheme；
+4. 全 App 唯一的 `Surface(` 在 `MainActivity.kt`，位于 `PixelCakeWorkspaceTheme` **之外**、用的是**外层**主题的 `surface`；
+5. 编辑页参数面板链路全程**没有任何 `Surface`**：`Box(weight)` → `GlassCard`（是 Modifier，不是 `Surface`）→ `Column` → 滚动 `Column` → `Crossfade` → `ParamPanel`。
 
-### 真机反馈第五轮（用户报 3 个现象 → 实为 1 个根因）
+⇒ 卡片底 `ContainerDark #1B1B22` + 文字 `Ink #1B1B1F` ≈ **1:1 对比度 = 看不见**。
+**只在 App 处于浅色主题（白天）时现形** —— 深色主题下继承到的恰好也是浅色值，所以一直没被发现。
 
-| 报障 | 单一根因 | 修法 |
-|---|---|---|
-| 点击底部「调色台 / 设置」时：**变灰底** + **两端直角** + **两按钮中间一条分割线** | 分段项只写了 `selectable(selected = …, onClick = …)`，**静默**落到「去 `LocalIndication` 取 M3 涟漪」的那个重载（`foundation:1.9.5` `Selectable.kt:140` —— 该重载**根本没有 `indication` 参数**，实现体 `useLocalIndication = true`）。涟漪的**颜色** ⇒ 整格变灰；涟漪边界是**矩形** ⇒ 与 `Radius.pill` 冲突、两端读成直角；相邻两格矩形**共用一条边** ⇒ 读成中缝 | 改成 4 命名参形式并显式传 `null`：`.selectable(selected=…, interactionSource=null, indication=null, onClick=…)` —— 只有 `Selectable.kt:230` 那个重载有 `indication` ⇒ 一旦写出即**唯一确定**，不会再静默落回。**安全性已证**：`Clickable.kt:697` 有 `indication == null` 快路径（不挂 `Modifier.indication`）；`initializeIndicationAndInteractionSourceIfNeeded()` 里 `indicationFactory?.let{…}` 恒不进入 ⇒ 那句 `!!` **永不可达** |
+**修法（2 文件、零 API 面）**：
+- `ui/theme/Theme.kt`：`PixelCakeWorkspaceTheme` 补 `LocalContentColor provides WorkspaceColors.onSurface`
+  —— 取这个值是因为「这正是假如这里有一层 `Surface` 会得到的值」⇒ **深色主题下零变化**，只在浅色下把「看不见」变回「看得见」；
+- `ui/components/ParamSlider.kt`：label 显式 `color = MaterialTheme.colorScheme.onSurface`（与面板内其它 `Text` 同口径）。
 
-**顺手修掉的两件事**：① `GlassSegmentedBar`（**编辑器一级工具条**：人像/调色/曲线/细节/效果/预设）有同一处漏法，
-一并修掉（调用点 `EditorToolbar.kt:104`）；② `GlassSegmentedBar` 的 KDoc 原写「底部 TabBar 与编辑器一级条
-**共用同一个控件**」—— **这句是错的**（`AppShell.kt:117` 有一份自己的 `private fun GlassTabBar`），
-正是这句假话让「改一处查两处」这个动作少做了一次，已改成事实 + 「改一处必须同步查另一处」。
-`docs/OBJECT_TONE_DESIGN.md` 新增 **§13.6**（逐条定性：两条与本批无关，一条是本批新文案暴露的老问题；
-§12.2 的 6 条真机验收项**一条都没被消掉**）。
+**同一根因当年只修了一半（关键教训）**：`EditorScreen` 的注释**早就写着**「外层 `Surface` 位于
+`PixelCakeWorkspaceTheme` 之外」—— 当年照它修了**底色**，**漏了文字颜色**。
+⇒ 遇到这类事实，要顺着 `background` / `contentColor` / `LocalDarkTheme` / 系统栏图标**四条各查一遍**。
+
+**「差点误判」也值得记**：一开始把「菜单项没文字」也算进同一 bug（`GlassChipRow` 的 `Text` 看着也没写 `color`），
+读 M3 源码后推翻 —— `FilterChip` → `SelectableChip` → **`Surface(...)`**（自带 contentColor 解析）⇒ chip 文案一直是好的。
+⇒ **「没写 `color` 的 `Text`」清单必须再按「在不在 `Surface` 内」分类，不能直接当结论。**
+（客观密度数据：每个滑块行 ≈76dp，影调页一屏约 4.8 个滑块。**本轮刻意不改密度** —— 属独立决策。）
+
+### 真机反馈第七轮（用户报：「预览窗口闪动、滑动参数卡、会出现按行按列扫描的条纹」）
+
+**三个现象一个根因：半成品位图被当成成品提交上屏。**
+
+- `EditEngine.renderIntoLinear` 的协作取消是「在下一个分带边界 **`return false`**」，而这个 `false` 的语义是
+  「**这张位图只写到了第 k 带**」；`MainActivity` 的调用点写 `{ !renderJob.isActive }`，**返回值被直接丢掉**；
+  出锁后唯一的丢弃判据是 `batch.epoch`（**图片**代次），而拖参数时 `imageEpoch` **一次都不会变**
+  ⇒ 每帧被取消的半成品都通过检查、被换到前台。缝在第 k 带，k 每帧不同 ⇒ 就是那道会移动的横纹。
+- **「卡」的真身不是渲染慢**：`.conflate().collectLatest` 对**每一次**快照都取消在跑的那帧，
+  而一帧重渲要 100~300ms ⇒ **没有一个渲染被允许跑完**（算力全花在「启动→被砍」）。
+- 洗清「并行分带」嫌疑只用了一处证据：`runBand` 用 `jobs.forEach { it.get() }` **同步等齐**所有分片后才 `setPixels`
+  ⇒ 「带内按行分片」**不可能**产生列方向半成品。
+
+**修法（只改 1 个代码文件）**：`RenderBatch` 增 `completed: Boolean` + `ms: Long`；出锁判据改为
+`if (!batch.completed || batch.epoch != imageEpoch.get())`；`.conflate().collectLatest` → `.conflate().collect`
+（参数变化不再取消在跑的那帧，能取消它的只剩「换图 / 退出编辑器」）；`import collectLatest` 换成 `collect`。
+顺手给每帧 `render done` 日志加上 `ms`（完整帧单帧耗时）与 `layers`，供真机直接报数。
+**`EditEngine.kt` 一行未改** —— `BAND_ROWS` / 并行粒度都不需要动，动它等于拿内存换一个没被证实的原因。
 
 ## ⭐ 复盘（供后人少走弯路）
 
-### 布局类：**先怀疑容器，再怀疑尺寸**
-`Crossfade` / `AnimatedContent` 的内容容器都是 `Box` ⇒ **内容必须是单一节点**，多节点会被叠在同一位置。
-现象会伪装成「参数太挤」，把排查引向高度 / 间距 / 字号 —— `docs/UI_DESIGN.md` §4.0.3 就是这么偏掉的，
-而且一带就是 4 个版本。输出一串兄弟节点就必须自己包 `Column`。
-
-### 渲染类：**正在被显示的位图是只读的**
-分带 `setPixels` 每带推进 generation id ⇒ 合成器重传纹理 ⇒ 撕裂横线。逐帧重渲**至少两块缓冲**
-（写一块、显一块）。另外：位图回收三原则里「**读者不唯一**的位图不手动回收」正与此同源。
-
-### 交互类：**「代码里写不出这个参数」≠「没有这个行为」**
-`selectable` 有一个**根本没有 `indication` 参数**的重载，代码里看不到 `indication` 恰恰说明它落到了那一个。
-判断默认行为必须去读**实际解析版本**的源码，不能凭「我没写」反推。传 `null` 之前要先把它下游 `!!` 的
-**可达性**证掉（否则真机上可能是崩溃而不是丑，代价完全不对等）。
-
-### 排障通法
-查这类「几个版本前就该发现」的问题时，`git log -S "<可疑 API>("` 比通读代码快得多 ——
-它一次就把「引入点」和「用户第一次报障的时间」对上了。
+1. **「控件没文字」先怀疑颜色，不要先怀疑布局**：`Ink` 压在 `ContainerDark` 上差 1 级明度，肉眼就是「这里什么都没有」，
+   很容易被读成「控件缺 label」。
+2. **自定义主题换 `colorScheme` 时，必须同时补 `LocalContentColor`** —— 否则子树里所有没写 `color` 的 `Text`
+   都去继承**外层**主题的值。这是**主题层的雷**，不是调用点的锅。
+3. **「协作取消」是一个必须被消费的返回值**：被取消时**正常 `return false`** 使得「忘接返回值」在语法 / 类型 / lint 上全都合法。
+   分带 / 分块写共享缓冲的算子，必须把「写完了没有」显式带出来。
+4. **「图片代次」与「这一批画完了没有」是两个正交的量**：单靠「有没有被取消」反推 completion 在拖动期间每帧都假。
+5. **「拖动时才出现、手指一停就消失」的画面缺陷，先怀疑「半成品被提交」**，
+   判据是「一条位置每帧变化的直线 / 接缝」，而不是去翻算法。
+6. **深浅相反才现形的 bug，验收必须两种主题各看一次。**
 
 ## 🔐 安全边界（重要）
 
@@ -128,28 +142,34 @@
 | `36003780194` | `v0.4.1`（tag） | ✅ success | 无（5 job 全绿含 Publish，Release 已发布） |
 | `36004335738` | `f735a7d`（main） | ✅ success | 无（docs-only） |
 | `36663128099` | `3ffc58d`（main） | ✅ success | 无（第四/五轮修复 + v0.4.2 版本号，4 job 绿） |
-| **`36663981140`** | **`v0.4.2`（tag）** | ✅ **success** | **无（5 job 全绿含 Publish，Release 已发布）** |
+| `36663981140` | `v0.4.2`（tag） | ✅ success | 无（5 job 全绿含 Publish，Release 已发布） |
+| `36664396924` | `2bd0a94`（main） | ✅ success | 无（docs-only） |
+| `36810389089` | `ebb8949`（main） | ✅ success | 无（第六/七轮修复 + v0.4.3 版本号，4 job 绿） |
+| **`36814801731`** | **`v0.4.3`（tag）** | ✅ **success** | **无（5 job 全绿含 Publish，Release 已发布）** |
 
 ## 后续步骤
 
-1. **真机（一加15）验收 `v0.4.2`**，本批三条 / 两类：
-   - **bug 1/3**：参数面板内容是否恢复**纵向排布**（**人像页最先看**；再抽查调色 / 颜色 / 曲线 / 细节 / 效果）；
-   - **bug 2**：拖动时那根**横线**是否消失（重点看清晰度 / 锐化这类**邻域算子**，它们的带边界最显眼）；
-   - **第五轮**：底部「调色台 / 设置」按下**不应**再有灰底 / 直角 / 中缝；编辑器一级工具条同样；
-     选中态仍应是强调色胶囊指示块滑动（**选中态没被动过**）。
-2. 仍待真机确认的历史项：批次 5 的 6 条（`docs/OBJECT_TONE_DESIGN.md` §12.2）/ `TONE_ZONE_GAIN=0.35` 是否过猛 /
-   批次 1~4 的预览↔导出一致性 / 锐化晚于磨皮 / A2 涂抹落点 / A1 导出内存日志 / 自动蒙版 / A7C2 直连 / 人脸锚点。
-3. 下一版若要发：先抬 `versionName`/`versionCode`（当前 `0.4.2` / `7`）→ push main 跑绿 → 再打 tag，两步走。
+1. **真机（一加15）验收 `v0.4.3`**，本批两类：
+   - **第六轮**：浅色 App 主题下打开编辑页 → 调色页**每个滑块的左侧标签应可读**（曝光 / 对比度 / 高光 …）；
+     顶栏「编辑」、人像页「自动蒙版（AI 皮肤识别）」「已标记瑕疵点」应一并恢复；
+     **深色主题下应当毫无变化**（这是本轮修复的设计约束）。看完再决定「进度条/菜单是否仍显过大」。
+   - **第七轮**：拖任意参数滑块 → 预览应**只有完整帧**（不再出现横扫的横线 / 条纹），且**每帧都在动**；
+     手指停下瞬间最后一帧就是松手时的参数；换图 / 退出编辑器不应「先闪一下上一张」。
+   - **请回传日志**：`render done` 里的 **`ms`**（这是**完整帧**的单帧耗时）—— 拖「曝光」时的典型值。
+     若仍偏大，下一轮才有明确目标去啃（届时才轮到 `BAND_ROWS` / 二次 pass / 并行粒度）。
+2. 仍待真机确认的历史项：第四/五轮已发布项、批次 5 的 6 条（`docs/OBJECT_TONE_DESIGN.md` §12.2）、
+   `TONE_ZONE_GAIN=0.35` 是否过猛、批次 1~4 的预览↔导出一致性、锐化晚于磨皮、A7C2 直连、人脸锚点。
+3. 下一版若要发：先抬 `versionName`/`versionCode`（当前 `0.4.3` / `8`）→ push main 跑绿 → 再打 tag，两步走。
 4. 新修改按固定流程 **全量推送** → 触发 CI → 结果覆盖写入本文件再推送。
 5. ⚠️ **已知待办**：第一版真实设置迁移落地时**必须同批补 `SettingsMigrationTest`**（当前 v0→v1 为空迁移）。
 6. ⚠️ **环境类失败预警**：`Failed to find package 'tools'` = 上游 SDK 变动，改 workflow `packages`，别改代码。
 7. ⚠️ **Material3 实验性 API**：用 `Slider` 自定义 `thumb` 等须加 `@OptIn(ExperimentalMaterial3Api::class)`。
-8. ⚠️ **日志埋点传可空值**：`DebugLog` 的 kv 是 `Map<String, Any>`（值**非空**）。往 `mapOf` 里塞
-   `String?` 这类可空值会让整张 map 被推断成可空交集类型而编译失败 —— 一律 `?: 兜底`，并建议显式写
-   `mapOf<String, Any>(...)`。
+8. ⚠️ **日志埋点传可空值**：`DebugLog` 的 kv 是 `Map<String, Any>`（值**非空**）—— 一律 `?: 兜底`。
 9. ⚠️ **`Crossfade` / `AnimatedContent` 的内容必须是单一节点**；**`selectable` / `clickable` / `toggleable`
-   必须显式传 `indication = null`**（否则静默取 `LocalIndication`，出现方形灰底涟漪）。两条都已写进
-   `docs/UI_DESIGN.md`，改一处**必须同步查** `GlassSegmentedBar` ↔ `AppShell.GlassTabBar`。
+   必须显式传 `indication = null`**；**自定义主题换 `colorScheme` 时必须同时补 `LocalContentColor`**。
+   三条都已写进 `docs/UI_DESIGN.md`。
+10. ⚠️ **执行 git commit 时不要在 `-m` 里用反引号**：bash 会把它当命令替换执行，提交信息里被反引号包住的
+    标识符会被**静默吃掉**（本轮实测：`LocalContentColor`、`batch.epoch` 等全部消失）。改用 `git commit -F <文件>`。
 
 ---
-*本报告由 push 后 GitHub Actions 运行结果自动整理；本轮 main 一次跑绿（4 job）→ 打 `v0.4.2` tag → 5 job 全绿含 Publish → Release 已发布。*
+*本报告由 push 后 GitHub Actions 运行结果自动整理；本轮 main 一次跑绿（4 job）→ 打 `v0.4.3` tag → 5 job 全绿含 Publish → Release 已发布。*
