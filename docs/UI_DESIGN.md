@@ -527,6 +527,78 @@ VSCO 的护城河也不是社交，是 `A4 / C1 / G3` 这些代号构成的**一
 > 这属于审计 L3「两套近似实现」的**残余**：UI-6（`71fc0ba`）只收敛了指示块的**材质**，
 > 交互/布局那两套仍在。
 
+### 4.0.6 2026-10-01 第六轮修正（`v0.4.2` 真机反馈：面板文字消失）
+
+| # | 现象（用户原话） | 根因 | 修法 |
+|---|---|---|---|
+| 1 | 底部调色工具栏菜单进度条**没有对应的文字** | `ParamSlider` 的 label 是编辑页里**唯一**「既没写 `color`、又不在任何 `Surface` 之内」的用户可见文字 ⇒ 它去取 `LocalContentColor`，而编辑页的 `LocalContentColor` 来自**外层**主题（详见下方规律）⇒ App 处于浅色主题时拿到 `Ink #1B1B1F`，压在 `ContainerDark #1B1B22` 的卡片上，对比度≈1 : 1 ⇒ **文字消失**。而 `GroupLabel` / `Hint` / 右侧数值都显式写了 `color`，所以面板里只剩标题与数值 | ① 根因：`PixelCakeWorkspaceTheme` 补 `LocalContentColor provides WorkspaceColors.onSurface`；② 该 label 另显式写 `color = onSurface`，与面板内其他 `Text` 同口径 |
+| 2 | 进度条、菜单选项**像素过大**，与预览图占比不合适，不美观 | **一半是第 1 条的后果**：标签消失后每个滑块只剩「右上角一个数值胶囊 + 一条 4dp 轨道」，而行高仍是 76dp（标签行 20 + M3 `Slider` 触控区 48 + 上下留白 4+4）⇒ 读成「一堆巨大的空条」。剩余部分是**客观密度**：影调页 7 个滑块 ≈ 652dp 内容 vs 视口 ≈ 366dp ⇒ 一屏只看得到约 4.8 个 | 本轮**刻意不改尺寸**：先把文字修回来再看观感（48dp 是拖拽触控区，不能为紧凑压掉）。若仍嫌密，诚实的杠杆只有「缩行上下留白 + 分组标题间距」或「调 `SPLIT_DEFAULT`」，属独立决策 |
+
+**规律**：**`LocalContentColor` 只有 `Surface` 会提供，嵌套 `MaterialTheme` 不下发它。**
+`material3` 里 `LocalContentColor` 的默认值就是 `Color.Black`（`ContentColor.kt:33` 原文
+"Defaults to `Color.Black` if no color has been explicitly set"），`Surface.kt:98-109` 才 `provide` 它；
+而 `MaterialTheme(colorScheme, shapes, typography, content)` 只换 colorScheme / typography / shapes /
+motionScheme（见其实现体），**一个 `LocalContentColor` 都不碰**。
+⇒ **任何「自己换 `colorScheme` 的自定义主题」都必须同时补 `LocalContentColor`**，
+否则该子树里所有没写 `color` 的 `Text` 都会继承**外层**主题的值 —— 内外深浅相反时就是「文字消失」。
+判据：**主题只换 `colorScheme` 而没 provide `LocalContentColor`，就是一个待爆的雷。**
+
+**规律（排查姿态）**：**「某个控件没文字」先怀疑颜色，不要先怀疑布局。**
+本轮最省时的一步是把全仓**没写 `color` 的 `Text`** 一次扫出来（**38 处**），再按「它在不在
+`Surface` 里面」分类 —— 最后只有 **1 处**是用户可见的漏网之鱼。
+⚠️ **但同一份清单不能直接当结论用**：M3 的 chip 看上去也是「没写 color」，可它内部就是
+`Surface` + `ChipContent` 里的 `CompositionLocalProvider(LocalContentColor provides labelColor, …)`
+⇒ **chip 文案一直是显式的、从来没坏**。**先分类（在不在 `Surface` 内），再定性。**
+
+> ⚠️ **同一个根因，当年只修了一半。** `EditorScreen` 铺底那段注释早就写着「外层 `Surface` 位于
+> `PixelCakeWorkspaceTheme` **之外**，用的是普通主题的 surface（浅色模式下是浅灰）」——
+> 当年照它修了**底色**（自己 `background` 铺深色），却漏了**文字颜色**。
+> 教训：**「记下了一个根因」不等于「把它的所有面都修了」**。一个「外层 X 在主题之外」的事实，
+> 至少要顺着 `background` / `contentColor` / `LocalDarkTheme` / 系统栏图标**四条**各查一遍
+> （后两条本来就各有一处修复记录，前一条本轮补上）。
+
+### 4.0.7 2026-10-01 第七轮修正（真机反馈：预览闪动 / 拖参数卡 / 扫描条纹）
+
+三个现象**同一个根因**，所以先给结论再拆：**「渲染被中途取消」的半成品位图，被当成成品提交上屏了。**
+
+`EditEngine.renderIntoLinear` 的协作取消是「在下一个分带边界 `return false`」——这个 `false` 的含义是
+**「这张位图只写到了第 k 带」**。而 `MainActivity` 的调用点写的是 `{ !renderJob.isActive }`，
+**返回值被直接丢掉**；出锁后唯一的丢弃判据是 `batch.epoch`（**图片**代次），拖参数时它一次都不会变
+⇒ 每一帧被取消的半成品都顺利通过检查、被换到前台。缝在第 k 带，而 k 每帧不同。
+
+| # | 现象（用户原话） | 根因 | 修法 |
+|---|---|---|---|
+| 1 | 预览窗口**闪动** | 半成品上屏：缝的两侧一边是本帧已算完的像素、另一边还是**上一张照片**的像素；k 每帧不同 ⇒ 缝的位置每帧上下跳 | ① `RenderBatch` 增 `completed`，出锁判据改为 `!batch.completed \|\| batch.epoch != imageEpoch.get()` —— **没画完的一律不提交**；② `.conflate().collectLatest` → `.conflate().collect` |
+| 2 | 滑动参数时**渲染速度**要优化 | **算力全被浪费**：拖滑块时 UI 以 60~120Hz 连发快照，`collectLatest` 对**每一次**都取消在跑的那一帧 ⇒ 一帧 100~300ms 的重渲几乎永远跑不到一半，「启动 → 被砍」的循环吃掉全部 CPU，完整帧一张都出不来。所以「卡」不是渲染慢，是**没有一个渲染被允许跑完** | 同上②。`conflate()` 只保留**最新**一次快照（不排队、不积压），而**已经在跑的那一帧一定跑完**。重渲吞吐从「~60 次/秒、全部作废」变成「~1/单帧耗时、次次有效」 |
+| 3 | 不要出现**按行按列扫描的条纹** | 同第 1 条：分带渲染每 32 行 `setPixels` 一次，被取消时只写满前 k 带，边界就是那条「上下颜色不一致的横线」；拖动时它从下往上扫 ⇒ 看着像扫描条纹 | 同第 1 条。⚠️ **「带内并行」已洗清嫌疑**：`runBand` 在 `setPixels` 之前 `jobs.forEach { it.get() }` **同步等齐**所有分片，所以列方向不可能出现半成品 |
+
+**规律**：**「协作取消」是一个必须被消费的返回值，不是背景噪音。**
+`renderIntoLinear` 被取消时是**正常返回 `false`**（不抛异常、不 throw），所以「忘了接返回值」这件事
+在语法、类型、lint 三层上**全都看不出来**。
+推论：**任何「分带/分块写进一块会被别人读的缓冲」的算子，都必须把「写完了没有」显式带出来**，
+不能让调用方用「这一批有没有被取消」去反推。
+
+**规律**：**「图片代次」与「这一批画完了没有」是两个正交的量。**
+`imageEpoch` 跟踪的是「用户还在不在看这张图」（换图 / 退出编辑器）；拖参数它**一次都不会变**。
+把它单独当「这一批还算数」的判据，等于默认「没人换图 ⇒ 这一批一定画完了」——
+而这个假设在拖动期间**每帧都假**。
+
+**规律（排查姿态）**：**「只在拖动时出现的画面缺陷」优先怀疑「半成品被提交」，而不是「算法有问题」。**
+判据很省事：缺陷若是**一条位置每帧变化的直线/接缝**（不是重影、色偏、糊），且**手指一停就消失**，
+几乎一定是「写一半的缓冲被读」。
+反之，要洗清「分带/并行」的嫌疑只需要一处证据：**写回前有没有等齐所有分片**。
+
+**本轮改动的边界（诚实记录）**：
+- **`EditEngine.kt` 一行未改**，`BAND_ROWS = 32`、`PARALLEL_THRESHOLD`、线程池全部原样 ——
+  三重症状都不需要动分带参数，动它反而是拿内存换一个没被证实的原因。
+- `renderIntoSrgb`（JPEG 路径）本来就不可取消、必定跑完，所以**这条路径过去没有这个 bug**；
+  受影响的只有 RAW 线性路径（`renderIntoLinear`），也就是 A7C2 的日常路径。
+- 顺手加了诊断：每帧的 `render done` 日志新增 `ms`（**完整帧**的单帧耗时）与 `layers`，
+  真机上「滑参数卡不卡」因此是一条**数字**，可直接回读，不必再靠感觉描述。
+- ⚠️ 改 `.collect { }` 时**不能只删 import**：`collect { }` 的 lambda 重载定义在
+  `kotlinx.coroutines.flow` 包里，`import ...flow.collectLatest` 必须**换成** `import ...flow.collect` ——
+  删掉就是编译错（`Flow.collect` 的 lambda 形参是顶层扩展函数，不是 `Flow` 的成员）。
+
 ### 4.1 对现有控件的替换关系
 
 | 现有实现（`EditorScreen.kt`） | 目标形态 |

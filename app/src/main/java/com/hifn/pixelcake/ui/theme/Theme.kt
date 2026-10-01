@@ -2,6 +2,7 @@ package com.hifn.pixelcake.ui.theme
 
 import android.app.Activity
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
@@ -145,13 +146,37 @@ private val WorkspaceColors = darkColorScheme(
  * 这里**必须**同时把 `LocalDarkTheme` 置为 `true`：换 `colorScheme` 并不会改变系统的 `uiMode`，
  * 而容器色 / 玻璃色是按「生效主题」解析的 —— 漏了这一句，系统处于浅色模式时编辑页会拿到
  * 浅色色板（一块近白的参数面板压在深色工作台上）。见 [LocalDarkTheme]。
+ *
+ * ## ⚠️ 还必须下发 `LocalContentColor`（2026-10-01 修）
+ *
+ * 与上面那条是**同一个根因的第二个面**，而且当年只修了一半：`EditorScreen` 铺底那段注释已经
+ * 写明「外层 `Surface` 位于本函数之外、用的是普通主题的 surface」，于是把工作台**底色**改成
+ * 自己画 —— 但**文字颜色**没管。`LocalContentColor` **只有 `Surface` 会提供**
+ * （`material3:1.4.0`：`ContentColor.kt:33` 默认值就是 `Color.Black`；`Surface.kt:98-109`
+ * 才 provide 它），而嵌套 `MaterialTheme` 只换 colorScheme / typography / shapes / motionScheme
+ * （见 `MaterialTheme.kt` 的实现体），**不碰** contentColor。
+ *
+ * 后果是：编辑页里任何**没写 `color`** 的 `Text` 都会继承**外层**主题的 contentColor。
+ * 外层浅色 ⇒ `Ink #1B1B1F`；工作台卡片是 `ContainerDark #1B1B22` ⇒ 对比度≈1:1，
+ * **文字直接消失**。真机话术：「底部调色工具栏菜单进度条没有对应的文字」。
+ * 外层深色时恰好也是浅色值（`OnDarkSurface`），所以这个 bug 只在 App 处于**浅色主题**时出现，
+ * 一直潜伏到用户在白天（浅色）打开编辑页才被看见。
+ *
+ * 取 `WorkspaceColors.onSurface`：这正是「假如这里有一层 `Surface`」会得到的值 ——
+ * 所以在深色 App 主题下**零变化**（两边都是 `OnDarkSurface #E6E1E5`），只在浅色下把
+ * 「看不见」变回「看得见」。局部仍由 `Surface` 说了算：chip 自带 `Surface`（其 `ChipContent`
+ * 里显式 provide `labelColor`）、底部 Sheet 也有自己的 `Surface`，各自覆盖，不受影响。
  */
 @Composable
 fun PixelCakeWorkspaceTheme(content: @Composable () -> Unit) {
     // 编辑页恒为深色 ⇒ 系统栏必须是**浅色图标**：否则系统浅色模式下会拿到深色图标压在
     // 深色工作台上（时钟 / 电量看不清）。见 SystemBarIcons。
     SystemBarIcons(lightBars = false)
-    CompositionLocalProvider(LocalDarkTheme provides true) {
+    CompositionLocalProvider(
+        LocalDarkTheme provides true,
+        // ⚠️ 与 `LocalDarkTheme` 同等重要，别删：理由见上方 KDoc「还必须下发 LocalContentColor」。
+        LocalContentColor provides WorkspaceColors.onSurface
+    ) {
         MaterialTheme(
             colorScheme = WorkspaceColors,
             typography = Typography,

@@ -66,7 +66,7 @@ import com.hifn.pixelcake.ui.theme.PixelCakeWorkspaceTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
@@ -189,9 +189,11 @@ private fun AppRoot(settings: AppSettings) {
     // 两者重叠时，已经算完但还没写回的那一批会把**上一张照片**的结果写进 `rendered` ——
     // 这比崩溃更隐蔽：用户退出后再进来，先看到的是刚关掉的那张图。
     //
-    // ⚠️ 别指望 `collectLatest` 的取消能兜住这里：取消只在**挂起点**生效，而
+    // ⚠️ 别指望「协程取消」能兜住这里：取消只在**挂起点**生效，而
     // `rendered = target` 这类赋值恰好不是挂起点 —— 协程被取消后仍会把它执行完。
     // 所以必须有一个显式的、由主线程推进的标记来作废在途批次。
+    // （第七轮起渲染协程改用 `collect` 收集快照，能取消它的只剩「换图 / 退出编辑器」这一条路；
+    //  那条路的取消同样**不保证**在赋值前生效 ⇒ 本标记一步都不能省。见渲染协程的注释。）
     //
     // 用 `AtomicInteger` 而不是 `var by mutableStateOf`：它是纯控制位，不需要驱动任何重组；
     // 而放进 Compose 快照会让「在 Default 线程上读它」变成一件需要留神的事。
@@ -251,7 +253,23 @@ private fun AppRoot(settings: AppSettings) {
     }
 
     // 参数 / retouch / 蒙版 / 自动蒙版开关变化 -> 异步把参数栈 + retouch 重渲到代理图。
-    // 用 snapshotFlow + conflate + collectLatest 做节流与取消（FIX_LIST F08）。
+    // 用 snapshotFlow + conflate 做节流（FIX_LIST F08）。
+    //
+    // ⚠️ **刻意用 `collect` 而不是 `collectLatest`**（2026-10-01 第七轮真机反馈修）。
+    //
+    // `collectLatest` 会在**每一次**新快照到来时取消正在跑的那一帧，而拖滑块时 UI 以
+    // 60~120Hz 连发快照 ⇒ 一帧 100~300ms 的重渲**几乎永远跑不到一半就被砍掉**。
+    // 它带来两个后果，正好对应两条真机症状：
+    //   1. 被砍掉的帧在目标位图上留下的是**写了一半**的分带结果（只写到第 k 带）；
+    //      这样一个半成品只要被提交上屏，就是「上下一半颜色不一致的横线」，
+    //      而每帧 k 都不同 ⇒ 拖动时持续**闪动**、看着像有**扫描条纹**穿过画面；
+    //   2. 算力全花在「启动 → 被砍」的循环上，真正完整的帧一张都出不来 ⇒ **越拖越卡**。
+    //
+    // 换成 `collect` 后：`conflate()` 只保留**最新**一次快照（不排队、不积压），
+    // 而**已经在跑的那一帧一定跑完** ⇒ 每张上屏的都是完整帧。
+    // 重渲吞吐也从「~60 次/秒、全部作废」变成「~1/renderTime、次次有效」。
+    //
+    // 取消因此只剩一个正当用途：**整张图被换掉**（新导入 / 退出编辑器）—— 见下面的 `renderJob`。
     LaunchedEffect(imported) {
         val src = imported ?: return@LaunchedEffect
         // 注意 `brushRadius` / `inpaintRadius` 必须**在监听列表里**：它们参与蒙版/祛瑕的
@@ -270,10 +288,14 @@ private fun AppRoot(settings: AppSettings) {
             )
         }
             .conflate()
-            .collectLatest {
+            .collect {
+                // `delay` 在这里**不是**节流阀（节流由上面的 `conflate` 负责）：它是「让 UI 先落定」。
+                // 下面读的所有状态都在 `delay` **之后**，所以每次开跑用的**一定是最新快照**，
+                // 不会拿着一个已经过期的值去跑几百毫秒的整帧。
                 delay(RENDER_THROTTLE_MS)
-                // 取当前这次重渲对应的协程 job：新参数到来时 collectLatest 会取消它，
-                // 渲染器据此在下一个分带边界退出（真正的协作取消，FIX_LIST F08 修复）。
+                // 取本协程的 job：它只在**整张图被换掉**时失效（`imported` 变了 ⇒ `LaunchedEffect`
+                // 重启；或退出编辑器）。渲染器据此在下一个分带边界退出（协作取消，FIX_LIST F08）。
+                // ⚠️ 参数变化**不会**让它失效 —— 这正是上面改用 `collect` 的目的。
                 val renderJob = currentCoroutineContext().job
                 // 在主线程捕获最新状态，避免在 Dispatchers.Default 内跨线程读快照状态
                 val p = params
@@ -321,7 +343,11 @@ private fun AppRoot(settings: AppSettings) {
                         // 与 `src.bitmap` 同一个口径（见 `onBack` 的说明）。
                         Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
                     }
-                    withContext(Dispatchers.Default) {
+                    // 单帧渲染耗时（诊断用，零风险）：真机上「滑参数卡不卡」需要的是一条**数字**，
+                    // 不是感觉。它跟着这一批走（见 `RenderBatch.ms`），出锁后连同 stamp 一起打点。
+                    val renderT0 = System.nanoTime()
+                    // ⚠️ 必须接住返回值：`false` = **这张位图没画完**，绝不能当成品提交。
+                    val completed = withContext(Dispatchers.Default) {
                         val linear = src.linear
                         // 自动蒙版：首次真正需要时跑一次皮肤分割（失败返回 null → 自动回退画笔/整幅），
                         // 之后同一 key 命中 MlMaskProvider 缓存，不再重复推理。
@@ -359,7 +385,9 @@ private fun AppRoot(settings: AppSettings) {
                             else -> "液化锚点：人脸检测（${MlFaceProvider.accelerator ?: "?"}）· ${faces.size} 张脸"
                         }
                         if (linear != null) {
-                            // 协作取消：renderJob 被 collectLatest 取消后，这里会在下一带边界退出。
+                            // 协作取消：`renderJob` 失效（换图 / 退出编辑器）时，这里会在下一带边界退出。
+                            // ⚠️ 它的返回值**必须**往上传 —— `false` 意味着这张位图只写了前 k 带，
+                            // 是**半成品**，绝不能当成品提交（见下面 `RenderBatch.completed`）。
                             // 注意：renderIntoLinear 内部已在物化目标 Bitmap 上跑过 retouch 整图 pass，
                             // 这里**不能**再调 RetouchLayer.apply，否则 RAW 预览会重复叠加（与导出不一致）。
                             EditEngine.renderIntoLinear(
@@ -370,25 +398,46 @@ private fun AppRoot(settings: AppSettings) {
                             EditEngine.renderIntoSrgb(bmp, src.bitmap, p, layerStack)
                             // 8-bit sRGB 路径的 renderIntoSrgb 不含 retouch，需在此补一趟整图 pass。
                             RetouchLayer.apply(bmp, renderRetouch, mask, faceAnchor)
+                            // 这条路径**没有**取消入口（`renderIntoSrgb` / `RetouchLayer.apply`
+                            // 都不收 `isCancelled`）⇒ 能走到这里就必定是完整帧。
+                            true
                         }
                     }
                     // `reused` 用引用相等判定，不重算一遍尺寸条件：回收决策完全依赖
                     // 「这张位图是不是借来的」，重算等于多一处可能与上面那次判断不一致的地方。
                     // 借来的那一块是双缓冲的备用块（`renderSpare`），**归属权不在本协程**。
-                    RenderBatch(bmp = bmp, reused = bmp === spare, epoch = epochAtStart)
+                    RenderBatch(
+                        bmp = bmp,
+                        reused = bmp === spare,
+                        epoch = epochAtStart,
+                        completed = completed,
+                        ms = (System.nanoTime() - renderT0) / 1_000_000
+                    )
                 }
-                // ⚠️ 出锁后的第一件事是**确认这一批还有没有人要**。
-                // 用户完全可能在渲染的这几百毫秒里退出了编辑器或换了图 —— 那样写回去就等于
-                // 让用户先看到上一张照片（这比崩溃更隐蔽，因为它看起来只是「慢了半拍」）。
-                // `collectLatest` 的取消兜不住这里，原因见 `imageEpoch` 的说明。
-                if (batch.epoch != imageEpoch.get()) {
+                // ⚠️ 出锁后的第一件事是**确认这一批还算不算一帧成品**。两个条件缺一不可。
+                //
+                // 1. `batch.epoch != imageEpoch.get()` —— 「没人要了」：用户完全可能在渲染的这几百
+                //    毫秒里退出了编辑器或换了图，那样写回去就等于让用户先看到上一张照片
+                //    （这比崩溃更隐蔽，因为它看起来只是「慢了半拍」）。
+                // 2. `!batch.completed` —— 「压根没画完」（2026-10-01 第七轮真机反馈修）。
+                //    这是**两个不同的维度**，过去只判了第 1 个，于是把半成品当了成品：
+                //    `renderIntoLinear` 被取消时是**正常返回 `false`**（不是抛异常），
+                //    那一帧只写了前 k 带、下半截还是上一张照片的像素。它一上屏就是
+                //    「上下颜色不一致的横线」，而每帧 k 不同 ⇒ 拖动时闪动、像有扫描条纹。
+                //    **判据必须取渲染器自报的完成位**，不能拿「这一批有没有被取消」反推 ——
+                //    `imageEpoch` 跟踪的是**图片**代次，拖参数它一次都不会变。
+                if (!batch.completed || batch.epoch != imageEpoch.get()) {
                     // 丢弃这一批。⚠️ 回收规则是**不对称**的，别写反：
                     // - `reused == false`：这张位图是本次新建、只有本协程持有 ⇒ 必须自己回收，
                     //   否则「拖完滑块立刻点返回」每来一次就漏一张代理图（约 11MB）；
                     // - `reused == true`：它是借来的 `renderSpare`，归属权不在本协程 ⇒
                     //   **绝不回收** —— 它还要当下一次渲染的写入目标，回收它等于把双缓冲拆成单缓冲。
+                    //   （它里面留着半张图也无所谓：它此刻**不在画面上**，而 `renderSpare` 的唯一
+                    //   读者就是这个渲染协程；只要下一批渲染画完，它就被整幅重写 —— 而「画完」
+                    //   本身正是上面 `completed` 把关的那件事，所以「上屏的图一定是完整帧」这条
+                    //   不变量不依赖它此刻的内容。）
                     if (!batch.reused) batch.bmp.recycle()
-                    return@collectLatest
+                    return@collect
                 }
                 val target = batch.bmp
                 // 渲染完成后再赋值并递增 stamp：位图是**原位**被写满的，
@@ -418,7 +467,7 @@ private fun AppRoot(settings: AppSettings) {
                     // 直接留一份副本当对比基准即可 —— 不必为了对比再单独跑一趟渲染（代理图也要几百毫秒）。
                     //
                     // ⚠️ 刻意在**当前线程同步复制**，不切 `Dispatchers.Default`：
-                    // 切线程会引入挂起点，而本协程随时可能被 `collectLatest` 取消 ——
+                    // 切线程会引入挂起点，而本协程仍可能在换图时被取消 ——
                     // 一旦在复制期间被取消，`compareBase` 永远是 null，「按住看原图」会静默退化成
                     // 拿解码预览图对比（正是这次要修的 bug）。复制量约 11MB、一次性、且紧跟在
                     // 一次几百毫秒的渲染之后，同步复制的代价可以忽略。
@@ -433,9 +482,14 @@ private fun AppRoot(settings: AppSettings) {
                 renderStamp++
                 autoMaskNote = autoMaskNoteOut
                 liquifyNote = liquifyNoteOut
+                // `ms` = 单帧渲染耗时（**完整帧**才算）。真机反馈「滑参数卡不卡」要看的就是它：
+                // 拖动时预览每秒能上几帧，直接由这个数决定（`conflate` 只留最新快照，不排队）。
                 DebugLog.d(
                     DebugLog.TAG_EDIT, "render done",
-                    mapOf("w" to target.width, "h" to target.height, "stamp" to renderStamp)
+                    mapOf(
+                        "w" to target.width, "h" to target.height,
+                        "stamp" to renderStamp, "ms" to batch.ms, "layers" to layerList.size
+                    )
                 )
             }
     }
@@ -894,19 +948,32 @@ private fun AppRoot(settings: AppSettings) {
 private fun mlCacheKey(uri: Uri?, bmp: Bitmap): String = "${uri ?: "-"}#${bmp.width}x${bmp.height}"
 
 /**
- * 一次预览渲染的产物（连同它的「身份」与「归属」）。
+ * 一次预览渲染的产物（连同它的「身份」、「归属」与「完整性」）。
  *
- * 把三样东西包在一起返回，是因为**出锁之后才需要判断该不该写回**：
- * 判断依据是 [epoch]（这一批还算不算数），而丢弃时该不该回收取决于 [reused]（这张图归谁）。
- * 若只返回一个 `Bitmap`，这两条信息在锁外就都丢了 —— 而它们正好对应两个真实缺陷：
- * 「退出编辑器瞬间 native 崩溃」与「换图后每批漏一张代理图」。
+ * 把这几样东西包在一起返回，是因为**出锁之后才需要判断该不该写回**：
+ * 判断依据是 [epoch]（这一批还算不算数）与 [completed]（这一批画完了没有），
+ * 而丢弃时该不该回收取决于 [reused]（这张图归谁）。
+ * 若只返回一个 `Bitmap`，这些信息在锁外就都丢了 —— 而它们各自对应一个真实缺陷：
+ * 「退出编辑器瞬间 native 崩溃」、「换图后每批漏一张代理图」，
+ * 以及「拖动时预览上下一半颜色不一致的横线 + 闪动」（第七轮真机反馈）。
  *
  * @param bmp 渲染结果。`renderInto*` 是**原位修改**，所以它就是位图本身、不是副本。
  * @param reused `true` 表示这张位图是从 `rendered` **借来复用**的（尺寸刚好一致）；
  *   `false` 表示是本次新建。**只有新建的那些才归本批所有、才允许在丢弃时回收。**
  * @param epoch 进入临界区之前读到的图片代次，用来在写回前核对这一批还有没有人要。
+ *   注意它跟踪的是**图片**（换图 / 退出编辑器），拖参数它不会变。
+ * @param completed 渲染器是否**画完了整幅**。`false` = 只写了前 k 带，是半成品，
+ *   一律不得提交上屏。⚠️ 这一位**必须**取渲染器自报的返回值，不能拿 [epoch] 反推：[epoch]
+ *   管「还有没有人要」，本字段管「画完了没有」，两者是互相独立的两个维度。
+ * @param ms 单帧渲染耗时（诊断用，配合 `EditEngine.BAND_ROWS` 与 `layers` 一起读日志）。
  */
-private data class RenderBatch(val bmp: Bitmap, val reused: Boolean, val epoch: Int)
+private data class RenderBatch(
+    val bmp: Bitmap,
+    val reused: Boolean,
+    val epoch: Int,
+    val completed: Boolean,
+    val ms: Long
+)
 
 /**
  * 堆内存快照（审计 A1 的取证手段，零风险、先做）。

@@ -113,7 +113,19 @@ fun ParamSlider(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(label, style = MaterialTheme.typography.bodyMedium)
+            // ⚠️ **必须显式写 `color`**：`LocalContentColor` 只由 `Surface` 提供，而参数面板是
+            // 一张 `Modifier.containerSurface` 的卡片（`GlassCard`，**不是** `Surface`）⇒ 不写
+            // `color` 就会去继承**外层**主题的 contentColor。App 处于浅色主题时那是
+            // `Ink #1B1B1F`，压在 `ContainerDark #1B1B22` 的卡片上 ⇒ 对比度≈1:1，**文字消失**。
+            // 真机话术：「底部调色工具栏菜单进度条没有对应的文字」。
+            //
+            // 根因已在 `PixelCakeWorkspaceTheme` 修掉；这里再显式写一遍，是为了与 `GroupLabel` /
+            // `Hint` / 右侧数值同一个口径 —— 面板里每个 `Text` 都自带颜色，不依赖外部是否 provide。
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface
+            )
             Text(
                 text = format(value),
                 style = MaterialTheme.typography.labelMedium,
