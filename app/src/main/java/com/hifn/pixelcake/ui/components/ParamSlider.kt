@@ -22,6 +22,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
@@ -87,7 +88,8 @@ fun ParamSlider(
     modifier: Modifier = Modifier,
     step: Float = 0f,
     format: (Float) -> String = { "%.2f".format(it) },
-    onDraggingChange: (Boolean) -> Unit = {}
+    onDraggingChange: (Boolean) -> Unit = {},
+    enabled: Boolean = true
 ) {
     var dragging by remember { mutableStateOf(false) }
     val accent = MaterialTheme.colorScheme.primary
@@ -142,6 +144,7 @@ fun ParamSlider(
         }
         Slider(
             value = value,
+            enabled = enabled,
             onValueChange = { raw ->
                 if (!dragging) {
                     dragging = true
@@ -161,7 +164,13 @@ fun ParamSlider(
             colors = SliderDefaults.colors(
                 thumbColor = thumbColor,
                 activeTrackColor = accent,
-                inactiveTrackColor = trackInactive
+                inactiveTrackColor = trackInactive,
+                // ⚠️ disabled 三个色**必须显式给**。M3 的默认 disabled 态是「按 38% 不透明度
+                // 整条轨道」，那会让「关掉的部位」看起来像「只是不可用」，而我们要表达的是
+                // 「这里本来有东西、只是这个部位关了」—— 所以保留轨迹形状，只压暗。
+                disabledThumbColor = thumbColor.copy(alpha = 0.38f),
+                disabledActiveTrackColor = accent.copy(alpha = 0.38f),
+                disabledInactiveTrackColor = trackInactive
             ),
             thumb = {
                 // 圆用 Radius.pill 表达而不是 CircleShape：圆角阶梯只允许「四档 + 胶囊」，
@@ -169,6 +178,7 @@ fun ParamSlider(
                 Box(
                     modifier = Modifier
                         .size(24.dp)  // 从 18.dp 提升到 24.dp，增大拇指尺寸，提高可操作性
+                        .alpha(if (enabled) 1f else 0.38f)
                         .shadow(
                             elevation = 4.dp,  // 从 3.dp 提升到 4.dp，增强立体感
                             shape = Radius.pill,

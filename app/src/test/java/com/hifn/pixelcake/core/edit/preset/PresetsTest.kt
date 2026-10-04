@@ -9,8 +9,9 @@ import org.junit.Test
 class PresetsTest {
 
     @Test
-    fun hasTenBuiltins() {
-        assertEquals("P1b 规格为 ~10 套内置预设", 10, Presets.ALL.size)
+    fun hasManyBuiltins() {
+        // 44 套：原图 + 12 风格 + 9 人像 + 12 风景 + 5 食物 + 6 黑白
+        assertEquals(44, Presets.ALL.size)
     }
 
     @Test
@@ -39,5 +40,16 @@ class PresetsTest {
                 listOf("none", "jp", "film", "retro", "morandi", "creamy", "portra", "bw", "cool", "warm")
             )
         )
+    }
+
+    @Test
+    fun categoriesPopulated() {
+        val counts = Presets.ALL.groupBy { it.category }
+        assertEquals(5, counts.size)
+        assertTrue("风格 ≥ 12", (counts[PresetCategory.Style]?.size ?: 0) >= 12)
+        assertTrue("人像 ≥ 8", (counts[PresetCategory.Portrait]?.size ?: 0) >= 8)
+        assertTrue("风景 ≥ 12", (counts[PresetCategory.Landscape]?.size ?: 0) >= 12)
+        assertTrue("食物 ≥ 5", (counts[PresetCategory.Food]?.size ?: 0) >= 5)
+        assertTrue("黑白 ≥ 6", (counts[PresetCategory.Bw]?.size ?: 0) >= 6)
     }
 }

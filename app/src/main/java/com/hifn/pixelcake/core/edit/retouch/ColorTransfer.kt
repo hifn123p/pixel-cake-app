@@ -20,15 +20,32 @@ import kotlin.math.sqrt
  */
 object ColorTransfer {
 
-    /** 内置参考风格的目标均值(R,G,B) / 标准差(R,G,B)。值为 sRGB 0..255 空间的手调近似值。 */
-    private data class Ref(val mr: Float, val mg: Float, val mb: Float, val sr: Float, val sg: Float, val sb: Float)
+    /**
+     * 内置参考风格的目标均值(R,G,B) / 标准差(R,G,B)。值为 sRGB 0..255 空间的手调近似值。
+     *
+     * [mono] 的含义见 [REFS] 里 `bw` 那条 —— **不能**靠「三通道均值相等」来实现去色。
+     */
+    private data class Ref(
+        val mr: Float, val mg: Float, val mb: Float,
+        val sr: Float, val sg: Float, val sb: Float,
+        /** 是否共用一个亮度 z-score（真正去色）；为 false 时三通道各自映射。 */
+        val mono: Boolean = false
+    )
 
     private val REFS: Map<String, Ref> = mapOf(
         "portra" to Ref(140f, 128f, 118f, 55f, 52f, 50f), // 暖、柔和
         "fuji" to Ref(118f, 128f, 138f, 52f, 55f, 55f),   // 冷、偏青绿
         "retro" to Ref(135f, 125f, 115f, 40f, 38f, 36f),  // 低反差、暖旧
         "morandi" to Ref(130f, 130f, 128f, 35f, 35f, 35f),// 低饱和、灰调
-        "jp" to Ref(162f, 160f, 156f, 45f, 45f, 45f)      // 高调、明亮
+        "jp" to Ref(162f, 160f, 156f, 45f, 45f, 45f),     // 高调、明亮
+        // —— 批次 5 新增：与 `Presets` 的风格/风景/黑白分类对齐 ——
+        "warm" to Ref(152f, 132f, 112f, 50f, 50f, 48f),   // 强暖，食物/日落
+        "cool" to Ref(110f, 130f, 148f, 50f, 50f, 50f),   // 强冷，雪景/海景/蓝调
+        // ⚠️ `mono = true` 是**必需**的，不能省：三通道目标值相等只保证「输出三通道的目标中心
+        // 相同」，而每个通道的 z-score 仍来自各自的原图通道 —— 一个纯红像素 (230,60,60) 会
+        // 得到三组差异很大的 z 值，被分别拉到 128 附近的不同偏移上，结果是**发青/发黄的伪黑白**。
+        // 共用亮度 z-score 才是真正的去色（且保留了亮度结构，与 Reinhard 的意图一致）。
+        "bw" to Ref(128f, 128f, 128f, 60f, 60f, 60f, mono = true)
     )
 
     /** 已知参考 id（供 UI 枚举；"none" 表示不追色）。 */
@@ -101,14 +118,19 @@ object ColorTransfer {
         val ref = REFS[params.refId] ?: return
         val intensity = params.intensity.coerceIn(0f, 1f)
         if (intensity <= 0f) return
+        // mono 模式下三通道共用一个亮度 z-score（亮度权重 BT.601），这样才是真正的去色；
+        // 若仍各用各的 z-score，像素会被「按各通道分别反推」⇒ 纯色像素会跑出彩边。
+        val lumaZ = if (ref.mono) {
+            ((stats.mr * 0.299 + stats.mg * 0.587 + stats.mb * 0.114) / stats.sdr).toFloat()
+        } else 0f
         for (i in 0 until length) {
             val a = pixels[i] and 0xff000000.toInt()
             val or = (pixels[i] shr 16) and 0xff
             val og = (pixels[i] shr 8) and 0xff
             val ob = pixels[i] and 0xff
-            val zr = ((or - stats.mr) / stats.sdr).toFloat()
-            val zg = ((og - stats.mg) / stats.sdg).toFloat()
-            val zb = ((ob - stats.mb) / stats.sdb).toFloat()
+            val zr = if (ref.mono) lumaZ else ((or - stats.mr) / stats.sdr).toFloat()
+            val zg = if (ref.mono) lumaZ else ((og - stats.mg) / stats.sdg).toFloat()
+            val zb = if (ref.mono) lumaZ else ((ob - stats.mb) / stats.sdb).toFloat()
             val tr = (ref.mr + zr * ref.sr) * intensity + or * (1f - intensity)
             val tg = (ref.mg + zg * ref.sg) * intensity + og * (1f - intensity)
             val tb = (ref.mb + zb * ref.sb) * intensity + ob * (1f - intensity)

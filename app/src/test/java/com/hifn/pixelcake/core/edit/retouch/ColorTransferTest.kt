@@ -54,4 +54,20 @@ class ColorTransferTest {
         ColorTransfer.apply(px, 8, 8, ColorTransferParams(refId = "portra", intensity = 0f))
         assertEquals("intensity=0 应完全不动", copy.contentHashCode(), px.contentHashCode())
     }
+
+    @Test
+    fun bwMonoProducesGrayscale() {
+        // 纯红像素 (230, 60, 60) 在 mono=true 时三通道共用亮度 z-score ⇒ 输出三通道完全相等。
+        val px = IntArray(8)
+        val red = 0xff000000.toInt() or (230 shl 16) or (60 shl 8) or 60
+        for (i in px.indices) px[i] = red
+        ColorTransfer.apply(px, 8, 8, ColorTransferParams(refId = "bw", intensity = 1f))
+        for (p in px) {
+            val r = (p shr 16) and 0xff
+            val g = (p shr 8) and 0xff
+            val b = p and 0xff
+            assertEquals("bw 去色后 R==G==B，得到 $r,$g,$b", r, g)
+            assertEquals("bw 去色后 R==B，得到 $r,$g,$b", r, b)
+        }
+    }
 }

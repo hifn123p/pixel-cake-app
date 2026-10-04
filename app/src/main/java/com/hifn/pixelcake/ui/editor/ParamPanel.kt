@@ -13,9 +13,14 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import com.hifn.pixelcake.core.edit.BodyPartBeautyParams
 import com.hifn.pixelcake.core.edit.ColorGrading
 import com.hifn.pixelcake.core.edit.ColorMath
 import com.hifn.pixelcake.core.edit.EditParams
@@ -26,6 +31,7 @@ import com.hifn.pixelcake.core.edit.ObjectScope
 import com.hifn.pixelcake.core.edit.RetouchState
 import com.hifn.pixelcake.core.edit.ToneCurve
 import com.hifn.pixelcake.core.edit.preset.Preset
+import com.hifn.pixelcake.core.edit.retouch.ColorTransfer
 import com.hifn.pixelcake.ui.components.GlassChipRow
 import com.hifn.pixelcake.ui.components.ParamSlider
 import com.hifn.pixelcake.ui.components.PresetThumbRow
@@ -37,14 +43,31 @@ private const val TOOL_NONE = "none"
 private const val TOOL_SKIN = "skin"
 private const val TOOL_BLEMISH = "blemish"
 
-/** 追色风格可选项。 */
-private val COLOR_TRANSFER_OPTIONS = listOf(
-    "none" to "无",
+/**
+ * 追色风格可选项。
+ *
+ * 直接由 [com.hifn.pixelcake.core.edit.retouch.ColorTransfer.REF_IDS] 生成，保证 UI 与
+ * 引擎认识的风格**永不失配** —— 手工维护这张表的话，批次 5 给 [ColorTransfer] 加了
+ * `warm`/`cool`/`bw` 之后，这张表就会静默少三格（选了预设却在追色面板看不到当前风格）。
+ */
+private val COLOR_TRANSFER_OPTIONS: List<Pair<String, String>> =
+    listOf("none" to "无") + ColorTransfer.REF_IDS.map { it to COLOR_TRANSFER_LABELS[it] ?: it }
+
+/**
+ * 追色 refId → 中文名。**只覆盖有中文名的**，缺失的 id 直接显示原 id（见上面的 `?: it`）。
+ *
+ * 刻意不写 `error()`/`require()`：引擎加一个新参考风格不该让 UI 崩掉或编译不过，
+ * 临时英文 id 出现在 chip 行上是可以接受的降级。
+ */
+private val COLOR_TRANSFER_LABELS: Map<String, String> = mapOf(
     "portra" to "波特拉",
     "fuji" to "富士",
     "retro" to "复古",
     "morandi" to "莫兰迪",
-    "jp" to "日系"
+    "jp" to "日系",
+    "warm" to "暖调",
+    "cool" to "冷调",
+    "bw" to "黑白"
 )
 
 /** LUT 可选项。 */
@@ -603,10 +626,18 @@ private fun PortraitParams(
         onValueChange = { onRetouchChange(retouch.copy(beauty = retouch.beauty.copy(slimJaw = it))) },
         onValueChangeFinished = onRetouchCommit, onDraggingChange = onDraggingChange
     )
-    ParamSlider(
+        ParamSlider(
         label = "大眼", value = retouch.beauty.eyeEnlarge, valueRange = 0f..1f, step = 0.05f,
         onValueChange = { onRetouchChange(retouch.copy(beauty = retouch.beauty.copy(eyeEnlarge = it))) },
         onValueChangeFinished = onRetouchCommit, onDraggingChange = onDraggingChange
+    )
+
+    // —— 批次 5：细部位美容 ——
+    BeautyPartPanel(
+        retouch = retouch,
+        onRetouchChange = onRetouchChange,
+        onRetouchCommit = onRetouchCommit,
+        onDraggingChange = onDraggingChange
     )
 
     GroupLabel("追色")
@@ -629,6 +660,186 @@ private fun PortraitParams(
             onValueChangeFinished = onRetouchCommit, onDraggingChange = onDraggingChange
         )
     }
+}
+
+/**
+ * 部位 chip 行的一项。
+ *
+ * @param enabledKey 对应 [com.hifn.pixelcake.core.edit.RetouchSwitches] 里哪个开关的读取入口
+ */
+private data class BodyPartTab(
+    val id: String,
+    val label: String,
+    val enabledKey: String
+)
+
+private const val ALL_PARTS_ID = "__all__"
+
+private val BODY_PART_TABS: List<BodyPartTab> = listOf(
+    BodyPartTab("head", "轮廓", "enableHead"),
+    BodyPartTab("eyes", "眼部", "enableEyes"),
+    BodyPartTab("lips", "唇部", "enableLips"),
+    BodyPartTab("face", "面部", "enableFaceSkin"),
+    BodyPartTab("body", "身体", "enableBodySkin"),
+    BodyPartTab("legs", "腿部", "enableLegs"),
+    BodyPartTab("hands", "手部", "enableHands"),
+    BodyPartTab(ALL_PARTS_ID, "全部", "")
+)
+
+/**
+ * 细部位美容面板（批次 5）：先选部位，再调该部位的滑块。
+ *
+ * ## 为什么是「先选部位」而不是把 13 个滑块平铺
+ *
+ * 13 个滑块一次性铺开，用户既找不到「我要的是祛黑眼圈」、也分不清量纲（有的 0..1、
+ * 有的是 −1..1 双向）。分组后每个部位只有 2–3 项，且**同名滑块的量纲按部位的语义定**：
+ * 「磨皮」永远是 0..1 越大越强，「瘦脸」永远是 −1..1 双向（往两头都能调）。
+ *
+ * ## 开关默认关
+ *
+ * [RetouchSwitches] 里唇/身体/腿/手默认 `false`。默认开的部分只保留「几乎人人都要」的
+ * 轮廓 + 眼部 + 面部磨皮 —— 若六组全默认开，一进面板就等于替用户做了决定，
+ * 而且用户会误以为「这东西没生效」（因为看不出区别）。
+ */
+@Composable
+private fun BeautyPartPanel(
+    retouch: RetouchState,
+    onRetouchChange: (RetouchState) -> Unit,
+    onRetouchCommit: () -> Unit,
+    onDraggingChange: (Boolean) -> Unit
+) {
+    var tabId by rememberSaveable { mutableStateOf("face") }
+
+    GroupHeader(
+        text = "细部位美容",
+        showReset = !retouch.beauty.bodyParts.isIdentity,
+        onReset = {
+            onRetouchChange(retouch.copy(beauty = retouch.beauty.copy(bodyParts = BodyPartBeautyParams())))
+            onRetouchCommit()
+        }
+    )
+
+    // 「全部」的 `enabledKey` 是空串 ⇒ 下面查不到分支 ⇒ `enabled` 落回 true，
+    // 即「全部」下所有滑块都可拖（它本来就不该有单一开关）。
+    val cur = BODY_PART_TABS.firstOrNull { it.id == tabId }
+    val sw = retouch.beauty.switches
+    val isAll = cur?.id == ALL_PARTS_ID
+
+    // 开关关掉时滑块整体变灰而不是消失：消失会让面板高度突变、误触到别的滑块；
+    // 变灰则保留了「这里本来有东西」的位置感。
+    val enabled = cur?.enabledKey?.let { key ->
+        when (key) {
+            "enableHead" -> sw.enableHead
+            "enableEyes" -> sw.enableEyes
+            "enableLips" -> sw.enableLips
+            "enableFaceSkin" -> sw.enableFaceSkin
+            "enableBodySkin" -> sw.enableBodySkin
+            "enableLegs" -> sw.enableLegs
+            "enableHands" -> sw.enableHands
+            else -> true
+        }
+    } ?: true
+
+    if (cur != null && !isAll) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(vertical = Spacing.xs),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("启用${cur.label}", style = MaterialTheme.typography.bodyMedium)
+            Switch(
+                checked = enabled,
+                onCheckedChange = { checked ->
+                    val next = when (cur.enabledKey) {
+                        "enableHead" -> sw.copy(enableHead = checked)
+                        "enableEyes" -> sw.copy(enableEyes = checked)
+                        "enableLips" -> sw.copy(enableLips = checked)
+                        "enableFaceSkin" -> sw.copy(enableFaceSkin = checked)
+                        "enableBodySkin" -> sw.copy(enableBodySkin = checked)
+                        "enableLegs" -> sw.copy(enableLegs = checked)
+                        "enableHands" -> sw.copy(enableHands = checked)
+                        else -> sw
+                    }
+                    onRetouchChange(retouch.copy(beauty = retouch.beauty.copy(switches = next)))
+                    onRetouchCommit()
+                }
+            )
+        }
+    }
+
+    GlassChipRow(
+        items = BODY_PART_TABS,
+        selected = cur,
+        label = { it.label },
+        onSelect = { tabId = it.id }
+    )
+
+    val bp = retouch.beauty.bodyParts
+    // 滑块统一走这一个 lambda。
+    fun slider(
+        label: String,
+        value: Float,
+        range: ClosedFloatingPointRange<Float>,
+        write: (BodyPartBeautyParams, Float) -> BodyPartBeautyParams
+    ) {
+        ParamSlider(
+            label = label,
+            value = value,
+            valueRange = range,
+            step = 0.05f,
+            enabled = enabled,
+            onValueChange = {
+                onRetouchChange(
+                    retouch.copy(beauty = retouch.beauty.copy(bodyParts = write(bp, it)))
+                )
+            },
+            onValueChangeFinished = onRetouchCommit,
+            onDraggingChange = onDraggingChange
+        )
+    }
+
+    // 「全部」把所有部位平铺；其余只列当前部位。两者共用同一批 `bp` 字段，
+    // 所以切到「全部」时看到的正是各部位自己那几条滑块，不会有第二份状态。
+    fun headSliders() {
+        slider("瘦头", bp.head, -1f..1f) { p, v -> p.copy(head = v) }
+        slider("下巴", bp.jaw, -1f..1f) { p, v -> p.copy(jaw = v) }
+        slider("额头", bp.forehead, -1f..1f) { p, v -> p.copy(forehead = v) }
+    }
+    fun eyesSliders() {
+        slider("大眼", bp.eyeEnlarge, 0f..1f) { p, v -> p.copy(eyeEnlarge = v) }
+        slider("祛黑眼圈", bp.eyeDarkCircle, 0f..1f) { p, v -> p.copy(eyeDarkCircle = v) }
+    }
+    fun lipsSliders() {
+        slider("唇部增润", bp.lipPlump, 0f..1f) { p, v -> p.copy(lipPlump = v) }
+        slider("唇部提亮", bp.lipBrighten, -1f..1f) { p, v -> p.copy(lipBrighten = v) }
+    }
+    fun faceSliders() { slider("面部磨皮", bp.faceSkin, 0f..1f) { p, v -> p.copy(faceSkin = v) } }
+    fun bodySliders() { slider("身体磨皮", bp.bodySkin, 0f..1f) { p, v -> p.copy(bodySkin = v) } }
+    fun legsSliders() {
+        slider("腿部拉长", bp.legLength, 0f..1f) { p, v -> p.copy(legLength = v) }
+        slider("腿部磨皮", bp.legSkin, 0f..1f) { p, v -> p.copy(legSkin = v) }
+    }
+    fun handsSliders() {
+        slider("手部去黄", bp.handBrighten, -1f..1f) { p, v -> p.copy(handBrighten = v) }
+        slider("手部细节", bp.handDetail, -1f..1f) { p, v -> p.copy(handDetail = v) }
+    }
+
+    if (tabId == ALL_PARTS_ID) {
+        headSliders(); eyesSliders(); lipsSliders()
+        faceSliders(); bodySliders(); legsSliders(); handsSliders()
+    } else {
+        when (tabId) {
+            "head" -> headSliders()
+            "eyes" -> eyesSliders()
+            "lips" -> lipsSliders()
+            "face" -> faceSliders()
+            "body" -> bodySliders()
+            "legs" -> legsSliders()
+            "hands" -> handsSliders()
+        }
+    }
+
+    Hint("每个部位独立生效：只磨皮肤可以不动轮廓，只放大眼睛也不会顺带把脸拉尖。开关关掉的部位保留参数值，重新打开即可恢复。")
 }
 
 /**

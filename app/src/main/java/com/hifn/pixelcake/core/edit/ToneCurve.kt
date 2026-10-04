@@ -49,4 +49,20 @@ object ToneCurve {
     /** 缺锚点（例如别处塞进来的自定义曲线）时回退到恒等值，绝不让 UI 出现空洞。 */
     private fun anchor(points: List<Pair<Int, Int>>, x: Int, fallback: Int): Int =
         points.firstOrNull { it.first == x }?.second ?: fallback
+
+    /**
+     * 锚点在 0..255 横轴上的取值（黑场 0 / 中间调 128 / 白场 255）。
+     *
+     * 供 UI 把手柄画在正确的横坐标上；与 [BLACK_X] / [MID_X] / [WHITE_X] 同口径，
+     * 这样曲线画布与命中测试（`hitTest`）用的是同一套 x 映射，不会出现「画在一处、
+     * 点不中」的错位。
+     */
+    fun anchorX(anchor: Anchor): Int = when (anchor) {
+        Anchor.Black -> BLACK_X
+        Anchor.Mid -> MID_X
+        Anchor.White -> WHITE_X
+    }
+
+    /** 锚点枚举（与 UI 的 `AnchorType` 解耦：核心层不依赖 UI 包）。 */
+    enum class Anchor { Black, Mid, White }
 }
