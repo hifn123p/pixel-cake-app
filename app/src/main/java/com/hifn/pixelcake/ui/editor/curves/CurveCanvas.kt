@@ -101,14 +101,18 @@ fun InteractiveCurveCanvas(
         }
 
         // 曲线
+        //
+        // ⚠️ Compose 的 `Path` **没有** `cubicBezier` —— 三次贝塞尔是 `cubicTo(x1, y1, x2, y2, x3, y3)`
+        // （3 个点 / 6 个浮点，终点是第 3 个点）。写成 5 参会报 `No value passed for parameter 'third'`
+        // 并连带一串 `Cannot infer type`。两段曲线分别落在 [黑场→中间调] 与 [中间调→白场]。
         val path = Path()
         path.moveTo(0f, h - blackY * scaleY)
-        path.cubicBezier(
+        path.cubicTo(
             w * 0.33f, h - blackY * scaleY,
             w * 0.33f, h - midY * scaleY,
             w * 0.5f, h - midY * scaleY
         )
-        path.cubicBezier(
+        path.cubicTo(
             w * 0.66f, h - midY * scaleY,
             w * 0.66f, h - whiteY * scaleY,
             w, h - whiteY * scaleY

@@ -72,7 +72,8 @@ private val COLOR_TRANSFER_LABELS: Map<String, String> = mapOf(
  * `warm`/`cool`/`bw` 之后，这张表就会静默少三格（选了预设却在追色面板看不到当前风格）。
  */
 private val COLOR_TRANSFER_OPTIONS: List<Pair<String, String>> =
-    listOf("none" to "无") + ColorTransfer.REF_IDS.map { it to COLOR_TRANSFER_LABELS[it] ?: it }
+    listOf<Pair<String, String>>("none" to "无") +
+        ColorTransfer.REF_IDS.map { it to (COLOR_TRANSFER_LABELS[it] ?: it) }
 
 /** LUT 可选项。 */
 private val LUT_OPTIONS = listOf(
