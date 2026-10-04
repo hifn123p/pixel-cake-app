@@ -120,10 +120,14 @@ fun InteractiveCurveCanvas(
         drawPath(path, Color.White, style = Stroke(width = 2f))
 
         // 锚点手柄
+        //
+        // ⚠️ 这里是 **2 元组**，必须用 `Pair` 而不是 `Triple` —— `Triple` 的三参构造
+        // 在只给两个实参时报 `No value passed for parameter 'third'`，
+        // 并连带 `listOf` 的 `Cannot infer type for type parameter 'T'`。
         listOf(
-            Triple(AnchorType.Black, blackY),
-            Triple(AnchorType.Mid, midY),
-            Triple(AnchorType.White, whiteY),
+            Pair(AnchorType.Black, blackY),
+            Pair(AnchorType.Mid, midY),
+            Pair(AnchorType.White, whiteY),
         ).forEach { (anchor, y) ->
             val x = ToneCurve.anchorX(anchor.toCoreAnchor()).toFloat() * scaleX
             val cy = h - y * scaleY
