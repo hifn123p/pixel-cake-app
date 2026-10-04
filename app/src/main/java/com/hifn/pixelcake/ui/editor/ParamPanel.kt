@@ -1242,7 +1242,7 @@ private fun GroupLabel(text: String) {
         text = text,
         style = MaterialTheme.typography.titleMedium,
         color = MaterialTheme.colorScheme.onSurface,
-        modifier = Modifier.padding(top = Spacing.m, bottom = Spacing.xs)
+        modifier = Modifier.padding(top = Spacing.l, bottom = Spacing.s)  // 从 Spacing.m/xs 提升，增加间距
     )
 }
 
@@ -1254,9 +1254,9 @@ private fun GroupLabel(text: String) {
 private fun Hint(text: String) {
     Text(
         text = text,
-        style = MaterialTheme.typography.labelSmall,
+        style = MaterialTheme.typography.bodySmall,  // 从 labelSmall 提升到 bodySmall，提高可读性
         color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(top = Spacing.s)
+        modifier = Modifier.padding(top = Spacing.m)  // 从 Spacing.s 提升到 Spacing.m，增加间距
     )
 }
 

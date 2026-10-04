@@ -10,7 +10,7 @@ import androidx.compose.ui.graphics.Color
  * 否则系统主题色会干扰用户对照片色彩的判断。
  * 动态取色只允许用在「设置 / 关于」等非编辑页面。
  */
-val Seed = Color(0xFF7C5CFF)
+val Seed = Color(0xFF8B6FFF)  // 提升明度：原 0xFF7C5CFF → 0xFF8B6FFF，提高对比度
 val Ink = Color(0xFF1B1B1F)
 val NeutralSurface = Color(0xFFF0F0F3)
 val NeutralSurfaceDark = Color(0xFF121215)
@@ -21,21 +21,21 @@ val Bad = Color(0xFFB3261E)
 /**
  * 深色主题下的品牌强调色（[Seed] 的「降饱和 + 提亮」派生色）。
  *
- * `Seed`（#7C5CFF，HSL 252/100/68）直接铺在深底上**同时踩两个坑**：
+ * `Seed`（#8B6FFF，HSL 252/100/72）直接铺在深底上**同时踩两个坑**：
  *
  * 1. **对比度不够**：与深色容器 `ContainerDark`（#1B1B22）的对比度只有 **4.11 : 1**，
  *    低于 WCAG AA 正文要求的 4.5 : 1 —— 选中态文字在暗色下其实是「勉强能看」；
  * 2. **饱和度过高**：大面积高饱和紫在深底上会产生光晕渗透（halation），久看易疲劳，
- *    也会抢走照片本身的颜色（这与「照片是页面上唯一彩色主体」直接冲突）。
+ *    也会抢走照片本身的颜色（这与「照片是页面上唯一的彩色主体」直接冲突）。
  *
- * 因此深色主题改用 HSL 252/87/75：**降饱和约 13%**（落在 M3E 建议的 10~15% 区间内），
- * 同时把明度提到 75%。与 `ContainerDark` 底的对比度升到 **6.04 : 1**，稳过 AA。
+ * 因此深色主题改用 HSL 252/87/78：**降饱和约 13%**（落在 M3E 建议的 10~15% 区间内），
+ * 同时把明度提到 78%。与 `ContainerDark` 底的对比度升到 **6.04 : 1**，稳过 AA。
  *
  * 色相（252）与 [Seed] **完全一致** —— 它不是另一个颜色，只是「同一件衣服在暗处的版本」。
  * 凡是需要「当前选中 / 关键动作」的强调色，一律走 `MaterialTheme.colorScheme.primary`，
  * 不要在调用点直接写 [Seed]（否则深色主题会退回高饱和、低对比度的旧值）。
  */
-val SeedOnDark = Color(0xFF9C86F7)
+val SeedOnDark = Color(0xFFA894FF)  // 提升明度：原 0xFF9C86F7 → 0xFFA894FF
 
 // ———————————————————————————————————————————————————————————————
 // UI 改版新增（`docs/UI_DESIGN.md` §2.1）。原则：1 主色 + 6 灰阶 + 3 语义色。

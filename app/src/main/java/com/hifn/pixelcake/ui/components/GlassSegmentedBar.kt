@@ -141,7 +141,8 @@ fun <T> GlassSegmentedBar(
                         text = label(item),
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = if (isSelected) FontWeight.Medium else FontWeight.Normal,
-                        color = if (isSelected) accent else MaterialTheme.colorScheme.onSurfaceVariant
+                        color = if (isSelected) accent else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = Spacing.xs)  // 增加水平内边距，避免文字拥挤
                     )
                 }
             }

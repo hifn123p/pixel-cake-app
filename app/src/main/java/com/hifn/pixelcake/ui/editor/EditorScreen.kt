@@ -582,7 +582,7 @@ fun EditorScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f - previewFraction)
-                .padding(horizontal = Spacing.page, vertical = Spacing.s)
+                .padding(horizontal = Spacing.page, vertical = Spacing.m)
         ) {
             // contentPadding 传 0 并把内边距交给两层子容器：卡片负责「边界与材质」，
             // 滚动层负责「内容与 Insets」，两者各管一件事。

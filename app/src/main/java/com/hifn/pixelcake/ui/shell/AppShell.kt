@@ -46,7 +46,7 @@ enum class PixelCakeTab(val label: String) {
 
 private object Shell {
     /** TabBar 玻璃条高度 */
-    val barHeight = 56.dp
+    val barHeight = 64.dp  // 从 56dp 提升到 64dp，增加触控舒适度
 }
 
 /**

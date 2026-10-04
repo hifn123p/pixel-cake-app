@@ -168,9 +168,9 @@ fun ParamSlider(
                 // 给等宽高的方块套胶囊就是正圆（与 GlassCircleButton 同一套约定）。
                 Box(
                     modifier = Modifier
-                        .size(18.dp)
+                        .size(24.dp)  // 从 18.dp 提升到 24.dp，增大拇指尺寸，提高可操作性
                         .shadow(
-                            elevation = 3.dp,
+                            elevation = 4.dp,  // 从 3.dp 提升到 4.dp，增强立体感
                             shape = Radius.pill,
                             clip = false,
                             ambientColor = SliderThumbShadow,

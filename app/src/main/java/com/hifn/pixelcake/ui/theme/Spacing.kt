@@ -25,11 +25,11 @@ object Spacing {
     /** 16dp：卡片内边距 */
     val l = 16.dp
 
-    /** 24dp：分组之间、页面左右边距 */
-    val xl = 24.dp
+    /** 20dp：元素间距提升（新增） */
+    val xl = 20.dp
 
-    /** 32dp：页面顶部/底部大留白 */
-    val xxl = 32.dp
+    /** 28dp：页面顶部/底部大留白（从 32 调整为 28，更紧凑） */
+    val xxl = 28.dp
 
     /** 48dp：空态与首屏的呼吸空间 */
     val xxxl = 48.dp
@@ -47,5 +47,5 @@ object Spacing {
     val sectionGap = xl
 
     /** 可点击控件的最小高度（避免误触） */
-    val controlHeight = 44.dp
+    val controlHeight = 48.dp  // 从 44.dp 提升到 48.dp，提高可操作性
 }
