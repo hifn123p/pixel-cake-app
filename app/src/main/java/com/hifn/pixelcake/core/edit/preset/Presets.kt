@@ -4,6 +4,7 @@ import com.hifn.pixelcake.core.edit.BeautyParams
 import com.hifn.pixelcake.core.edit.BodyPartBeautyParams
 import com.hifn.pixelcake.core.edit.ColorTransferParams
 import com.hifn.pixelcake.core.edit.EditParams
+import com.hifn.pixelcake.core.edit.HslMix
 import com.hifn.pixelcake.core.edit.NeutralGrayParams
 import com.hifn.pixelcake.core.edit.RetouchSwitches
 import com.hifn.pixelcake.core.edit.RetouchState
@@ -106,7 +107,8 @@ object Presets {
         ),
         Preset(
             id = "cyber", name = "赛博", category = PresetCategory.Style,
-            params = EditParams(saturation = 0.4f, contrast = 0.2f, temperature = -0.1f, hue = 0.1f),
+            params = EditParams(saturation = 0.4f, contrast = 0.2f, temperature = -0.1f,
+                hsl = HslMix().withHue(6, 0.1f).withHue(5, 0.1f)),
             retouch = RetouchState()
         ),
         Preset(
@@ -300,7 +302,8 @@ object Presets {
         ),
         Preset(
             id = "landscape_snow", name = "雪景", category = PresetCategory.Landscape,
-            params = EditParams(exposureEv = 0.4f, contrast = -0.1f, saturation = -0.05f, temperature = 0.1f, highlights = 0.2f, blues = 0.1f),
+            params = EditParams(exposureEv = 0.4f, contrast = -0.1f, saturation = -0.05f, temperature = 0.1f, highlights = 0.2f,
+                hsl = HslMix().withSat(5, 0.15f).withLum(5, 0.1f)),
             retouch = RetouchState(colorTransfer = ColorTransferParams(refId = "cool", intensity = 0.3f))
         ),
         Preset(
@@ -315,7 +318,8 @@ object Presets {
         ),
         Preset(
             id = "landscape_coast", name = "海景", category = PresetCategory.Landscape,
-            params = EditParams(exposureEv = 0.15f, contrast = 0.05f, saturation = 0.1f, temperature = -0.1f, highlights = -0.1f, shadows = 0.05f, blues = 0.15f, vibrance = 0.1f),
+            params = EditParams(exposureEv = 0.15f, contrast = 0.05f, saturation = 0.1f, temperature = -0.1f, highlights = -0.1f, shadows = 0.05f, vibrance = 0.1f,
+                hsl = HslMix().withSat(5, 0.2f).withLum(5, 0.05f)),
             retouch = RetouchState(colorTransfer = ColorTransferParams(refId = "cool", intensity = 0.4f))
         ),
         Preset(

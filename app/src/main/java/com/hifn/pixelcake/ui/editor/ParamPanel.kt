@@ -44,20 +44,14 @@ private const val TOOL_SKIN = "skin"
 private const val TOOL_BLEMISH = "blemish"
 
 /**
- * 追色风格可选项。
- *
- * 直接由 [com.hifn.pixelcake.core.edit.retouch.ColorTransfer.REF_IDS] 生成，保证 UI 与
- * 引擎认识的风格**永不失配** —— 手工维护这张表的话，批次 5 给 [ColorTransfer] 加了
- * `warm`/`cool`/`bw` 之后，这张表就会静默少三格（选了预设却在追色面板看不到当前风格）。
- */
-private val COLOR_TRANSFER_OPTIONS: List<Pair<String, String>> =
-    listOf("none" to "无") + ColorTransfer.REF_IDS.map { it to COLOR_TRANSFER_LABELS[it] ?: it }
-
-/**
- * 追色 refId → 中文名。**只覆盖有中文名的**，缺失的 id 直接显示原 id（见上面的 `?: it`）。
+ * 追色 refId → 中文名。**只覆盖有中文名的**，缺失的 id 直接显示原 id（见下面的 `?: it`）。
  *
  * 刻意不写 `error()`/`require()`：引擎加一个新参考风格不该让 UI 崩掉或编译不过，
  * 临时英文 id 出现在 chip 行上是可以接受的降级。
+ *
+ * ⚠️ **必须声明在 [COLOR_TRANSFER_OPTIONS] 之前**：Kotlin 顶层属性按**声明顺序**初始化，
+ * 上面的 OPTIONS 直接读这张表 —— 写反了会得到 `Variable 'COLOR_TRANSFER_LABELS'
+ * must be initialized`（前向引用在顶层属性里不是「能用」，而是编译错）。
  */
 private val COLOR_TRANSFER_LABELS: Map<String, String> = mapOf(
     "portra" to "波特拉",
@@ -69,6 +63,16 @@ private val COLOR_TRANSFER_LABELS: Map<String, String> = mapOf(
     "cool" to "冷调",
     "bw" to "黑白"
 )
+
+/**
+ * 追色风格可选项。
+ *
+ * 直接由 [com.hifn.pixelcake.core.edit.retouch.ColorTransfer.REF_IDS] 生成，保证 UI 与
+ * 引擎认识的风格**永不失配** —— 手工维护这张表的话，批次 5 给 [ColorTransfer] 加了
+ * `warm`/`cool`/`bw` 之后，这张表就会静默少三格（选了预设却在追色面板看不到当前风格）。
+ */
+private val COLOR_TRANSFER_OPTIONS: List<Pair<String, String>> =
+    listOf("none" to "无") + ColorTransfer.REF_IDS.map { it to COLOR_TRANSFER_LABELS[it] ?: it }
 
 /** LUT 可选项。 */
 private val LUT_OPTIONS = listOf(
@@ -776,6 +780,9 @@ private fun BeautyPartPanel(
 
     val bp = retouch.beauty.bodyParts
     // 滑块统一走这一个 lambda。
+    // ⚠️ 局部函数内要调 @Composable（ParamSlider）⇒ 这个局部函数**自己也必须标 @Composable**，
+    //    否则报 "Functions which invoke @Composable functions must be marked with the @Composable annotation"。
+    @Composable
     fun slider(
         label: String,
         value: Float,
@@ -800,25 +807,32 @@ private fun BeautyPartPanel(
 
     // 「全部」把所有部位平铺；其余只列当前部位。两者共用同一批 `bp` 字段，
     // 所以切到「全部」时看到的正是各部位自己那几条滑块，不会有第二份状态。
+    @Composable
     fun headSliders() {
         slider("瘦头", bp.head, -1f..1f) { p, v -> p.copy(head = v) }
         slider("下巴", bp.jaw, -1f..1f) { p, v -> p.copy(jaw = v) }
         slider("额头", bp.forehead, -1f..1f) { p, v -> p.copy(forehead = v) }
     }
+    @Composable
     fun eyesSliders() {
         slider("大眼", bp.eyeEnlarge, 0f..1f) { p, v -> p.copy(eyeEnlarge = v) }
         slider("祛黑眼圈", bp.eyeDarkCircle, 0f..1f) { p, v -> p.copy(eyeDarkCircle = v) }
     }
+    @Composable
     fun lipsSliders() {
         slider("唇部增润", bp.lipPlump, 0f..1f) { p, v -> p.copy(lipPlump = v) }
         slider("唇部提亮", bp.lipBrighten, -1f..1f) { p, v -> p.copy(lipBrighten = v) }
     }
+    @Composable
     fun faceSliders() { slider("面部磨皮", bp.faceSkin, 0f..1f) { p, v -> p.copy(faceSkin = v) } }
+    @Composable
     fun bodySliders() { slider("身体磨皮", bp.bodySkin, 0f..1f) { p, v -> p.copy(bodySkin = v) } }
+    @Composable
     fun legsSliders() {
         slider("腿部拉长", bp.legLength, 0f..1f) { p, v -> p.copy(legLength = v) }
         slider("腿部磨皮", bp.legSkin, 0f..1f) { p, v -> p.copy(legSkin = v) }
     }
+    @Composable
     fun handsSliders() {
         slider("手部去黄", bp.handBrighten, -1f..1f) { p, v -> p.copy(handBrighten = v) }
         slider("手部细节", bp.handDetail, -1f..1f) { p, v -> p.copy(handDetail = v) }
