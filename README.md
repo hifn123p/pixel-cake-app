@@ -32,23 +32,23 @@
 
 ## ✨ 特性
 
-### 已完成规划 / 开发中
+### 已实现
 | 模块 | 说明 |
 |---|---|
-| 🖼 导入 | 相册 Photo Picker；JPEG / HEIF 原生解码；**ARW 支持** |
-| ⚡ ARW 快速预览 | 解析 ARW 内嵌的全分辨率 JPEG 预览（7008×4672），**纯 Kotlin 零 NDK**，秒开 |
-| 🎚 调色 | 曝光 / 曲线 / LUT，非破坏编辑栈，可撤销重做、原图对比 |
-| 🚀 实时预览 | 代理图 + CPU 多线程逐像素 band 渲染（分带拉取 16-bit 线性 + PixelProgram 上色）；GPU/RenderEffect/AGSL 规划中 |
-| 💾 导出 | 写回相册（JPEG / PNG；HEIF 视设备编码器），按设备档位自适应分辨率 |
-| 🐞 调试日志 | 内置结构化日志，可导出分享——无本地构建环境下的唯一联调回路 |
-| 📷 ARW 全量修图 | LibRaw NDK 真解马赛克 → 16-bit 线性（P1b-1/2/3 已接入并启用；人像算子 / 预设见 P1b-4/5） |
+| 🖼 导入与解码 | Photo Picker / SAF；JPEG、HEIF；Sony ARW 内嵌预览与 LibRaw 全量解码 |
+| 🎚 非破坏编辑 | 曝光、白平衡、曲线、HSL、分级、LUT、细节与效果；撤销/重做、前后对比 |
+| 🧴 人像精修 | 皮肤画笔与 AI 肤色蒙版、磨皮、美型液化、祛瑕、追色及对象蒙版图层 |
+| 🎨 预设 | 内置参数栈预设，按当前照片生成缩略图；编辑后可继续微调 |
+| 🤖 端侧 ML | LiteRT 人脸框/关键点与 6 类人体分割；GPU→CPU 回退 |
+| 📷 相机直连 | Sony USB PTP 探测、浏览与下载；支持单张导入及批量套预设导出 |
+| 💾 导出 | JPEG / PNG；RAW 全分辨率分带渲染，非 RAW 按设备能力选择分辨率 |
+| 🐞 调试日志 | 结构化端侧日志，可通过系统分享导出 |
 
 ### 规划中
-- 🧴 人像精修：中性灰磨皮 / 美型液化 / 祛瑕 / 追色 / AGSL 局部
-- 🎨 内置人像预设 ~10 套（参数栈 + `.cube` 电影/胶片 LUT）
-- 🤖 ML 自动蒙版：人脸检测 / 关键点 / 分割（TFLite + NNAPI）
-- 📡 A7C2 相机直连：USB PTP 拉图 + 套预设 + 边拍边看
-- ☁️ 云端 NAS：Docker 化 Rust 引擎 + HTTP API，单张/批量后台修图
+- ☁️ NAS 后台引擎：Docker 化 Rust 服务与任务队列（P3）
+- 🎨 用户预设库：保存/管理自定义参数栈，并在相机批处理中复用
+- ⚡ GPU/AGSL 预览管线与更多格式/机型的性能验证
+- 📷 相机真机验收与实时取景；当前 PTP 能力以传输照片为主，并非实时取景
 
 ---
 
@@ -56,10 +56,12 @@
 
 **客户端（主）**
 - Kotlin 2.2.21 · Jetpack Compose + Material3 · AGP 8.13.2 · JDK 17
-- Hilt · Room · Coil · Navigation · Coroutines
-- 预览渲染：当前为 **CPU 多线程逐像素 band 渲染**（分带拉取 + 查表上色）；GPU/RenderEffect/AGSL 为后续规划
-- 端侧推理（后置）：TensorFlow Lite + **NNAPI** delegate（NNAPI → GPU → CPU 降级）
-- RAW：LibRaw（NDK / JNI）+ 纯 Kotlin TIFF/IFD 解析
+- AndroidX Core / Activity Compose / Lifecycle Runtime；Compose UI、Material3、Animation
+- 端侧推理：LiteRT `CompiledModel`（GPU→CPU 回退），模型随包内置
+- 预览渲染：CPU 分带像素管线；RAW 编辑使用 LibRaw NDK/JNI 的 16-bit 线性数据
+- RAW 快速预览：纯 Kotlin TIFF/IFD 解析内嵌 JPEG
+
+**体积与响应策略**：Release 已启用 R8/资源收缩、限定 `arm64-v8a` 并过滤语言资源；RAW/像素编辑采用代理预览、分带读写和双缓冲。肤色分割模型约 16.37 MB、用于端侧 mmap 因而不压缩，另有人脸检测模型约 0.68 MB。继续明显缩包需量化/蒸馏分割模型；在没有真机画质基准前不应以牺牲蒙版质量换体积。
 
 **服务端（辅，P3）**
 - Rust · `axum` · `ort`(ONNX: OpenVINO / Vulkan / CPU) · `rusqlite` · Docker（飞牛 FnOS）
@@ -73,13 +75,12 @@
 ```
 com.hifn.pixelcake
 ├── core/
-│   ├── decode/    Decoder · ArwPreviewDecoder · RawNative(LibRaw) · ExportResolver
-│   ├── edit/      EditStack + ops/(曝光·曲线·LUT·AGSL·中性灰·液化·祛瑕·追色) + mask/
-│   ├── ml/        FaceDetector · Landmarker · Segmenter   (后置)
-│   ├── render/    PreviewPipeline（EditStack → GPU 节点图）
-│   └── model/     Photo · EditOperation · Preset · Project
-├── data/          Room · preset/(参数栈 json + .cube LUT)
-├── ui/            home · gallery · editor · export
+│   ├── decode/    JPEG/HEIF、RAW 解码与导出
+│   ├── edit/      参数管线、对象图层、预设及人像算子
+│   └── ml/        LiteRT 人脸检测与肤色/对象分割
+├── arw/           ARW 容器解析、预览提取与全量解码
+├── camera/        USB PTP、会话管理与批量处理
+├── ui/            Compose 首页、编辑器、相机面板、设置与主题
 └── diag/          DebugLog（结构化日志 + 导出分享）
 ```
 
@@ -110,10 +111,10 @@ com.hifn.pixelcake
 | **M0a** | SDK 升 minSdk36 + CI 出首个可装 APK + DebugLog | ✅ |
 | **M0b** | ARW 内嵌预览解码（纯 Kotlin，零 NDK） | ✅ |
 | **P1a** | 最小可用编辑链路 → **首个真机可测 APK**（导入/曝光·曲线·LUT/导出/日志） | ✅ |
-| **P1b** | 完整人像修图 + ARW 全量修图 + 内置预设 ~10 套 | 🔧 进行中（LibRaw 全量解码已接入启用；人像算子/预设待做） |
-| **P1+** | ML 自动蒙版（ONNX → TFLite） | ⬜ |
-| **P2** | A7C2 相机直连（USB PTP PoC）+ 边拍边看 | ⬜ |
-| **P3** | NAS Docker 化 + HTTP API，单张/批量后台修图 | ⬜ |
+| **P1b** | 人像修图、RAW 全量编辑与预设 | ✅（真机验收持续进行） |
+| **P1+** | LiteRT 肤色/对象蒙版与人脸关键点 | ✅（真机效果仍需验收） |
+| **P2** | Sony USB PTP 传输与批量预设处理 | ✅（真机兼容性/实时取景仍需验证） |
+| **P3** | NAS Docker 化 + HTTP API，单张/批量后台修图 | 🔜 |
 
 ---
 

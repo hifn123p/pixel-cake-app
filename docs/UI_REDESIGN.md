@@ -23,9 +23,10 @@
 
 ## 三、滑块（ParamSlider.kt）
 
-- 拇指直径：18dp → **24dp**
+- 拇指直径：24dp → **20dp**；保留 Material Slider 的 48dp 触控热区
 - 阴影：3dp → **4dp**
 - 形状统一走 `Radius.pill`
+- 移除滑块整行上下额外留白，降低连续调节项的纵向占比
 - 移除有兼容性风险的 `activeTrackStroke` 参数
 
 ## 四、间距阶梯（Spacing.kt）
@@ -55,8 +56,8 @@ TabBar 高度 56 → **64dp**，触控舒适度提升。
 
 ## 九、玻璃 ChipRow（GlassChipRow.kt）
 
-- 增加 `contentPadding = PaddingValues(horizontal = Spacing.m, vertical = 0.dp)`
-- chip 触控热区更舒适，文字与边框间距回到阶梯
+- chip 按可用宽度自动换行，模板与选项不再需要横向寻找
+- 行间距按 `Spacing.xs`，保留 chip 本身的触控热区
 
 ## 十、导出面板（ExportSheet.kt）
 
@@ -71,4 +72,4 @@ TabBar 高度 56 → **64dp**，触控舒适度提升。
 ## 待办
 
 - [ ] 编译验证：`.\gradlew.bat :app:compileDebugKotlin --no-daemon --console=plain`
-- [ ] 真机触控热区验证（64dp TabBar / 24dp slider thumb）
+- [ ] 真机触控热区与多行布局验证（64dp TabBar / 48dp slider 热区）

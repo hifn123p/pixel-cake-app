@@ -47,7 +47,7 @@ object MlMaskProvider {
      * `@Synchronized`：编辑器的预览重渲与导出可能并发进入（两者都在 `Dispatchers.Default`），
      * 串行化可避免同一 key 被重复推理、以及缓存字段被交错写坏。
      *
-     * @param key 源图标识（建议 `uri + 尺寸`）；相同 key 命中缓存，不重复推理
+     * @param key 源图标识（应区分 URI、尺寸及位图实例/内容代次）；相同 key 命中缓存
      * @return 失败返回 `null`（**不抛异常**）
      */
     @Synchronized
@@ -175,6 +175,7 @@ object MlMaskProvider {
     }
 
     /** 完全重置（含模型与失败标记）；供调试/测试用。 */
+    @Synchronized
     fun reset() {
         runCatching { model?.close() }
         model = null

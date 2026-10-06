@@ -506,10 +506,18 @@ fun CameraPanel(
                 if (p.bytesTotal > 0L) {
                     LinearProgressIndicator(
                         progress = { p.percent / 100f },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier
+                            .fillMaxWidth(0.72f)
+                            .height(3.dp)
+                            .align(Alignment.CenterHorizontally)
                     )
                 } else {
-                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                    LinearProgressIndicator(
+                        modifier = Modifier
+                            .fillMaxWidth(0.72f)
+                            .height(3.dp)
+                            .align(Alignment.CenterHorizontally)
+                    )
                 }
                 Text(
                     p.text(),
