@@ -135,6 +135,27 @@ private fun AppRoot(settings: AppSettings) {
     // 见 `ParamScopeBar` 的 KDoc：让用户点进一个注定不生效的作用域，是本批最不能犯的错。
     var objectScopesAvailable by remember { mutableStateOf(false) }
 
+    // 「图片代次」：每次导入新图 / 退出编辑器都 +1。
+    //
+    // ## 它解决的是什么
+    //
+    // 渲染协程是**异步**的（几百毫秒），而「退出编辑器」「换图」是主线程上的一次性动作。
+    // 两者重叠时，已经算完但还没写回的那一批会把**上一张照片**的结果写进 `rendered` ——
+    // 这比崩溃更隐蔽：用户退出后再进来，先看到的是刚关掉的那张图。
+    //
+    // ⚠️ 别指望「协程取消」能兜住这里：取消只在**挂起点**生效，而
+    // `rendered = target` 这类赋值恰好不是挂起点 —— 协程被取消后仍会把它执行完。
+    // 所以必须有一个显式的、由主线程推进的标记来作废在途批次。
+    // （第七轮起渲染协程改用 `collect` 收集快照，能取消它的只剩「换图 / 退出编辑器」这一条路；
+    //  那条路的取消同样**不保证**在赋值前生效 ⇒ 本标记一步都不能省。见渲染协程的注释。）
+    //
+    // 用 `AtomicInteger` 而不是 `var by mutableStateOf`：它是纯控制位，不需要驱动任何重组；
+    // 而放进 Compose 快照会让「在 Default 线程上读它」变成一件需要留神的事。
+    //
+    // ⚠️ **声明必须在本函数的靠前位置**：下面的对象作用域预热 `LaunchedEffect` 会读它。
+    // 局部变量按声明顺序可见，放在后面会得到 `Unresolved reference 'imageEpoch'`。
+    val imageEpoch = remember { AtomicInteger(0) }
+
     // 对象作用域的可用性**预热**（批次 5）。
     //
     // ## 为什么要在用户点开之前就探测
@@ -180,24 +201,6 @@ private fun AppRoot(settings: AppSettings) {
     val exportCancelled = remember { AtomicBoolean(false) }
     val renderMutex = remember { Mutex() }
     var renderStamp by remember { mutableStateOf(0) }
-
-    // 「图片代次」：每次导入新图 / 退出编辑器都 +1。
-    //
-    // ## 它解决的是什么
-    //
-    // 渲染协程是**异步**的（几百毫秒），而「退出编辑器」「换图」是主线程上的一次性动作。
-    // 两者重叠时，已经算完但还没写回的那一批会把**上一张照片**的结果写进 `rendered` ——
-    // 这比崩溃更隐蔽：用户退出后再进来，先看到的是刚关掉的那张图。
-    //
-    // ⚠️ 别指望「协程取消」能兜住这里：取消只在**挂起点**生效，而
-    // `rendered = target` 这类赋值恰好不是挂起点 —— 协程被取消后仍会把它执行完。
-    // 所以必须有一个显式的、由主线程推进的标记来作废在途批次。
-    // （第七轮起渲染协程改用 `collect` 收集快照，能取消它的只剩「换图 / 退出编辑器」这一条路；
-    //  那条路的取消同样**不保证**在赋值前生效 ⇒ 本标记一步都不能省。见渲染协程的注释。）
-    //
-    // 用 `AtomicInteger` 而不是 `var by mutableStateOf`：它是纯控制位，不需要驱动任何重组；
-    // 而放进 Compose 快照会让「在 Default 线程上读它」变成一件需要留神的事。
-    val imageEpoch = remember { AtomicInteger(0) }
 
     // 「按住看原图」的对比基准 = **零编辑渲染图**（不是解码预览图）。
     // 为什么必须是它、而不是 `src.bitmap`，见 `EditorScreen` 的 compareBase 文档。
