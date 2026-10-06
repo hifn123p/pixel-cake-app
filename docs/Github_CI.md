@@ -2,7 +2,7 @@
 
 > 由 push 触发的工作流运行结果整理。本文件每次 CI 后**覆盖重写**（前一次报告已清空）。
 > 生成时间：2026-10-06（本地）
-> 关联提交：`97bf4a99eb8fbfaf3b9051e6039e31d83dd561b3`（**versionName `0.4.6` / versionCode `11` —— 本轮已发版**）
+> 关联提交：`a8a93ce`（**versionName `0.4.6` / versionCode `11` —— 本轮已发版**）
 > 本轮主题：**合入 `agents/project-analysis-and-improvement` worktree 分支的代码复审修正，发布 `v0.4.6`**
 
 ## 结论：✅ 两轮 main 后全绿发版 —— 首轮红（`imageEpoch` 局部变量前向引用）→ 修复后 main 绿 → 打 tag，5 job 全过（含 Publish），Release 已发布
@@ -12,6 +12,7 @@
 | ① main 推「合并 + 抬版本号」 | run **`37440627734`** | `7a8ea25`（main） | ❌ **failure**（`compileDebugKotlin` 1 类：`MainActivity.kt:158` `Unresolved reference 'imageEpoch'`） |
 | ② main 推修复 | run **`37441305549`** | `97bf4a9`（main） | ✅ **4 job 全绿**（`Publish` 非 tag 跳过） |
 | ③ tag 触发发布 | run **`37443544216`** | `v0.4.6`（`97bf4a9`） | ✅ **5 job 全绿**（含 `Publish GitHub Release`） |
+| ④ main 推本报告 | run **`37445115490`** | `a8a93ce`（main） | ✅ **4 job 全绿**（`Publish` 非 tag 跳过） |
 
 > 🚀 **Release 已发布**：<https://github.com/hifn123p/pixel-cake-app/releases/tag/v0.4.6>
 > 附件 `pixelcake-v0.4.6-release.apk`（**29.06 MB**），已供真机（一加15）下载验收。
@@ -183,6 +184,7 @@ e: .../MainActivity.kt:158:75  Argument type mismatch: actual type is 'MatchGrou
 | `37440627734` | `7a8ea25`（main） | ❌ failure | `MainActivity.kt:158` `Unresolved reference 'imageEpoch'`（局部变量前向引用）+ 连带 `MatchGroup?` 类型不匹配 |
 | `37441305549` | `97bf4a9`（main） | ✅ success | 无（修复后 4 job 绿） |
 | **`37443544216`** | **`v0.4.6`（tag）** | ✅ **success** | **无（5 job 全绿含 Publish，Release 已发布）** |
+| `37445115490` | `a8a93ce`（main） | ✅ success | 无（docs-only，4 job 绿） |
 
 ## 后续步骤
 
