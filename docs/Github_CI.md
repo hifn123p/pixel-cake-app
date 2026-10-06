@@ -1,27 +1,22 @@
 # GitHub Actions CI 结果报告
 
 > 由 push 触发的工作流运行结果整理。本文件每次 CI 后**覆盖重写**（前一次报告已清空）。
-> 生成时间：2026-10-04（本地）
-> 关联提交：`b582da049ed982754d7cbb7e68833b3fce3f25d9`（**versionName `0.4.5` / versionCode `10` —— 本轮已发版**）
-> 本轮主题：**细部位美容 + 预设体系扩容到 44 套（分类）+ 追色 mono 去色 + 曲线/直方图工具，发布 `v0.4.5`**
+> 生成时间：2026-10-06（本地）
+> 关联提交：`97bf4a99eb8fbfaf3b9051e6039e31d83dd561b3`（**versionName `0.4.6` / versionCode `11` —— 本轮已发版**）
+> 本轮主题：**合入 `agents/project-analysis-and-improvement` worktree 分支的代码复审修正，发布 `v0.4.6`**
 
-## 结论：✅ 四轮 main 后全绿发版 —— main 连续三轮红（均为真实编译错，逐轮收敛）→ 第四轮绿 → 打 tag，5 job 全过（含 Publish），Release 已发布
+## 结论：✅ 两轮 main 后全绿发版 —— 首轮红（`imageEpoch` 局部变量前向引用）→ 修复后 main 绿 → 打 tag，5 job 全过（含 Publish），Release 已发布
 
 | 阶段 | 运行 | ref / 提交 | 结论 |
 |---|---|---|---|
-| ① main 推功能批次 + 抬版本号 | run **`37203167123`** | `60af310`（main） | ❌ **failure**（`compileDebugKotlin` 6 错：Presets ×3 + ParamPanel ×3） |
-| ② main 推第 1 轮修复 | run **`37203592131`** | `54c2898`（main） | ❌ failure（2 错：`ParamPanel:75` 类型推断 + `CurveCanvas.cubicBezier` 不存在） |
-| ③ main 推第 2 轮修复 | run **`37203885993`** | `3e2d1b6`（main） | ❌ failure（`CurveCanvas:123-127`：`Triple` 只给 2 参） |
-| ④ main 推第 3 轮修复 | run **`37204072934`** | `b582da0`（main） | ✅ **4 job 全绿**（`Publish` 非 tag 跳过） |
-| ⑤ tag 触发发布 | run **`37204595671`** | `v0.4.5`（`b582da0`） | ✅ **5 job 全绿**（含 `Publish GitHub Release`） |
+| ① main 推「合并 + 抬版本号」 | run **`37440627734`** | `7a8ea25`（main） | ❌ **failure**（`compileDebugKotlin` 1 类：`MainActivity.kt:158` `Unresolved reference 'imageEpoch'`） |
+| ② main 推修复 | run **`37441305549`** | `97bf4a9`（main） | ✅ **4 job 全绿**（`Publish` 非 tag 跳过） |
+| ③ tag 触发发布 | run **`37443544216`** | `v0.4.6`（`97bf4a9`） | ✅ **5 job 全绿**（含 `Publish GitHub Release`） |
 
-> 🚀 **Release 已发布**：<https://github.com/hifn123p/pixel-cake-app/releases/tag/v0.4.5>
-> 附件 `pixelcake-v0.4.5-release.apk`（**29.03 MB**），已供真机（一加15）下载验收。
+> 🚀 **Release 已发布**：<https://github.com/hifn123p/pixel-cake-app/releases/tag/v0.4.6>
+> 附件 `pixelcake-v0.4.6-release.apk`（**29.06 MB**），已供真机（一加15）下载验收。
 
-> ⚠️ **本轮是「main 连红三轮」的最坏情况**：新功能批次里有**从未编译过**的新文件（`curves/` 包 + `Histogram.kt`），
-> 它们**首次进编译**，逐层暴露错误。共 4 个 run 才收敛。这是「新文件多 + 本地无编译器」的正常代价，不是流程故障。
-
-## 任务（Job）总览 — run `37204595671`（tag run，最终绿）
+## 任务（Job）总览 — run `37443544216`（tag run，最终绿）
 
 | Job | 结论 | 说明 |
 |---|---|---|
@@ -31,136 +26,108 @@
 | Signed Release | ✅ success | 解 PKCS12 keystore → `assembleRelease`（R8）→ 签名 APK + mapping |
 | Publish GitHub Release | ✅ success | `v*` tag 触发，上传 release APK 并创建 Release（`contents: write`） |
 
-> 与 main run `37204072934` 的唯一差别：后者为非 tag push，`Publish` 按设计 **⏭️ skip**。
+> 与 main run `37441305549` 的唯一差别：后者为非 tag push，`Publish` 按设计 **⏭️ skip**。
 > 两步走的**闸门设计生效**：只有「main 已绿」的 commit 才被打了 tag。
 
-## ❌ 本轮 4 个 run 的完整故障链（逐轮收敛）
+## 🔀 本轮的「合并」性质：worktree 分支 → main
 
-### 第 1 轮红 — run `37203167123`（`60af310`，6 错）
-
-```
-e: .../core/edit/preset/Presets.kt:109:90   No parameter with name 'hue' found.
-e: .../core/edit/preset/Presets.kt:303:130  No parameter with name 'blues' found.
-e: .../core/edit/preset/Presets.kt:318:148  No parameter with name 'blues' found.
-e: .../ui/editor/ParamPanel.kt:54:5   Initializer type mismatch:
-                                      expected 'List<Pair<String, String>>', actual 'List<Serializable>'.
-e: .../ui/editor/ParamPanel.kt:54:63  Variable 'COLOR_TRANSFER_LABELS' must be initialized.
-e: .../ui/editor/ParamPanel.kt:779:9  Functions which invoke @Composable functions must be marked with the @Composable annotation
-e: .../ui/editor/ParamPanel.kt:785:9  @Composable invocations can only happen from the context of a @Composable function
-> Task :app:compileDebugKotlin FAILED
-```
-
-**根因（3 类）**：
-
-1. **`EditParams` 没有 `hue` / `blues` 字段** —— 写预设时凭「应该有」注入了两个不存在的具名参数。
-   `EditParams` 实测 **37 个字段**（`exposureEv`…`texture`），色相/蓝色调整的正确入口是 `hsl: HslMix`。
-   修：`cyber` → `hsl = HslMix().withHue(6, 0.1f).withHue(5, 0.1f)`（品红 6 / 蓝 5）；
-   `landscape_snow` → `hsl = HslMix().withSat(5, 0.15f).withLum(5, 0.1f)`；
-   `landscape_coast` → `hsl = HslMix().withSat(5, 0.2f).withLum(5, 0.05f)`。并补 `import ...edit.HslMix`。
-2. **Kotlin 顶层属性前向引用是编译错**（不是「能用」）—— `COLOR_TRANSFER_OPTIONS` 声明在
-   `COLOR_TRANSFER_LABELS` **之前**，而它直接读后者 ⇒ `must be initialized`，
-   且 `+` 的类型被推断成 `List<Serializable>`。修：把 `LABELS` 挪到 `OPTIONS` **之前**。
-3. **`@Composable` 局部函数必须自己标 `@Composable`** —— `slider()` 与 7 个 `*Sliders()` 局部函数
-   内部调用了 `ParamSlider`（`@Composable`），自身却未标注。共 **8 处**一并补上。
-
-### 第 2 轮红 — run `37203592131`（`54c2898`，2 错）
+本轮不是常规的功能开发，而是把**第二个 worktree** 的工作合回 `main`：
 
 ```
-e: .../ui/editor/ParamPanel.kt:75:5  Initializer type mismatch:
-                                     expected 'List<Pair<String, String>>', actual 'List<Serializable>'.
-e: .../ui/editor/curves/CurveCanvas.kt:106:14  Unresolved reference 'cubicBezier'.
-e: .../ui/editor/curves/CurveCanvas.kt:111:14  Unresolved reference 'cubicBezier'.
-e: .../ui/editor/curves/CurveCanvas.kt:119-121  Cannot infer type / No value passed for parameter 'third'.
+D:/AI_Project                                            [main]
+D:/AI_Project.worktrees/project-analysis-and-improvement  [agents/project-analysis-and-improvement]
 ```
 
-**根因（2 类）**：
-
-1. `ParamPanel:75` —— 声明顺序改了，但 `listOf("none" to "无") + REF_IDS.map {...}` 的 `+`
-   仍把公共超类型推到 **`Serializable`**。修：显式写 `listOf<Pair<String, String>>(...)`，
-   并把 elvis 结果加括号（`it to (LABELS[it] ?: it)`）防歧义。
-2. **Compose `Path` 没有 `cubicBezier`** —— 三次贝塞尔真名是 `cubicTo(x1,y1,x2,y2,x3,y3)`（6 浮点）。
-   原代码只给 5 个实参 ⇒ `No value passed for parameter 'third'` 并连带一串 `Cannot infer type`。
-   修：两段改 `path.cubicTo(...)` 并补齐终点。
-
-### 第 3 轮红 — run `37203885993`（`3e2d1b6`，仅 `CurveCanvas`）
-
-```
-e: .../ui/editor/curves/CurveCanvas.kt:123:9   Cannot infer type for type parameter 'T'. Specify it explicitly.
-e: .../ui/editor/curves/CurveCanvas.kt:124:38  No value passed for parameter 'third'.
-e: .../ui/editor/curves/CurveCanvas.kt:125:36  No value passed for parameter 'third'.
-e: .../ui/editor/curves/CurveCanvas.kt:126:38  No value passed for parameter 'third'.
-```
-
-**根因**：锚点手柄写成 `Triple(AnchorType.Black, blackY)` —— **`Triple` 是三参构造**，只给 2 个实参
-必然报 `No value passed for parameter 'third'`，并让 `listOf` 的 `T` / `C` 无法推断。
-修：这是 **2 元组**，改用 **`Pair(AnchorType.Xxx, xxxY)`**，`forEach { (anchor, y) -> }` 解构不变。
-
-### 第 4 轮绿 — run `37204072934`（`b582da0`）
-
-`Build Debug APK` / `Lint` / `Check signing secrets` / `Signed Release` **4 job 全过**。
-`compileDebugUnitTestKotlin` 随之首跑，**测试全过** ⇒ 断言与实现一致。
-
-## 本轮产出物（Artifacts）— run `37204595671` / `37204072934`
-
-| Artifact | 保留 |
-|---|---|
-| `pixelcake-release-b582da0…` | 90 天 |
-| `pixelcake-debug-b582da0…` | 90 天 |
-| `pixelcake-mapping-b582da0…` | 90 天 |
-| `lint-report-b582da0…` | 7 天 |
-
-**Release 附件**：`pixelcake-v0.4.5-release.apk`（29.03 MB）。
-
-## 本轮改动：细部位美容 / 44 套分类预设 / 追色 mono / 曲线直方图工具
-
-| 文件 | 变更 |
-|---|---|
-| `core/edit/RetouchState.kt` | 新增 `BodyPartBeautyParams`（13 字段）+ `RetouchSwitches`（7 开关，唇/身/腿/手默认关）；`BeautyParams` 加 `bodyParts`/`switches` 及 13 个新字段（共 18） |
-| `core/edit/preset/Presets.kt` | 预设扩到 **44 套** + 新增 `PresetCategory`（风格 12 / 人像 9 / 风光 12 / 美食 5 / 黑白 6）；`Preset` 加**必填** `category` |
-| `core/edit/retouch/ColorTransfer.kt` | 新增 `warm`/`cool`/`bw` 参考风格；`Ref` 加 `mono` 标志；`bw` 走**单通道亮度 z-score** 迁移 |
-| `core/edit/Histogram.kt` | **新增**：纯函数直方图（零 Android 依赖），`compute`/`computeRgb`/`normalize`/`meanShift`/`clippedMedian` |
-| `core/edit/ToneCurve.kt` | 补 `anchorX(Anchor)` + `Anchor` 枚举（核心层不依赖 UI 包） |
-| `ui/components/ParamSlider.kt` | 新增 `enabled` 形参；禁用态显式降透明度（thumb `.alpha(0.38f)` + 三条 disabled 颜色） |
-| `ui/editor/ParamPanel.kt` | 新增 `BeautyPartPanel`（部位分页 `BodyPartTab` / `BODY_PART_TABS` / `ALL_PARTS_ID`）；追色选项由 `ColorTransfer.REF_IDS` 动态生成 |
-| `ui/editor/curves/*.kt` | **新增 3 文件（备用实现，暂未接线）**：`CurveCanvas`（可交互曲线画布）/ `CurvePanel` / `CurveDisplay` |
-| `app/build.gradle.kts` | 抬版本 `0.4.4 → 0.4.5`（`versionCode 9 → 10`） |
-
-> ℹ️ `ui/editor/curves/` 三个文件目前**无任何调用点（dead code）** —— 真正在用的曲线 UI 仍是
-> `ParamPanel` 内的滑块版 `CurveTab`。它们**只要放在 `app/src` 下就必须能编译**，本轮 4 个错误里有 3 个出在这里。
-
-### 本轮提交
+合入时两个分支指针相同（都是 `b0176d0`），worktree 侧有 **13 个文件的未提交改动**。
+处理顺序：**先在 worktree 里提交 → 再 `git merge --no-ff` 合入 main**。
 
 | 提交 | 说明 |
 |---|---|
-| `f639183` | `feat(edit)`：细部位美容 + 44 套分类预设 + 追色 mono + 曲线/直方图工具（12 文件，`+1270 / −34`） |
-| `60af310` | `chore(release)`：抬版本 `0.4.4 → 0.4.5`（`versionCode 9 → 10`） |
-| `54c2898` | `fix(edit)`：修第 1 轮 6 处编译错（2 文件，`+32 / −14`） |
-| `3e2d1b6` | `fix(edit)`：修第 2 轮 2 处编译错（2 文件，`+8 / −3`） |
-| `b582da0` | `fix(edit)`：修第 3 轮 `Triple` 2 参调用（1 文件，`+7 / −3`） |
+| `0dd6784` | `fix(review)`：代码复审修正（13 文件，`+147 / −94`）—— **提交于 worktree 分支** |
+| `758ee95` | `merge`：合入 `agents/project-analysis-and-improvement`（`--no-ff`，保留分支历史） |
+| `7a8ea25` | `chore(release)`：抬版本 `0.4.5 → 0.4.6`（`versionCode 10 → 11`） |
+| `97bf4a9` | `fix(edit)`：修首轮编译错（`imageEpoch` 前向引用，1 文件，`+21 / −18`） |
+
+## ❌ 本轮真实故障：首轮 `37440627734` main 红
+
+**报错（Build 与 Lint 两个 job 同一处，预编译步即红）**：
+
+```
+e: .../MainActivity.kt:158:75  Unresolved reference 'imageEpoch'.
+e: .../MainActivity.kt:158:75  Argument type mismatch: actual type is 'MatchGroup?', but 'Int' was expected.
+> Task :app:compileDebugKotlin FAILED
+```
+
+**根因：局部变量按声明顺序可见 —— 前向引用。**
+
+批次复审给「对象作用域预热」的 `LaunchedEffect(imported)`（原 155–164 行）新加了 `imageEpoch.get()`
+实参，而 `val imageEpoch = remember { AtomicInteger(0) }` 的声明**在其后的原 200 行**。
+
+⚠️ 注意那条**迷惑性的连带错误**：编译器找不到 `imageEpoch` 这个局部符号后，把该标识符解析成了
+其它同名候选，于是额外报出 `actual type is 'MatchGroup?'`。**看到「Unresolved reference + 类型不匹配」
+同时出现在同一列，第一反应应是「符号没找到」，而不是去查那个类型。**
+
+**修法（`97bf4a9`）**：把「注释块 + 声明」整体**上移**到 `LaunchedEffect` 之前
+（`objectScopesAvailable` 声明之后），并在 KDoc 补一条警示：声明必须靠前。
+修后 `imageEpoch` 只声明一次，12 处引用全部在其后。
+
+**顺带核对**（同一批改动把 `mlCacheKey` 由 2 参改为 4 参）：
+- 声明 4 参，3 个调用点全部传 4 参 ✓
+- 尺寸取 `src.bitmap.width/height`（`Int`）、代次取 `imageEpoch.get()` / `epochAtStart`（`Int`）✓
+
+## 📦 本轮改动内容（复审驱动）
+
+### 1. ML 缓存键正确性（核心修复）
+
+`mlCacheKey` 原为 `uri + 预览位图尺寸`，在「同 URI 重开」「同尺寸连拍」场景下会**错误命中缓存**，
+把上一张的人脸/分割结果当成当前图的。改为 **`uri + 尺寸 + epoch`（会话代次）**。
+
+- 尺寸取 `src.bitmap`（导入代理尺寸），**不取 `src.linear`** —— 后者在 RAW 路径下是**线性代理尺寸**，
+  与导入探测 / 导出路径传的键不同，会把同一张图拆成两个键导致缓存复用失效（每次导出重跑推理）。
+- `epoch` 取 `imageEpoch`：语义为「换图 / 退出编辑器时 +1」，**一次编辑会话内恒定**
+  ⇒ 同一张图的预览 / 导出 / 对象作用域探测**共用同一蒙版**（只推理一次），换图必然失效。
+- **不采用** `identityHashCode`（位图回收后新实例可能落在同地址 ⇒ 碰撞）与 `generationId`
+  （语义是「像素内容被改动」，而渲染**每 32 行**就 `setPixels` 一次，键会每帧变化）。
+
+### 2. 缓存失效的线程与时机
+
+- `MlFaceProvider.invalidate()` / `reset()`、`MlMaskProvider.reset()` 补 **`@Synchronized`**
+  （与 `objectMasksFor` / `facesFor` 的并发访问串行化）。
+- 换图时 `invalidate()` 挪进 `withContext(Dispatchers.Default)`（与推理同线程）；
+  退出编辑器时挪进 `scope.launch(Dispatchers.Default)`，不再阻塞主线程。
+- `decodeToProxy` 失败路径提前置 `loading = false`，避免失败后 loading 悬挂。
+
+### 3. UI 尺寸回调
+
+| 文件 | 变更 |
+|---|---|
+| `GlassChipRow.kt` / `PresetThumbRow.kt` | 横向滚动 → **`FlowRow` 自适应换行**，选项不再被截断或藏在水平滚动区；补 `@OptIn(ExperimentalLayoutApi::class)` |
+| `ParamSlider.kt` | 拇指 24dp → **20dp**（保留 Material Slider 48dp 触控热区）；移除整行上下额外留白 |
+| `GlassSegmentedBar.kt` | 移除选中项内联 `Modifier.padding` |
+| `CameraPanel.kt` | 进度条收窄至 72% 宽 / 3dp 高并居中 |
+| `EditorScreen.kt` / `EditorToolbar.kt` | 顶栏与一级工具条统一 48dp（`Spacing.controlHeight`），注释同步 |
+
+### 4. 文档同步
+
+- `README.md`：特性表由「规划中」更新为「已实现」，模块树与技术栈对齐当前实现。
+- `docs/UI_DESIGN.md` / `docs/UI_REDESIGN.md`：控件高度（44→48dp）、chip 行改为换行组、滑块拇指尺寸等与实现对齐。
 
 ## ⭐ 复盘（供后人少走弯路）
 
-1. **`Triple` 必 3 参、`Pair` 必 2 参 —— 别凭手感写元组**。`Triple(a, b)` 的报错是
-   `No value passed for parameter 'third'`，还会**连带**把 `listOf(...)` 的类型推断成
-   `Cannot infer type for type parameter 'T'`，看起来像两个无关错误，其实是同一处。
-2. **Compose `Path` 的贝塞尔 API 是 `cubicTo(x1,y1,x2,y2,x3,y3)`（6 浮点）**，**没有** `cubicBezier`。
-   少一个终点实参的报错同样会伪装成「类型推断失败」。
-3. **顶层 `val` 前向引用是编译错**（`Variable 'X' must be initialized`），不是警告。
-   且 `listOf(...) + listOther` 的公共超类型容易被推到 `Serializable` ⇒ **显式写 `listOf<T>(...)`**。
-4. **`@Composable` 局部函数内调 `@Composable` ⇒ 自身必须标 `@Composable`**（本次 8 处）。
-5. **「新文件首次进编译」是最贵的一轮**：`curves/` 包 + `Histogram.kt` 从未编译过，
-   即使它们**是 dead code**，只要在 `app/src` 下就必须能编译 —— 别以为「没接线就能随便写」。
-   本轮 4 个 run 中有 3 个错误来自这些文件。
-6. **本地无编译器时的静态闸门**（本轮实测有效）：
-   - **具名参数合法性扫描**：收集所有 `class X(...)` 的主构造字段名，再遍历所有 `X(...)` 调用点
-     检查 `name =` 是否在字段表内。注意**必须先剥离注释/字符串**（否则 KDoc 里的示例会被算进去 ⇒ 假阳性）。
-   - **元组实参个数扫描**：`Pair` 必 2、`Triple` 必 3。
-   - **惯用类缺 import 扫描**：Compose/Android 常用类（`Modifier`/`Column`/`Path`/`Size`/`dp`…）
-     出现在正文但不在 import 表 ⇒ 报警。
-7. **一处编译错 = Build 与 Lint 两个 job 同时红**，且在**预编译步**就失败。
+1. **局部变量前向引用 = `Unresolved reference`，与顶层 `val` 前向引用（`must be initialized`）是两回事。**
+   局部变量按**声明顺序**可见，写在后面就是**找不到符号**（不是「能用但危险」）。
+   本轮踩坑原因：给一个**靠前的** `LaunchedEffect` 新增实参，而变量声明在靠后位置。
+2. **「Unresolved reference + 类型不匹配」出现在同一行同一列 ⇒ 先怀疑符号没找到。**
+   `MatchGroup?` 那条纯属编译器解析失败后的连带噪音，追它只会浪费时间。
+3. **静态闸门要再加一条：跨行检查「变量使用点是否早于其声明」**。
+   本轮已建立的三类闸门（具名参数合法性 / `Pair`·`Triple` 实参个数 / 惯用类缺 import）
+   **扫不出**这类错误 —— 它的符号存在、名字也对，只是**顺序错了**。
+   注意粗粒度扫描会因**不同函数里同名变量**而产生大量假阳性，必须以「声明位置之后的首次使用」为判据。
+4. **一处编译错 = Build 与 Lint 两个 job 同时红**，且都在**预编译步**就失败。
    判据：**真错** = 有 `e: file:///...kt:行:列`；**infra 抖动** = Build 绿而 Lint 挂、日志只有 `hs_err_pid*.log`。
-8. **`compileDebugKotlin` 挂 ⇒ `compileDebugUnitTestKotlin` 根本没跑** —— main 编译错修完后，
-   测试侧可能还埋着下一轮错误。本轮测试侧一次通过。
+5. **多 worktree 协作的正确顺序：先在各自 worktree 内提交，再合入 main。**
+   本轮合入时两分支指针相同、worktree 侧仅有未提交改动 ⇒ 真正的动作是「提交 + 合并」，
+   而不是「合并两个已分叉的分支」。
 
 ## 🔐 安全边界（重要）
 
@@ -211,28 +178,37 @@ e: .../ui/editor/curves/CurveCanvas.kt:126:38  No value passed for parameter 'th
 | `37203592131` | `54c2898`（main） | ❌ failure | `ParamPanel.kt:75` `List<Serializable>` 类型推断；`CurveCanvas.kt:106/111` `Path.cubicBezier` 不存在 |
 | `37203885993` | `3e2d1b6`（main） | ❌ failure | `CurveCanvas.kt:123-127` `Triple` 只给 2 参 ⇒ `No value passed for parameter 'third'` |
 | `37204072934` | `b582da0`（main） | ✅ success | 无（修复后 4 job 绿） |
-| **`37204595671`** | **`v0.4.5`（tag）** | ✅ **success** | **无（5 job 全绿含 Publish，Release 已发布）** |
+| `37204595671` | `v0.4.5`（tag） | ✅ success | 无（5 job 全绿含 Publish，Release 已发布） |
+| `37204925691` | `b0176d0`（main） | ✅ success | 无（docs-only） |
+| `37440627734` | `7a8ea25`（main） | ❌ failure | `MainActivity.kt:158` `Unresolved reference 'imageEpoch'`（局部变量前向引用）+ 连带 `MatchGroup?` 类型不匹配 |
+| `37441305549` | `97bf4a9`（main） | ✅ success | 无（修复后 4 job 绿） |
+| **`37443544216`** | **`v0.4.6`（tag）** | ✅ **success** | **无（5 job 全绿含 Publish，Release 已发布）** |
 
 ## 后续步骤
 
-1. **真机（一加15）验收 `v0.4.5`**，本批重点看：
-   - **细部位美容**：头/脸/眼/唇/身/腿/手各部位分页切换是否顺、默认仅面部开启是否符合预期；
-   - **预设**：44 套 × 5 分类的 chip 行能否正确筛选、`none` 是否仍在首位；
-   - **追色**：新增 `暖调 / 冷调 / 黑白` 三格是否出现；**黑白**是否为真去色（R=G=B）；
-   - **禁用态滑块**：`ParamSlider(enabled=false)` 的降透明度是否可见；
+1. **真机（一加15）验收 `v0.4.6`**，本批重点看：
+   - **ML 缓存键**：同一张图反复进出编辑器 / 连续导出，确认**不会用错图的蒙版**；
+     以及「同尺寸连拍的两张不同照片」切换时结果正确（这是本轮修的核心问题）。
+   - **chip 行换行**：预设 / 追色 / 工具选择等长列表是否**完整可见**（不再需要横向滑动找），
+     面板高度随内容增长是否可接受。
+   - **滑块拇指 20dp**：触控是否仍顺手（Material 48dp 热区保留）。
+   - **顶栏 / 工具条 48dp**：上下是否对齐、视觉是否协调。
+   - **相机面板进度条**：72% 宽 / 3dp 高是否清晰可读。
    - **两种主题（浅 / 深）各看一次** —— 历史教训：深浅相反才现形的 bug（`LocalContentColor`）必须两主题都验。
 2. 仍待真机确认的历史项：第六轮面板文字（浅色主题）、第七轮拖参数「只有完整帧 + 每帧都在动」
-   + `render done` 的 `ms` 报数、第四/五轮已发布项、批次 5 的 6 条（`docs/OBJECT_TONE_DESIGN.md` §12.2）、
-   `TONE_ZONE_GAIN=0.35` 是否过猛、批次 1~4 预览↔导出一致性、锐化晚于磨皮、A7C2 直连、人脸锚点。
-3. **`docs/CURVE_HISTOGRAM_DESIGN.md` 尚未创建** —— `Histogram.kt` 的 KDoc 已引用它。下次接线
-   `curves/` 包时一并补上设计文档（或修正 KDoc 引用）。
-4. 下一版若要发：先抬 `versionName`/`versionCode`（当前 `0.4.5` / `10`）→ push main 跑绿 → 再打 tag，两步走。
+   + `render done` 的 `ms` 报数、`TONE_ZONE_GAIN=0.35` 是否过猛、批次 1~4 预览↔导出一致性、
+   锐化晚于磨皮、A7C2 直连、人脸锚点。
+3. ⚠️ **`docs/CURVE_HISTOGRAM_DESIGN.md` 仍不存在** —— `Histogram.kt` 的 KDoc 引用了它。
+   下次接线 `ui/editor/curves/` 包时一并补上（或修正 KDoc 引用）。
+4. 下一版若要发：先抬 `versionName`/`versionCode`（当前 `0.4.6` / `11`）→ push main 跑绿 → 再打 tag，两步走。
 5. 新修改按固定流程 **全量推送** → 触发 CI → 结果覆盖写入本文件再推送。
-6. ⚠️ **已知待办**：第一版真实设置迁移落地时**必须同批补 `SettingsMigrationTest`**（当前 v0→v1 为空迁移）。
-7. ⚠️ **环境类失败预警**：`Failed to find package 'tools'` = 上游 SDK 变动，改 workflow `packages`，别改代码。
-8. ⚠️ **Material3 实验性 API**：用 `Slider` 自定义 `thumb` 等须加 `@OptIn(ExperimentalMaterial3Api::class)`。
-9. ⚠️ **日志埋点传可空值**：`DebugLog` 的 kv 是 `Map<String, Any>`（值**非空**）—— 一律 `?: 兜底`。
-10. ⚠️ **M3 控件实参要核签名**：`FilterChip` 无 `contentPadding`；`Modifier.size` 要 `import foundation.layout.size`。
+6. ⚠️ **多 worktree**：`agents/project-analysis-and-improvement` 位于
+   `D:/AI_Project.worktrees/project-analysis-and-improvement`。合入 main 前先在该 worktree 内提交。
+7. ⚠️ **已知待办**：第一版真实设置迁移落地时**必须同批补 `SettingsMigrationTest`**（当前 v0→v1 为空迁移）。
+8. ⚠️ **环境类失败预警**：`Failed to find package 'tools'` = 上游 SDK 变动，改 workflow `packages`，别改代码。
+9. ⚠️ **Material3 实验性 API**：用 `Slider` 自定义 `thumb` 等须加 `@OptIn(ExperimentalMaterial3Api::class)`；
+   `FlowRow` 须加 `@OptIn(ExperimentalLayoutApi::class)`（`androidx.compose.foundation.layout`）。
+10. ⚠️ **日志埋点传可空值**：`DebugLog` 的 kv 是 `Map<String, Any>`（值**非空**）—— 一律 `?: 兜底`。
 11. ⚠️ **`Crossfade` / `AnimatedContent` 的内容必须是单一节点**；**`selectable` / `clickable` / `toggleable`
     必须显式传 `indication = null`**；**自定义主题换 `colorScheme` 时必须同时补 `LocalContentColor`**。
 12. ⚠️ **执行 git commit 时不要在 `-m` 里用反引号**：bash 会把它当命令替换执行。改用 `git commit -F <文件>`。
@@ -241,4 +217,4 @@ e: .../ui/editor/curves/CurveCanvas.kt:126:38  No value passed for parameter 'th
     **不改仓库/全局配置**，只在单条 push 命令上临时覆盖。
 
 ---
-*本报告由 push 后 GitHub Actions 运行结果自动整理；本轮 main 连红三轮（`Triple` 2 参 / `Path.cubicBezier` / 非法具名参数与前向引用）→ 逐轮修复 → 第四轮 main 绿（4 job）→ 打 `v0.4.5` tag → 5 job 全绿含 Publish → Release 已发布。*
+*本报告由 push 后 GitHub Actions 运行结果自动整理；本轮 main 首轮红（`imageEpoch` 局部变量前向引用，连带一条迷惑性的 `MatchGroup?` 类型错误）→ 修复 → main 一次跑绿（4 job）→ 打 `v0.4.6` tag → 5 job 全绿含 Publish → Release 已发布。*
