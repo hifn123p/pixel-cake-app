@@ -155,7 +155,7 @@ private fun AppRoot(settings: AppSettings) {
     LaunchedEffect(imported) {
         val src = imported ?: return@LaunchedEffect
         objectScopesAvailable = false
-        val key = mlCacheKey(srcUri, src.bitmap)
+        val key = mlCacheKey(srcUri, src.bitmap.width, src.bitmap.height, imageEpoch.get())
         val ok = withContext(Dispatchers.Default) {
             MlMaskProvider.objectMasksFor(context, src.bitmap, key) != null
         }
@@ -312,7 +312,12 @@ private fun AppRoot(settings: AppSettings) {
                 val w = src.linear?.width ?: src.bitmap.width
                 val h = src.linear?.height ?: src.bitmap.height
                 // ML 蒙版缓存键：同一张图在预览与导出之间复用同一蒙版对象（P1p-1b）。
-                val mlKey = mlCacheKey(srcUri, src.bitmap)
+                // ⚠️ 尺寸必须用 `src.bitmap` 的，**不能**用上面的 `w`/`h` —— 那两个在 RAW 路径下
+                // 是**线性代理尺寸**（`src.linear` 的），与导入探测 / 导出路径传的键不同
+                // ⇒ 会把「同一张图」拆成两个键，缓存复用失效（每次导出重跑一遍推理）。
+                // ⚠️ 代次用 `epochAtStart` 而不是 `imageEpoch.get()`：后者在换图期间已被推进，
+                // 会把「上一张图的这一帧」算到新会话的键上。
+                val mlKey = mlCacheKey(srcUri, src.bitmap.width, src.bitmap.height, epochAtStart)
                 var autoMaskNoteOut = ""
                 var liquifyNoteOut = ""
                 val batch = renderMutex.withLock {
@@ -500,8 +505,8 @@ private fun AppRoot(settings: AppSettings) {
             loading = true
             status = EditorStatus(StatusKind.Info, "正在解码…")
             val dec = runCatching { Decoder.decodeToProxy(context, uri, profile.proxyLongEdge) }.getOrNull()
-            loading = false
             if (dec == null) {
+                loading = false
                 status = EditorStatus(StatusKind.Error, "无法解码该文件")
                 DebugLog.w(DebugLog.TAG_DECODE, "decode failed", mapOf("uri" to uri.toString()))
             } else {
@@ -518,12 +523,14 @@ private fun AppRoot(settings: AppSettings) {
                     // 正常路径上 `compareBase` 早已被 `onBack` 清成 null，这里是兜底。
                     scope.launch { renderMutex.withLock { staleBase.recycle() } }
                 }
+                withContext(Dispatchers.Default) {
+                    MlMaskProvider.invalidate()
+                    MlFaceProvider.invalidate()
+                }
+                loading = false
                 imported = dec
                 srcUri = uri
                 history.reset()
-                // 换图：丢掉上一张的 ML 缓存（蒙版网格 + 人脸列表，均不含 Bitmap，代价极低）。
-                MlMaskProvider.invalidate()
-                MlFaceProvider.invalidate()
                 params = EditParams()
                 retouch = RetouchState()
                 // 换图必须清空对象层：它们是**上一张照片**的分割结果上建出来的作用域，
@@ -709,7 +716,7 @@ private fun AppRoot(settings: AppSettings) {
                             // 在主线程把格式/质量/缓存键取出来：Dispatchers.Default 里不应读 Compose 快照状态
                             val fmt = settings.exportFormat
                             val quality = settings.jpegQuality.value
-                            val mlKey = mlCacheKey(srcUri, img.bitmap)
+                            val mlKey = mlCacheKey(srcUri, img.bitmap.width, img.bitmap.height, imageEpoch.get())
                             // A1 取证：导出起点（此刻蒙版/包围盒缓冲都还没分配）
                             DebugLog.i(DebugLog.TAG_EDIT, "export begin", memorySnapshot())
                             val result: Pair<Uri?, String> = withContext(Dispatchers.Default) {
@@ -889,8 +896,10 @@ private fun AppRoot(settings: AppSettings) {
                         }
                         ArwFullDecoder.releaseCache(src.rawCachePath)
                         // 退出编辑器：清掉 ML 缓存（下次打开重新推理，避免用错图）。
-                        MlMaskProvider.invalidate()
-                        MlFaceProvider.invalidate()
+                        scope.launch(Dispatchers.Default) {
+                            MlMaskProvider.invalidate()
+                            MlFaceProvider.invalidate()
+                        }
                         // ⚠️ 刻意**不**回收 `src.bitmap`（导入代理图）。它与上面两张的关键区别是
                         // **读者不唯一**：预览渲染、预设缩略图、导出、ML 推理都要读它。
                         // 手动回收就得穷举全部读者并逐个串行化，漏掉任何一个都换来一次 native 崩溃；
@@ -944,8 +953,41 @@ private fun AppRoot(settings: AppSettings) {
     }
 }
 
-/** ML 蒙版缓存键：源图 uri + 预览位图尺寸。同一张图在预览与导出之间复用同一蒙版对象。 */
-private fun mlCacheKey(uri: Uri?, bmp: Bitmap): String = "${uri ?: "-"}#${bmp.width}x${bmp.height}"
+/**
+ * ML 缓存键：源图 uri + 尺寸 + **会话代次** `epoch`（= `imageEpoch`）。
+ *
+ * ## 为什么不能拿 `Bitmap` 的实例身份（`identityHashCode` / `generationId`）当键
+ *
+ * 两条都是硬伤，任一条单独成立就足以否掉这个方案：
+ *
+ * 1. **`identityHashCode` 会碰撞，而且碰撞模式恰好命中本项目。**
+ *    它是 32 位、由对象地址派生，**不是唯一 ID**。而本项目的位图生命周期正好是
+ *    「导入 → 编辑 → 退出 → 交 GC（`src.bitmap` 明确不手动回收，见 `onBack`）→ 再导入」——
+ *    前一块被回收后，新的 `Bitmap` 极可能落在**同一地址** ⇒ `identityHashCode` 相同。
+ *    若两次的 `uri` 与尺寸也相同（同一张照片重开、或连拍都是同尺寸），键就**完全相等** ⇒
+ *    命中缓存 ⇒ 用上一张的旧人脸/分割结果。**这正是本次要修的症状，那样写修不掉它。**
+ * 2. **`generationId` 的语义不是「这是哪张图」。** 它跟踪的是「像素**内容**被改动过」
+ *    （`setPixels` / `eraseColor` 推进它）。用它当键，等于把「图换了」与「图被改了一笔」
+ *    混成一件事；而 `EditEngine` 渲染**每 32 行**就 `setPixels` 一次（`BAND_ROWS = 32`）——
+ *    一旦哪天有调用点传进来的是渲染目标而非源图，键就会每帧变化。
+ * 3. **最现实的反面作用：缓存会永不命中。** `uri` + 尺寸相同时，每次 `decodeToProxy`
+ *    都产生**新实例** ⇒ 实例身份必不同。而本缓存的核心价值就是「预览与导出之间复用同一蒙版，
+ *    只推理一次」（见 `MlMaskProvider` 类 KDoc 第 3 条）—— 预览传 `src.bitmap`、
+ *    导出传 `img.bitmap`（**不同实例**，见调用点）⇒ 复用**全部失效**，
+ *    每次导出都白跑一遍人脸检测与皮肤分割（几百 ms ~ 数秒）。
+ *
+ * ## `epoch` 为什么恰好是对的那个量
+ *
+ * `imageEpoch` 的语义就是「**换图 / 退出编辑器**时 +1」，因此它在**一次编辑会话内恒定**：
+ *  - 同一张图的预览、导出、对象作用域探测 ⇒ **键相同 ⇒ 复用生效**（性能前提保住）；
+ *  - 换成另一张图（或同一 URI 内容被替换后重开）⇒ `epoch` 已 +1 ⇒ **必然失效**；
+ *  - 不碰撞、不依赖地址复用、不依赖 GC 时机。
+ *
+ * ⚠️ 调用点必须在 `imageEpoch.incrementAndGet()` **之后**取值（导入路径即如此），
+ * 否则取到的是上一张图的代次。
+ */
+private fun mlCacheKey(uri: Uri?, w: Int, h: Int, epoch: Int): String =
+    "${uri ?: "-"}#${w}x$h#$epoch"
 
 /**
  * 一次预览渲染的产物（连同它的「身份」、「归属」与「完整性」）。

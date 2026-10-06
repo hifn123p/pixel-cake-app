@@ -1,17 +1,16 @@
 package com.hifn.pixelcake.ui.components
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -23,14 +22,13 @@ import com.hifn.pixelcake.ui.theme.Radius
 import com.hifn.pixelcake.ui.theme.Spacing
 
 /**
- * 横向滚动的 chip 行（`docs/UI_DESIGN.md` §4.3 的二级工具条）。
+ * 自适应换行的 chip 组选项（`docs/UI_DESIGN.md` §4.3 的二级工具条）。
  *
  * 预设、追色风格、工具选择、二级分组、色相通道都是「一组互斥小选项」，形态完全一致，
  * 所以只做一个控件。
  *
- * 两个刻意的决定：
- * - **横向滚动而不是换行**：换行会让面板高度随内容跳变（选 10 套预设时面板突然长高一大截），
- *   参数面板高度跳变是「廉价感」的常见来源。横向滚动高度恒定。
+ * - **按可用宽度换行**：常用选项无需横向寻找；高度随内容增加，但面板本身可纵向滚动，
+ *   不再让一排选项被截断或隐藏在水平滚动区域里。
  * - **圆角统一走 [Radius.chip]**：Material 默认给的 8dp 不在本项目的圆角阶梯上，
  *   混进来就破了「只用四档圆角」的纪律。
  *
@@ -52,6 +50,7 @@ import com.hifn.pixelcake.ui.theme.Spacing
  *   而界面上没有任何东西解释为什么。
  */
 @Composable
+@OptIn(ExperimentalLayoutApi::class)
 fun <T> GlassChipRow(
     items: List<T>,
     selected: T?,
@@ -62,11 +61,11 @@ fun <T> GlassChipRow(
     itemEnabled: ((T) -> Boolean)? = null,
     swatch: ((T) -> Color)? = null
 ) {
-    Row(
+    FlowRow(
         modifier = modifier
-            .fillMaxWidth()
-            .horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(Spacing.s)
+            .fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(Spacing.s),
+        verticalArrangement = Arrangement.spacedBy(Spacing.xs)
     ) {
         items.forEach { item ->
             FilterChip(

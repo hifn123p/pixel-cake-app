@@ -5,17 +5,16 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -41,7 +40,7 @@ import com.hifn.pixelcake.ui.theme.containerColor
 import com.hifn.pixelcake.ui.theme.pressScale
 
 /**
- * 预设缩略图行（`docs/UI_DESIGN.md` §1.5 的 **A 档**：预设卡片带**真实缩略图**）。
+ * 预设缩略图组（`docs/UI_DESIGN.md` §1.5 的 **A 档**：预设卡片带**真实缩略图**）。
  *
  * ## 为什么预设值得一张真图
  *
@@ -51,13 +50,13 @@ import com.hifn.pixelcake.ui.theme.pressScale
  *
  * ## 与 [GlassChipRow] 的关系
  *
- * 两者都是「一组互斥小选项 + 横向滚动不换行」（高度恒定，避免面板高度跳变）。
+ * 两者都是「一组互斥小选项」；预设卡片按可用宽度换行，便于直接浏览完整模板列表。
  * 区别只在**信息量**：chip 只承载一个词，本控件承载「一张图 + 一个词」。
  * 所以没有去重构成一个带可选缩略图的巨型控件 —— 那会让 chip 路径多背一层可空判断。
  *
  * ## 选中态用 2px 强调描边（对「1px 描边」纪律的一次显式例外）
  *
- * 72dp 的缩略图上，1px 强调线在照片的复杂内容上几乎看不见，选中态会**读不出来**。
+ * 64dp 的缩略图上，1px 强调线在照片的复杂内容上几乎看不见，选中态会**读不出来**。
  * 这是「状态可见性」压过「描边纪律」的场景，因此明确写成 2px，并只用于选中态
  * （未选中仍是 1px 极淡描边，不破坏整体观感）。
  *
@@ -67,6 +66,7 @@ import com.hifn.pixelcake.ui.theme.pressScale
  * @param size     缩略图边长（方形）；显示尺寸，不是位图像素尺寸
  */
 @Composable
+@OptIn(ExperimentalLayoutApi::class)
 fun <T> PresetThumbRow(
     items: List<T>,
     selected: T?,
@@ -77,11 +77,11 @@ fun <T> PresetThumbRow(
     enabled: Boolean = true,
     size: Dp = 64.dp
 ) {
-    Row(
+    FlowRow(
         modifier = modifier
-            .fillMaxWidth()
-            .horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(Spacing.m)
+            .fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(Spacing.m),
+        verticalArrangement = Arrangement.spacedBy(Spacing.m)
     ) {
         items.forEach { item ->
             PresetThumb(

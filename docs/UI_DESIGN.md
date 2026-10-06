@@ -225,7 +225,7 @@ VSCO 的护城河也不是社交，是 `A4 / C1 / G3` 这些代号构成的**一
 | 底座 | 工作台深色 `#0E0E10`；浅色 `#F0F0F3`（卡片 `#FBFBFD`）；暗色 `#121215`（卡片 `#1B1B22`） | 新增「工作台深色」方案，编辑页可强制使用。浅色底座从 `#F7F7F8` 压到 `#F0F0F3`，让**实心卡片**有 ≈11 级明度差可分层 |
 | 容器色阶 | 5 档 × 2 主题（`ContainerLevel`：Lowest → Highest） | **档位越高 = 越亮 = 越「浮」**，明暗方向一致。承载型容器走 `containerSurface()`，不再用玻璃（§1.6.1） |
 | 字阶 | 保留 displaySmall 24 / titleMedium 16 / bodyMedium 14 / labelMedium 12，**新增 11sp caption** | 参数数值建议等宽字体，避免拖动时宽度跳动 |
-| 栅格 | 页面左右边距 **24dp**，卡片内边距 16dp，卡片间距 12dp，控件最小高 44dp | 全部走 `Spacing` token。**原稿写 20dp 不在尺度上**，故取 24dp —— 顺带落实「留白 +30%」这条最高性价比的改进 |
+| 栅格 | 页面左右边距 **24dp**，卡片内边距 16dp，卡片间距 12dp，控件最小高 48dp | 全部走 `Spacing` token。**原稿写 20dp 不在尺度上**，故取 24dp —— 顺带落实「留白 +30%」这条最高性价比的改进 |
 
 ### 2.2 「高级感」从哪来：先减后加
 
@@ -415,10 +415,10 @@ VSCO 的护城河也不是社交，是 `A4 / C1 / G3` 这些代号构成的**一
 
 | 层 | 高度 | 内容 |
 |---|---|---|
-| ① 顶栏 | 44dp（`Spacing.controlHeight`） | 返回 / 撤销 / 重做 / 重置 / **导出**（导出为玻璃胶囊，其余为 ghost 文字按钮） |
+| ① 顶栏 | 48dp（`Spacing.controlHeight`） | 返回 / 撤销 / 重做 / 重置 / **导出**（导出为玻璃胶囊，其余为 ghost 文字按钮） |
 | ② 预览区 | `weight(previewFraction)`，默认 0.45 | 照片（**按 `fitContentRect` 定尺，无黑边**）+ 按住对比 + 蒙版笔刷/祛瑕落点 + 胶囊提示 |
 | ③ **分隔条** | 28dp 热区 / 4dp 视觉线 | 上下拖动即改「预览 : 工具区」高度比（`SPLIT_MIN 0.22` ~ `SPLIT_MAX 0.78`） |
-| ④ 一级工具条 | 44dp，圆角胶囊 | 分段：人像 / 调色 / 颜色 / 曲线 / 细节 / 效果 / 预设（**7 段**）；选中项指示块滑动 |
+| ④ 一级工具条 | 48dp，圆角胶囊 | 分段：人像 / 调色 / 颜色 / 曲线 / 细节 / 效果 / 预设（**7 段**）；选中项指示块滑动 |
 | ⑤ 参数区 | `weight(1 - previewFraction)` | 实心卡（圆角 22dp）→ 卡内顶部是**二级分组 chip 行（钉在滚动之外）**，其下才是滚动内容；滚动条在**卡片内**，面板边界不随内容漂移 |
 
 ⚠️ **高度分配必须按比例，不能写死 dp**：预览区与参数区是**一对权重**。
@@ -608,7 +608,7 @@ motionScheme（见其实现体），**一个 `LocalContentColor` 都不碰**。
 | `Slider` + 旁边 `Text` 数值 | 玻璃轨道滑块 + 拖动时弹出的数值气泡 |
 | `Switch`（自动蒙版） | 保留 Switch，加选中动画 + 触感反馈 |
 | `autoMaskNote` / `liquifyNote` 纯文本回显 | 预览区上的**胶囊提示条**（2.5s 自动淡出） |
-| `PresetRow` / `LutSelector` 文字列表 | 横向滚动玻璃卡带，卡片内嵌缩略图 |
+| `PresetRow` / `LutSelector` 文字列表 | 自适应换行的玻璃卡片组，预设卡片内嵌缩略图 |
 | `OutlinedCard` 分组 | 玻璃卡 + 圆角 22dp + 描边分层 |
 | 导出按钮内联在底部 | 移入底部 sheet |
 
@@ -810,7 +810,7 @@ motionScheme（见其实现体），**一个 `LocalContentColor` 都不碰**。
 | `ui/theme/Type.kt` | `labelSmall` 11sp —— 字号封顶 5 级 |
 | `ui/components/GlassCard.kt` | `GlassCard` / `SectionHeader` / `CapsuleNote` |
 | `ui/components/GlassSegmentedBar.kt` | 泛型分段玻璃条（TabBar 与编辑器一级工具条共用） |
-| `ui/components/GlassChipRow.kt` | 横向滚动 chip 行（统一 `Radius.chip`） |
+| `ui/components/GlassChipRow.kt` | 自适应换行 chip 组（统一 `Radius.chip`） |
 | `ui/components/ParamSlider.kt` | 参数滑块 + 拖动状态上报 |
 | `ui/components/ActionTile.kt` | 动作卡（按下缩放，替代实心 Button） |
 
@@ -901,8 +901,8 @@ app/src/main/java/com/hifn/pixelcake/
 ├── ui/components/
 │   ├── GlassCard.kt        [新增] 通用卡片（默认实心容器，CardMaterial 可切玻璃）/ SectionHeader / CapsuleNote
 │   ├── GlassSegmentedBar.kt[新增] 泛型分段玻璃条（TabBar 与工具条共用）
-│   ├── GlassChipRow.kt     [新增] 横向滚动 chip 行
-│   ├── PresetThumbRow.kt   [新增] 预设缩略图行（A 档：真实缩略图，选中态 2px 强调描边）
+│   ├── GlassChipRow.kt     [新增] 自适应换行 chip 组
+│   ├── PresetThumbRow.kt   [新增] 预设缩略图组（A 档：真实缩略图，选中态 2px 强调描边）
 │   ├── GlassCircleButton.kt[新增] 圆形玻璃按钮（参数面板的归零按钮等）
 │   ├── ImportSheet.kt      [新增] 「＋」唤起的开始 Sheet（相册 / ARW / 相机）
 │   ├── ParamSlider.kt      [新增] 参数滑块 + 拖动状态上报

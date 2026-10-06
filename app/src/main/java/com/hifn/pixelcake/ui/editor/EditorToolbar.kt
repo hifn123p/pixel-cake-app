@@ -92,8 +92,8 @@ enum class ScopeMode(val showsScopeBar: Boolean, val layerable: Boolean) {
  * 复用 [GlassSegmentedBar]（与底部 TabBar 同一控件）—— 两者视觉与行为完全一致，
  * 差别只在挂在哪一层。分开写两份必然出现「改了一处忘了另一处」的漂移。
  *
- * 高度刻意压到 44dp（= [Spacing.controlHeight]）：这是悬浮在预览图上的浮层，
- * 每多 1dp 就少 1dp 给画面。同时 44dp 仍是可点面积的下限，不会变得难按。
+ * 高度与顶栏统一为 48dp（= [Spacing.controlHeight]）：保留足够触控高度，
+ * 同时让两条导航控件对齐，不与照片争夺多余空间。
  */
 @Composable
 fun EditorToolbar(

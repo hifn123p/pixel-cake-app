@@ -109,7 +109,7 @@ fun ParamSlider(
     val thumbColor = if (dark) Color.White else MaterialTheme.colorScheme.onSurface
     val trackInactive = if (dark) SliderTrackDark else SliderTrackLight
 
-    Column(modifier = modifier.fillMaxWidth().padding(vertical = Spacing.xs)) {
+    Column(modifier = modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -177,7 +177,7 @@ fun ParamSlider(
                 // 给等宽高的方块套胶囊就是正圆（与 GlassCircleButton 同一套约定）。
                 Box(
                     modifier = Modifier
-                        .size(24.dp)  // 从 18.dp 提升到 24.dp，增大拇指尺寸，提高可操作性
+                        .size(20.dp)
                         .alpha(if (enabled) 1f else 0.38f)
                         .shadow(
                             elevation = 4.dp,  // 从 3.dp 提升到 4.dp，增强立体感
