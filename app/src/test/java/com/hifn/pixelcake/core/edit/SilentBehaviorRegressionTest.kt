@@ -1,7 +1,10 @@
 package com.hifn.pixelcake.core.edit
 
 import com.hifn.pixelcake.core.edit.retouch.ColorTransfer
-import com.hifn.pixelcake.core.edit.retouch.ColorTransferParams
+// ⚠️ `ColorTransferParams` **不需要 import**：它定义在 `core/edit/RetouchState.kt`，
+// 与本测试同包 `com.hifn.pixelcake.core.edit`。写一个 `...edit.retouch.ColorTransferParams`
+// 的 import 会报 Unresolved reference（retouch 包里没有这个类）——
+// 这是 CI run 37582756671 唯一的一条错误。
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
