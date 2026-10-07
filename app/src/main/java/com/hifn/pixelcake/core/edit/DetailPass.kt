@@ -438,6 +438,15 @@ object DetailPass {
         val len = if (horizontal) w else h
         val majorCount = if (horizontal) h else w
         val win = r * 2 + 1
+        // ⚠️ 平均必须走「乘倒数」，**不能**写 `acc / win`。
+        // 累加器是 Long ⇒ 那是一次 **64 位整数除法**，ARM64 上一约 20~90 周期；
+        // 而 `core()` 要调 boxPass **4 趟**，33MP 下就是约 4 亿次 idiv ——
+        // 单这一个函数就能吃掉整条「亚秒级」预算（其余部分是 SIMD 友好的浮点乘加）。
+        //
+        // epsilon 的作用：保证「acc 恰好整除 win」时截断仍得到**精确商**。
+        // `1.0/win` 的浮点误差约 1e-16，而最近的非整数商距整数至少 `1/win ≥ 0.003`，
+        // 所以这个 epsilon 只影响「本来就该整除」的那部分，不改变任何 floor 结果。
+        val invWin = 1.0 / win + 1e-9
         for (major in 0 until majorCount) {
             var accR = 0L
             var accG = 0L
@@ -453,9 +462,9 @@ object DetailPass {
             for (minor in 0 until len) {
                 val outIdx = if (horizontal) major * w + minor else minor * w + major
                 dst[outIdx] = 0xff000000.toInt() or
-                    (((accR / win).toInt().coerceIn(0, 255)) shl 16) or
-                    (((accG / win).toInt().coerceIn(0, 255)) shl 8) or
-                    (accB / win).toInt().coerceIn(0, 255)
+                    (((accR * invWin).toInt().coerceIn(0, 255)) shl 16) or
+                    (((accG * invWin).toInt().coerceIn(0, 255)) shl 8) or
+                    (accB * invWin).toInt().coerceIn(0, 255)
                 // 滑出窗口的是 minor-r，滑入的是 minor+r+1（两端 clamp 到 [0, len-1]，
                 // 与初始累加用的 clamp 口径一致 ⇒ 边界处的和与整幅版完全相同）。
                 val left = (minor - r).coerceIn(0, len - 1)

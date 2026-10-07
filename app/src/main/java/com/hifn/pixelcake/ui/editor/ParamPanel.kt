@@ -670,41 +670,50 @@ private fun PortraitParams(
 /**
  * 部位 chip 行的一项。
  *
- * @param enabledKey 对应 [com.hifn.pixelcake.core.edit.RetouchSwitches] 里哪个开关的读取入口
+ * @param wired 该部位的算子是否**已接进渲染管线**。2026-10-07 起只有「眼部」为 `true`
+ *   （大眼）；其余部位 chip 仍可选，但点进去给的是一句「尚未接入」说明而不是假滑块。
+ * @param enabledKey 对应 [com.hifn.pixelcake.core.edit.RetouchSwitches] 里哪个开关。
+ *   ⚠️ **当前无读取方**：`RetouchSwitches` 的 7 个开关从未参与渲染判据（见类KDoc）。
+ *   保留字段是为了将来接线时不必改数据表 —— 但在接线之前**不要**把它渲染成开关控件。
  */
 private data class BodyPartTab(
     val id: String,
     val label: String,
-    val enabledKey: String
+    val enabledKey: String,
+    val wired: Boolean = false
 )
 
 private const val ALL_PARTS_ID = "__all__"
 
 private val BODY_PART_TABS: List<BodyPartTab> = listOf(
     BodyPartTab("head", "轮廓", "enableHead"),
-    BodyPartTab("eyes", "眼部", "enableEyes"),
+    BodyPartTab("eyes", "眼部", "enableEyes", wired = true),
     BodyPartTab("lips", "唇部", "enableLips"),
     BodyPartTab("face", "面部", "enableFaceSkin"),
     BodyPartTab("body", "身体", "enableBodySkin"),
     BodyPartTab("legs", "腿部", "enableLegs"),
     BodyPartTab("hands", "手部", "enableHands"),
-    BodyPartTab(ALL_PARTS_ID, "全部", "")
+    BodyPartTab(ALL_PARTS_ID, "全部", "", wired = true)
 )
 
 /**
  * 细部位美容面板（批次 5）：先选部位，再调该部位的滑块。
  *
- * ## 为什么是「先选部位」而不是把 13 个滑块平铺
+ * ## ⚠️ 2026-10-07：从「全量暴露」改为「只暴露已接线的」
  *
- * 13 个滑块一次性铺开，用户既找不到「我要的是祛黑眼圈」、也分不清量纲（有的 0..1、
- * 有的是 −1..1 双向）。分组后每个部位只有 2–3 项，且**同名滑块的量纲按部位的语义定**：
- * 「磨皮」永远是 0..1 越大越强，「瘦脸」永远是 −1..1 双向（往两头都能调）。
+ * 这个面板曾经把 13 个部位滑块 + 7 个开关全铺出来，而渲染侧只读三个量
+ * （[BeautyParams.slimFace] / `slimJaw` / 大眼）⇒ 「面部磨皮 / 身体磨皮 / 腿部磨皮 /
+ * 唇部 / 祛黑眼圈 / 瘦头 / 下巴 / 额头 / 腿部拉长 / 手部…」拖下去画面纹丝不动，
+ * 而 [RetouchSwitches] 那 7 个开关**根本不参与任何判据**。
  *
- * ## 开关默认关
+ * 暴露一堆不生效的控件比不暴露**更糟**：用户的第一反应是「这个 App 的滑块坏了」，
+ * 而不是「这个功能没做」。所以现在的口径是**宁可不给，不给假的**
+ * （与 `docs/OBJECT_TONE_DESIGN.md` §9.4「对象作用域同理」一致）：
+ *只有真正接线的大眼留滑块，其余部位给一句说明。
  *
- * [RetouchSwitches] 里唇/身体/腿/手默认 `false`。默认开的部分只保留「几乎人人都要」的
- * 轮廓 + 眼部 + 面部磨皮 —— 若六组全默认开，一进面板就等于替用户做了决定，
- * 而且用户会误以为「这东西没生效」（因为看不出区别）。
+ * 待接线清单（实现顺序建议见 `docs/DEV_PLAN.md` 的 P4）：
+ * 面部/身体/腿部磨皮 → 映射到 [NeutralGrayParams] 的**分区**强度（按部位切蒙版）；
+ * 唇部/祛黑眼圈/瘦头/额头/腿长/手部 → 需要新的局部算子。
  */
 @Composable
 private fun BeautyPartPanel(
@@ -713,7 +722,7 @@ private fun BeautyPartPanel(
     onRetouchCommit: () -> Unit,
     onDraggingChange: (Boolean) -> Unit
 ) {
-    var tabId by rememberSaveable { mutableStateOf("face") }
+    var tabId by rememberSaveable { mutableStateOf("eyes") }
 
     GroupHeader(
         text = "细部位美容",
@@ -727,50 +736,12 @@ private fun BeautyPartPanel(
     // 「全部」的 `enabledKey` 是空串 ⇒ 下面查不到分支 ⇒ `enabled` 落回 true，
     // 即「全部」下所有滑块都可拖（它本来就不该有单一开关）。
     val cur = BODY_PART_TABS.firstOrNull { it.id == tabId }
-    val sw = retouch.beauty.switches
     val isAll = cur?.id == ALL_PARTS_ID
 
-    // 开关关掉时滑块整体变灰而不是消失：消失会让面板高度突变、误触到别的滑块；
-    // 变灰则保留了「这里本来有东西」的位置感。
-    val enabled = cur?.enabledKey?.let { key ->
-        when (key) {
-            "enableHead" -> sw.enableHead
-            "enableEyes" -> sw.enableEyes
-            "enableLips" -> sw.enableLips
-            "enableFaceSkin" -> sw.enableFaceSkin
-            "enableBodySkin" -> sw.enableBodySkin
-            "enableLegs" -> sw.enableLegs
-            "enableHands" -> sw.enableHands
-            else -> true
-        }
-    } ?: true
-
-    if (cur != null && !isAll) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(vertical = Spacing.xs),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("启用${cur.label}", style = MaterialTheme.typography.bodyMedium)
-            Switch(
-                checked = enabled,
-                onCheckedChange = { checked ->
-                    val next = when (cur.enabledKey) {
-                        "enableHead" -> sw.copy(enableHead = checked)
-                        "enableEyes" -> sw.copy(enableEyes = checked)
-                        "enableLips" -> sw.copy(enableLips = checked)
-                        "enableFaceSkin" -> sw.copy(enableFaceSkin = checked)
-                        "enableBodySkin" -> sw.copy(enableBodySkin = checked)
-                        "enableLegs" -> sw.copy(enableLegs = checked)
-                        "enableHands" -> sw.copy(enableHands = checked)
-                        else -> sw
-                    }
-                    onRetouchChange(retouch.copy(beauty = retouch.beauty.copy(switches = next)))
-                    onRetouchCommit()
-                }
-            )
-        }
-    }
+    // ⚠️ 2026-10-07：这里曾按 `enabledKey` 查 [com.hifn.pixelcake.core.edit.RetouchSwitches]
+    // 决定「部位开关 → 滑块是否变灰」。那 7 个开关**没有任何渲染判据读它们**，
+    // 于是「拨了开关 → 滑块变灰 → 但画面本来就没变化」整套都是假的，已整段移除。
+    val enabled = true
 
     GlassChipRow(
         items = BODY_PART_TABS,
@@ -806,55 +777,49 @@ private fun BeautyPartPanel(
         )
     }
 
-    // 「全部」把所有部位平铺；其余只列当前部位。两者共用同一批 `bp` 字段，
-    // 所以切到「全部」时看到的正是各部位自己那几条滑块，不会有第二份状态。
+    // 「全部」把所有部位平铺；其余只列当前部位。
+    //
+    // ⚠️ **只暴露真正接进渲染管线的滑块**。这里曾经把 13 个部位滑块 + 7 个开关全部铺出来，
+    // 而 `Beauty.apply` 只读三个量：外层 `slimFace`（上面「美型」组的瘦脸）、
+    // 外层 `slimJaw`（收下颌），以及大眼（现已合并 `bodyParts.eyeEnlarge`）。
+    // ⇒「面部磨皮 / 身体磨皮 / 腿部磨皮 / 唇部 / 祛黑眼圈 / 瘦头 / 下巴 / 额头…」拖下去
+    // 画面纹丝不动 —— 看起来就像滑块坏了。这比「功能少」严重得多：
+    // 用户会把整个 App 判成「不靠谱」。
+    //
+    // 因此口径与 `docs/OBJECT_TONE_DESIGN.md` §9.4 一致：**宁可不给，不给假的** ——
+    // 未实现的部位给一句说明 + 明确出口，而不是一排灰控件。
     @Composable
-    fun headSliders() {
-        slider("瘦头", bp.head, -1f..1f) { p, v -> p.copy(head = v) }
-        slider("下巴", bp.jaw, -1f..1f) { p, v -> p.copy(jaw = v) }
-        slider("额头", bp.forehead, -1f..1f) { p, v -> p.copy(forehead = v) }
+    fun eyesSliders() {
+        // 唯一真正接线的一条：走 [BeautyParams.wiredEyeEnlarge]，与「美型」组同源。
+        slider("大眼", bp.eyeEnlarge, 0f..1f) { p, v -> p.copy(eyeEnlarge = v) }
+    }
+
+    /** 未接线的部位：给一句说明（而不是一排拖了没反应的滑块）。 */
+    @Composable
+    fun notWiredYet(label: String) {
+        Text(
+            "$label 尚未接入渲染管线（算法待落地）。可用效果见上方「美型」组：瘦脸 / 收下颌 / 大眼。",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
     @Composable
     fun eyesSliders() {
         slider("大眼", bp.eyeEnlarge, 0f..1f) { p, v -> p.copy(eyeEnlarge = v) }
-        slider("祛黑眼圈", bp.eyeDarkCircle, 0f..1f) { p, v -> p.copy(eyeDarkCircle = v) }
-    }
-    @Composable
-    fun lipsSliders() {
-        slider("唇部增润", bp.lipPlump, 0f..1f) { p, v -> p.copy(lipPlump = v) }
-        slider("唇部提亮", bp.lipBrighten, -1f..1f) { p, v -> p.copy(lipBrighten = v) }
-    }
-    @Composable
-    fun faceSliders() { slider("面部磨皮", bp.faceSkin, 0f..1f) { p, v -> p.copy(faceSkin = v) } }
-    @Composable
-    fun bodySliders() { slider("身体磨皮", bp.bodySkin, 0f..1f) { p, v -> p.copy(bodySkin = v) } }
-    @Composable
-    fun legsSliders() {
-        slider("腿部拉长", bp.legLength, 0f..1f) { p, v -> p.copy(legLength = v) }
-        slider("腿部磨皮", bp.legSkin, 0f..1f) { p, v -> p.copy(legSkin = v) }
-    }
-    @Composable
-    fun handsSliders() {
-        slider("手部去黄", bp.handBrighten, -1f..1f) { p, v -> p.copy(handBrighten = v) }
-        slider("手部细节", bp.handDetail, -1f..1f) { p, v -> p.copy(handDetail = v) }
     }
 
     if (tabId == ALL_PARTS_ID) {
-        headSliders(); eyesSliders(); lipsSliders()
-        faceSliders(); bodySliders(); legsSliders(); handsSliders()
+        eyesSliders()
+        notWiredYet("其余部位美容")
     } else {
         when (tabId) {
-            "head" -> headSliders()
             "eyes" -> eyesSliders()
-            "lips" -> lipsSliders()
-            "face" -> faceSliders()
-            "body" -> bodySliders()
-            "legs" -> legsSliders()
-            "hands" -> handsSliders()
+            "head", "lips", "face", "body", "legs", "hands" ->
+                notWiredYet(BODY_PART_TABS.first { it.id == tabId }.label)
         }
     }
 
-    Hint("每个部位独立生效：只磨皮肤可以不动轮廓，只放大眼睛也不会顺带把脸拉尖。开关关掉的部位保留参数值，重新打开即可恢复。")
+    Hint("大眼与「美型」组的瘦脸 / 收下颌 走同一条液化管线（锚点取人脸检测的双眼中点）；其余部位算法尚未落地，因此这里不提供滑块——「宁可不给，不给假的」。")
 }
 
 /**

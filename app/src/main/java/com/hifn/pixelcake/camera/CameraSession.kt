@@ -202,6 +202,16 @@ class CameraSession private constructor(
         }
 
         val started = System.currentTimeMillis()
+        // ⚠️ 失步的会话**不能继续用**：IN 端点上还留着未读的负载字节，下一次事务会把它们
+        // 当成容器头解析。PTP 没有恢复机制，唯一正确处置是「失步即作废会话」，
+        // 让用户重新连接，而不是继续一张张失败。
+        if (transport.isDesynced) {
+            runCatching { target.delete() }
+            return@withContext DownloadOutcome(
+                false, 0,
+                "会话已失步（上次传输中断），请重新连接相机"
+            )
+        }
         val download = try {
             FileOutputStream(target).use { fos ->
                 BufferedOutputStream(fos, 64 * 1024).use { out ->
@@ -209,6 +219,7 @@ class CameraSession private constructor(
                 }
             }
         } catch (e: Exception) {
+            runCatching { target.delete() }
             return@withContext DownloadOutcome(
                 false, 0,
                 "写入缓存失败：${e.javaClass.simpleName} ${e.message.orEmpty()}".trim()
@@ -226,9 +237,11 @@ class CameraSession private constructor(
 
         if (!download.ok) {
             runCatching { target.delete() }
+            val msg = download.failure ?: "GetObject 响应 ${download.responseName()}"
             DownloadOutcome(
                 false, download.bytes,
-                download.failure ?: "GetObject 响应 ${download.responseName()}"
+                // 失步要给出明确指令，而不是让用户以为「再试一次就好」
+                if (transport.isDesynced) "$msg —— 请重新连接相机" else msg
             )
         } else {
             DownloadOutcome(true, download.bytes, "已下载 ${download.bytes} 字节")
@@ -278,41 +291,45 @@ class CameraSession private constructor(
                 ?: return@withContext CameraSessionResult.Failed(
                     "打开设备或声明 PTP 接口失败（见 CAMERA 日志的 openDevice / claimInterface 两条）"
                 )
-            step("已打开设备并声明 PTP 接口")
+            // ⚠️ 从这里到 `Ok(...)` 之间的任何异常或协程取消，都必须释放这个已 claim 的接口 ——
+            // 否则会留下一个「半开」的 UsbDeviceConnection 无人关闭（类注释里抱怨的
+            // 「相机端半开状态」的另一种形态），此后相机连不上，只能拔插。
+            var handedOff = false
+            try {
+                step("已打开设备并声明 PTP 接口")
 
-            val open = transport.execute(PtpProtocol.OP_OPEN_SESSION, PtpProtocol.SESSION_ID_DEFAULT)
-            if (!open.ok) {
-                transport.close()
-                return@withContext CameraSessionResult.Failed("OpenSession 未成功：${open.describe()}")
-            }
-            step("OpenSession → ${open.responseName()}")
+                val open = transport.execute(PtpProtocol.OP_OPEN_SESSION, PtpProtocol.SESSION_ID_DEFAULT)
+                if (!open.ok) {
+                    transport.close()
+                    return@withContext CameraSessionResult.Failed("OpenSession 未成功：${open.describe()}")
+                }
+                step("OpenSession → ${open.responseName()}")
 
-            val deviceInfo = transport.execute(PtpProtocol.OP_GET_DEVICE_INFO).data
-                ?.let { parseDeviceInfo(it) }
-            if (deviceInfo != null) {
-                step("GetDeviceInfo → ${deviceInfo.headline()}")
-            } else {
-                step("GetDeviceInfo 数据集解析失败（继续，不影响拉图）")
-            }
+                val deviceInfo = transport.execute(PtpProtocol.OP_GET_DEVICE_INFO).data
+                    ?.let { parseDeviceInfo(it) }
+                if (deviceInfo != null) {
+                    step("GetDeviceInfo → ${deviceInfo.headline()}")
+                } else {
+                    step("GetDeviceInfo 数据集解析失败（继续，不影响拉图）")
+                }
 
-            val storageIds = transport.execute(PtpProtocol.OP_GET_STORAGE_IDS).data
-                ?.let { parseStorageIds(it) }
-                .orEmpty()
-            step("GetStorageIDs → ${storageIds.size} 个存储")
+                val storageIds = transport.execute(PtpProtocol.OP_GET_STORAGE_IDS).data
+                    ?.let { parseStorageIds(it) }
+                    .orEmpty()
+                step("GetStorageIDs → ${storageIds.size} 个存储")
 
-            val storages = ArrayList<PtpStorageInfo>()
-            for (storageId in storageIds) {
-                // 存储信息拿不到不致命：跳过即可，别让整轮连接失败
-                transport.execute(PtpProtocol.OP_GET_STORAGE_INFO, storageId).data
-                    ?.let { parseStorageInfo(it) }
-                    ?.let { storages.add(it) }
-            }
-            if (storages.isNotEmpty()) {
-                step("GetStorageInfo → ${storages.joinToString(" / ") { it.label() }}")
-            }
+                val storages = ArrayList<PtpStorageInfo>()
+                for (storageId in storageIds) {
+                    // 存储信息拿不到不致命：跳过即可，别让整轮连接失败
+                    transport.execute(PtpProtocol.OP_GET_STORAGE_INFO, storageId).data
+                        ?.let { parseStorageInfo(it) }
+                        ?.let { storages.add(it) }
+                }
+                if (storages.isNotEmpty()) {
+                    step("GetStorageInfo → ${storages.joinToString(" / ") { it.label() }}")
+                }
 
-            CameraSessionResult.Ok(
-                CameraSession(
+                val session = CameraSession(
                     transport = transport,
                     deviceLabel = describeDevice(device),
                     deviceInfo = deviceInfo,
@@ -320,7 +337,12 @@ class CameraSession private constructor(
                     storageIds = storageIds,
                     storages = storages
                 )
-            )
+                handedOff = true
+                CameraSessionResult.Ok(session)
+            } finally {
+                // 只在「所有权还没交出去」时关闭：CancellationException 也覆盖到了。
+                if (!handedOff) transport.close()
+            }
         }
 
         /** 设备描述：「厂商 型号 [VID:PID] 节点路径」，用于报告与 `CAMERA` 日志。 */

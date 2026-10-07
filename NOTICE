@@ -28,7 +28,7 @@
 3. LiteRT 运行时 与 MediaPipe 图像分割模型（P1+，均 Apache-2.0）
    - **LiteRT**（`com.google.ai.edge.litert:litert`，Apache-2.0）
      用途：端侧执行皮肤分割模型（P1+ ML 自动蒙版，见
-     `app/src/main/java/com/hifn/pixelcake/core/ml/` 与 `docs/P1p_DESIGN.md`）。
+     `app/src/main/java/com/hifn/pixelcake/core/ml/` 与 `docs/PHASE_DESIGN_HISTORY.md`（P1+ 部分））。
    - **MediaPipe Image Segmenter — SelfieMulticlass (256×256)**（Apache-2.0）
        * 随包文件：`app/src/main/assets/models/selfie_multiclass_256x256.tflite`
        * 体积：16,371,837 字节
@@ -41,7 +41,7 @@
 4. MediaPipe BlazeFace Sparse (Full Range) 人脸检测模型（P1p-2，Apache-2.0）
    - 用途：端侧人脸检测（给液化提供人脸中心/眼心，见
      `app/src/main/java/com/hifn/pixelcake/core/ml/` 的 `FaceDetector` 系与
-     `docs/P1p_DESIGN.md` §15）；同一 LiteRT 运行时（第 3 条）执行。
+     `docs/PHASE_DESIGN_HISTORY.md`（P1+ 部分） §15）；同一 LiteRT 运行时（第 3 条）执行。
    - **MediaPipe BlazeFace Sparse (Full Range)**（Apache-2.0）
        * 随包文件：`app/src/main/assets/models/face_detection_full_range_sparse.tflite`
        * 体积：676,746 字节

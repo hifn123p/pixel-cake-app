@@ -15,12 +15,12 @@
 // P1b raw bridge —— 基于 LibRaw 的 ARW 全量解马赛克。
 // 仅面向 arm64-v8a（一加15）。
 //
-// 管线约定（FIX_LIST F01）：
+// 管线约定（PHASE_DESIGN_HISTORY.md（审查台账） F01）：
 //   这里只负责「把 RAW 变成 16-bit 线性 sRGB」，**不做** 白平衡基线以外的任何色调决策：
 //   不自动亮度、不 gamma 编码、不降到 8-bit。白平衡/曝光/曲线/滤镜全部由 Kotlin 的
 //   参数栈在线性域可逆地重放，因此同一组参数在任意照片上可复现。
 //
-// 内存约定（FIX_LIST F05）：
+// 内存约定（PHASE_DESIGN_HISTORY.md（审查台账） F05）：
 //   33MP 的 16-bit 三通道处理结果约 196MB，一次性回传 JVM 必然 OOM。
 //   因此结果留在 native 侧，由 Kotlin 分带（row band）取走：
 //   openLinear -> readLinearRows(...) x N -> closeLinear。

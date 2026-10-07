@@ -93,9 +93,23 @@ object DebugLog {
             writer?.close()
             val backup = File(f.parentFile, "${f.nameWithoutExtension}.old.txt")
             if (backup.exists()) backup.delete()
-            f.renameTo(backup)
+            // ⚠️ `File.renameTo` 在跨挂载点、`filesDir` 正被系统清理、目标文件被占用等情况下
+            // **返回 false 而不是抛异常**。以前忽略了这个返回值就接着
+            // `FileWriter(f, false)` —— 那是**无条件截断**为0 字节：2MB+ 的排障证据全丢，
+            // `.old.txt` 也没生成，而且**日志里不会有任何记录**（记录本身刚被截断）。
+            // 现在失败就放弃本轮轮转并**追加**写：宁可让文件超一点，也绝不丢证据。
+            if (!f.renameTo(backup)) {
+                writer = BufferedWriter(FileWriter(f, true))
+                return
+            }
             writer = BufferedWriter(FileWriter(f, false))
         } catch (_: Exception) {
+            // ⚠️ 这里若已close 成功而重新打开失败，`writer` 会指向一个**已关闭**的对象 ⇒
+            // 之后每条日志的 flush 都抛 IOException，被 [write] 的 catch 静默吞掉
+            // ⇒ 日志从此完全停止且无任何提示。所以必须把 writer 置空 + 把 ready 复位，
+            // 让下一个会话重新初始化。
+            writer = null
+            ready.set(false)
         }
     }
 

@@ -77,7 +77,9 @@ import com.hifn.pixelcake.ui.theme.segmentIndicator
  * @param items    分段项
  * @param selected 当前项
  * @param label    取显示文案
- * @param height   条高（默认 44dp；编辑器工具条使用 48dp）
+ * @param height   条高。**必须**来自 `Spacing` token：默认值曾经写死 44.dp，
+ *   而 `docs/UI_DESIGN.md` §4.0.8 已把 `Spacing.controlHeight` 提到 48dp 并明令
+ *   「代码里不要再出现写死的 44.dp」。默认值本身就是违规源 —— 即使当前无人使用它。
  */
 @Composable
 fun <T> GlassSegmentedBar(
@@ -86,7 +88,7 @@ fun <T> GlassSegmentedBar(
     label: (T) -> String,
     onSelect: (T) -> Unit,
     modifier: Modifier = Modifier,
-    height: Dp = 44.dp,
+    height: Dp = Spacing.controlHeight,
     contentPadding: PaddingValues = PaddingValues(horizontal = Spacing.page)
 ) {
     if (items.isEmpty()) return

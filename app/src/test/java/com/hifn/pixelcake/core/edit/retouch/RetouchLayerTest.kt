@@ -11,7 +11,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * `RetouchLayer` 分带编排的等价性（FIX_LIST R10 方案 A 收尾：`RetouchLayer.px` 流式化）。
+ * `RetouchLayer` 分带编排的等价性（PHASE_DESIGN_HISTORY.md（审查台账） R10 方案 A 收尾：`RetouchLayer.px` 流式化）。
  *
  * 参照实现 = 「整幅版」：一次取出整图 → **按设计顺序依次**跑四个算子 → 写回。
  * 分带版（[RetouchLayer.apply]）必须与之**逐位相同**。

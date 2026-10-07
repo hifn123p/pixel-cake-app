@@ -7,7 +7,7 @@ import com.hifn.pixelcake.diag.DebugLog
 /**
  * ML 蒙版的进程级提供者（P1p-1，批次 5 起扩出对象作用域）。
  *
- * 职责（`docs/P1p_DESIGN.md` §6/§9、`docs/OBJECT_TONE_DESIGN.md` §8）：
+ * 职责（`docs/PHASE_DESIGN_HISTORY.md`（P1+ 部分） §6/§9、`docs/OBJECT_TONE_DESIGN.md` §8）：
  * 1. **懒加载**模型（首次真正需要时才建，避免拖慢冷启动）；GPU→CPU 级联在 [LiteRtSkinMaskModel] 内完成；
  * 2. **每图一次推理 + 缓存**：以调用方给的 [key] 标识源图；
  * 3. **一次推理、两种产物**：缓存的是**原始 6 类概率**，皮肤蒙版（[skinMaskFor]）与
@@ -23,15 +23,51 @@ import com.hifn.pixelcake.diag.DebugLog
  */
 object MlMaskProvider {
 
+    @Volatile
     private var model: SkinMaskModel? = null
+
+    @Volatile
     private var modelResolved = false
 
     /** OOM 等致命失败后置位：本会话不再尝试自动蒙版。 */
+    @Volatile
     private var disabled = false
 
+    /**
+     * 连续 OOM 次数；达到 [MAX_OOM_BEFORE_PERMANENT] 后**永久**关闭（进程内）。
+     *
+     * 为什么不一次就永久：`disabled` 只挡住本会话，换图（[invalidate]）后还会再试；
+     * 但如果这台设备是真的内存不够，第二次 OOM 就不该再让用户等一次几十毫秒~数秒的
+     * 推理再失败。两次是「偶发」与「必然」之间的分界线。
+     */
+    @Volatile
+    private var oomCount = 0
+
+    @Volatile
+    private var permanentlyDisabled = false
+
+    /**
+     * 释放已加载的模型（把 native 内存还给系统）。
+     *
+     * 只在 OOM 之后调用 —— 那时模型**永远不会被用到**，留着就是纯浪费。
+     * 平时不主动释放：模型是进程级复用的，每次换图重建一次反而更慢。
+     */
+    private fun releaseModel() {
+        synchronized(this) {
+            runCatching { model?.close() }
+            model = null
+            modelResolved = false
+        }
+    }
+
     /** 概率缓存的 key（含源图标识与尺寸）。只有它匹配才认为缓存有效。 */
+    @Volatile
     private var cacheKey: String? = null
+
+    @Volatile
     private var cacheProbs: FloatArray? = null
+
+    @Volatile
     private var cacheSide: Int = 0
 
     /** 由 [cacheProbs] 派生的两种产物，各自懒构建。key 变化时一起作废。 */
@@ -122,7 +158,25 @@ object MlMaskProvider {
             true
         } catch (t: Throwable) {
             if (t is OutOfMemoryError) {
+                // ⚠️ OOM 之后**必须把 native 内存还回去**：`CompiledModel`（GPU delegate 可能持
+                // 数十 MB）、`Environment`、`inputs`/`outputs` 的 tensor buffer 会全部留在进程里，
+                // 而 `disabled = true` 之后**永远不会再用到它们** —— 该释放的不释放，
+                // 是 OOM 之后最危险的状态。
+                //
+                // 同时 OOM 计数：换图是新会话，值得再给一次机会（`invalidate` 会复位计数）。
+                // 「一次与分割无关的瞬时 OOM 让自动蒙版在整个进程生命周期内静默降级」
+                // 是比「这次失败」严重得多的故障 —— 用户只会看到「自动蒙版不可用」，
+                // 像功能 bug 而不像资源问题。
                 disabled = true
+                oomCount += 1
+                if (oomCount >= MAX_OOM_BEFORE_PERMANENT) {
+                    permanentlyDisabled = true
+                    DebugLog.e(
+                        DebugLog.TAG_ML, "OOM x$oomCount -> auto mask disabled permanently",
+                        mapOf("key" to key)
+                    )
+                }
+                releaseModel()
                 DebugLog.e(DebugLog.TAG_ML, "OOM -> auto mask disabled for this session", mapOf("key" to key))
             } else {
                 DebugLog.e(
@@ -140,7 +194,7 @@ object MlMaskProvider {
         model?.let { return it }
         synchronized(this) {
             model?.let { return it }
-            if (modelResolved) return null
+            if (modelResolved || permanentlyDisabled) return null
             modelResolved = true
             val m = LiteRtSkinMaskModel.createOrNull(context.applicationContext)
             model = m
@@ -172,6 +226,11 @@ object MlMaskProvider {
         cacheSide = 0
         cacheSkin = null
         cacheObjects = null
+        // 换图 = 新会话：把「本次会话禁用」与 OOM 计数都复位。
+        // 以前 `disabled` 从不复位 ⇒ 一次瞬时 OOM 会在整个进程生命周期里静默阉割自动蒙版；
+        // 而唯一的复位入口 `reset()` 在生产代码里**没有调用点**。
+        disabled = false
+        oomCount = 0
     }
 
     /** 完全重置（含模型与失败标记）；供调试/测试用。 */
@@ -181,6 +240,11 @@ object MlMaskProvider {
         model = null
         modelResolved = false
         disabled = false
+        oomCount = 0
+        permanentlyDisabled = false
         invalidate()
     }
+
+    /** 连续 OOM 多少次后永久关闭自动蒙版。两次是「偶发」与「必然」的分界。 */
+    private const val MAX_OOM_BEFORE_PERMANENT = 2
 }

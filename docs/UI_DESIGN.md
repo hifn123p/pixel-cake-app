@@ -1,8 +1,14 @@
-# PixelCake UI 设计规范（草案 v0.1）
+# PixelCake UI 设计规范（v1.0 · 已落地）
 
-> 状态：**大纲框架 · 待评审**。本文只定义视觉与交互骨架、Token 与落地顺序，**不含实现代码**。
+> 状态：**已落地并进入维护期**（`v0.4.6`）。本文定义视觉与交互骨架、Token 与落地顺序；
+> §7「落地顺序」与 §9「文件地图」所列内容**全部已实现**，§4.0.1~§4.0.8 是逐轮真机反馈的修正记录。
 > 目标：为 PixelCake 建立一套「iOS 26 Liquid Glass 观感 + Android 原生实现」的界面语言，
 > 以 美图秀秀 / Snapseed / 醒图 为对标基线，同时守住本 App 的专业向定位。
+>
+> **阅读提示**：正文里的 Token 值以「当前值」为准；**尺寸若与旧稿冲突，一律以交付序号最大的
+> §4.0.x 修正表为准**（例如顶栏高度：§4.0.3 写 44dp，§4.0.4/§4.0.8 之后实为
+> `Spacing.controlHeight = 48dp`）。工程纪律与布局陷阱的完整清单见
+> [`ENGINEERING_NOTES.md`](ENGINEERING_NOTES.md) §2。
 
 ---
 
@@ -462,6 +468,11 @@ VSCO 的护城河也不是社交，是 `A4 / C1 / G3` 这些代号构成的**一
 | 2 | 调色栏下面的所有参数菜单全部挤在一起，无法使用 | **两个独立根因叠加**：① `SPLIT_DEFAULT = 0.62` 把 62% 的「预览+参数」高度给了预览，但照片是**宽约束**定尺（3:2 横片在 6.8" 屏只需 ~285dp 高）⇒ 预览区 ~489dp 里 **~204dp 是纯空气**，参数区只剩 ~260dp 却要装 500–900dp 内容；② `GroupLabel` 用 `labelMedium` + `onSurfaceVariant` —— 与滑块右侧**数值**完全同款，面板里唯一表达层级的东西没了 | ① `SPLIT_DEFAULT` 0.62 → **0.45**、`SPLIT_MIN` 0.28 → **0.22**（矮屏也要留够面板）；② `GroupLabel` 改 **`titleMedium` + `onSurface`**，与全 App 的 `SectionHeader` 规范统一 |
 | 3 | 预览窗口圆角过大，丢失边缘细节 | 预览容器沿用了容器级圆角 `Radius.shell`（**40dp**），而 40dp 是给「大面板/整表」的；照片是**内容**，不该被容器半径啃掉四角（边角常带有效信息） | 预览 `clip` / `border` 改**最小梯级** `Radius.chip`（**14dp**） |
 
+> ⚠️ **2026-10-04 尺寸回调（详见 §4.0.8）**：上表第 1 条的「顶栏改 **44dp**」在 UI v2.0 之后
+> **已不再是当前值** —— 当时 `Spacing.controlHeight = 44.dp`，本轮把它提升到 **48dp**，
+> 顶栏/工具条/分隔条同阶梯绑 `Spacing.controlHeight`，因此现在读到的是 **48dp**。
+> 代码里**不要**再出现写死的 `44.dp`：一律引用 `Spacing.controlHeight`。
+
 **规律**：**圆角梯级 = 内容小、容器大**。内容（照片 / 缩略图）用最小档 `chip`(14dp)，
 卡片用 `card`(22dp)，面板/整表用 `shell`(40dp)。给内容套容器半径，等于用装饰吃掉信息。
 
@@ -598,6 +609,36 @@ motionScheme（见其实现体），**一个 `LocalContentColor` 都不碰**。
 - ⚠️ 改 `.collect { }` 时**不能只删 import**：`collect { }` 的 lambda 重载定义在
   `kotlinx.coroutines.flow` 包里，`import ...flow.collectLatest` 必须**换成** `import ...flow.collect` ——
   删掉就是编译错（`Flow.collect` 的 lambda 形参是顶层扩展函数，不是 `Flow` 的成员）。
+
+### 4.0.8 2026-10-04 全局尺寸回调（UI v2.0，原 `UI_REDESIGN.md` 并入）
+
+> 本节由独立的 `docs/UI_REDESIGN.md` 合并而来（该稿已在合并后移除，需要原文可用
+> `git show <合并前的提交>:docs/UI_REDESIGN.md` 取回）。
+> 它是一次**全局 Token 回调**，不是某个页面的修补；与 §4.0.1~§4.0.7 一样，**后出现的覆盖先出现的**。
+
+| 项 | 旧 → 新 |
+|---|---|
+| 字号阶梯（`Type.kt`） | 严格 5 级：`displaySmall` 24 → **28sp**、`titleMedium` 16 → **18sp**、`bodyMedium` 14 → **15sp**、`labelMedium` 12 → **13sp**、`labelSmall` 11 → **12sp** |
+| 品牌色（`Color.kt`） | Seed `0xFF7C5CFF` → **`0xFF8B6FFF`**；SeedOnDark `0xFF9C86F7` → **`0xFFA894FF`**（同色相 252） |
+| 滑块拇指（`ParamSlider.kt`） | 24dp → **20dp**（**保留** M3 `Slider` 的 48dp 拖拽触控热区）；移除整行上下额外留白 |
+| 间距（`Spacing.kt`） | `xl` 24 → **20dp**、`xxl` 32 → **28dp**、`controlHeight` 44 → **48dp** |
+| 编辑器面板（`EditorScreen.kt`） | 垂直间距 `Spacing.s` → **`Spacing.m`** |
+| 参数面板（`ParamPanel.kt`） | `GroupLabel` 间距同步；`Hint` 改 `bodySmall` + `Spacing.m` |
+| 玻璃 TabBar（`AppShell.kt`） | 高度 56 → **64dp** |
+| 玻璃 SegmentedBar | 选中项增加水平 padding（⚠️ 此后又因 §4.0.5 去掉了 chip 的 `padding(horizontal = Spacing.xs)`） |
+| Chip 行（`GlassChipRow.kt`） | 改为**按可用宽度自动换行**（行间距 `Spacing.xs`），模板与选项不再需要横向寻找 |
+
+**导出面板（`ExportSheet.kt`）** 的功能覆盖：基础（曝光 / 对比度 / 高光 / 阴影 / 白色 / 黑色 / 高光恢复 / WB）、
+氛围（自然饱和度 / 饱和度 / 去雾 / 曲线 / HSL / 彩色分级 / LUT）、细节（晕影 / 颗粒 / 锐化 / 降噪 / 清晰度 / 纹理）、
+人像（皮肤笔刷 / 瑕疵移除 / 美颜 / 追色 / 预设）。导出成功后按钮形态切换（实心 → 描边 + 文案变「再导一次」+
+说明文字），防止重复导出 RAW 全分辨率。
+
+> ⚠️ 三条**跨节提醒**（都以本节为准）：
+> 1. **`controlHeight = 48dp`** —— §4.0.3 里那个「顶栏 44dp」是**当年**的值，不要再照抄；
+> 2. **`GlassChipRow` 的换行会改变面板高度** —— 这与 §4.3「横向滚动换行会让高度跳变」的原始决策相反，
+>    是**有意**改的（详见 `ENGINEERING_NOTES.md` §2.1 的边界说明：真正会变高的只有预设缩略图行，
+>    二级分组项数 ≤4，任何手机都不会换行）；
+> 3. **分段项不加 `pressScale`**（只有一行文字，会读成「文字抖一下」）—— 口径与 §4.0.5 一致。
 
 ### 4.1 对现有控件的替换关系
 
@@ -871,7 +912,10 @@ motionScheme（见其实现体），**一个 `LocalContentColor` 都不碰**。
 
 ---
 
-## 8. 待拍板决策点
+## 8. 设计决策点（结论已全部采纳）
+
+> 本节最初是「待拍板」，**现已全部拍定并按右列执行**（§7 的落地顺序即按此展开）。
+> 保留本节是为了让后人知道「这些取舍当年为什么这么定」，而不是等人来回答。
 
 | # | 决策 | 推荐 |
 |---|---|---|
@@ -930,6 +974,10 @@ app/src/main/java/com/hifn/pixelcake/
 
 **约束**：本次改造**只动 UI 层**，`core/edit/**`、`core/camera/**`、`ml/**` 一律不碰，
 以免影响已通过 CI 的 P1p-2c 与待真机验收的 P2/P1p-1c。
+
+> **v2.0 之后增补的文件**（不在上表，属后续批次）：`ui/components/ParamSlider.kt` 的拇指尺寸回调、
+> `core/edit/ToneCurve.kt` + `core/edit/Histogram.kt`（曲线锚点换算与直方图统计，UI 入口在
+> `ParamPanel` 的曲线分类里）。上表其余条目仍然准确。
 
 ---
 

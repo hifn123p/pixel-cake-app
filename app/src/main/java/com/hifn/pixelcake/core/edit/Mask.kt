@@ -3,7 +3,7 @@ package com.hifn.pixelcake.core.edit
 import kotlin.math.sqrt
 
 /**
- * retouch 蒙版抽象（P1b-4 / `docs/P1b_DESIGN.md` §4）。
+ * retouch 蒙版抽象（P1b-4 / `docs/PHASE_DESIGN_HISTORY.md`（P1b 部分） §4）。
  * - P1：画笔栅格（`RasterMask.fromStrokes`）。
  * - P1+：ML 皮肤概率图实现同一接口，UI 无需改动。
  *
@@ -12,7 +12,7 @@ import kotlin.math.sqrt
  *
  * **`null` 语义（全仓统一约定，勿再各算子自行解释）**：蒙版参数为 `null` = **未圈定作用域 → 该算子不执行**，
  * 而不是「全局生效」。皮肤类算子（`NeutralGray` 磨皮、`Beauty` 液化）都按此处理，全仓见
- * `docs/P1b_DESIGN.md` §4。相机批量链路正是靠这条约定（`CameraBatch` 传 `mask = null`）避免把背景一起磨/形变；
+ * `docs/PHASE_DESIGN_HISTORY.md`（P1b 部分） §4。相机批量链路正是靠这条约定（`CameraBatch` 传 `mask = null`）避免把背景一起磨/形变；
  * 代价是**批量与「未涂抹蒙版的编辑器」都不会执行皮肤类算子** —— 如需全局效果，调用方应显式传
  * [FullMask]（或任何全幅覆盖的蒙版），而不是依赖 `null` 的隐含含义。
  */
@@ -81,7 +81,7 @@ class RasterMask(private val data: FloatArray, val w: Int, val h: Int) : Retouch
 }
 
 /**
- * 两张蒙版**逐点取最大**的合并（P1p-1，见 `docs/P1p_DESIGN.md` §7）。
+ * 两张蒙版**逐点取最大**的合并（P1p-1，见 `docs/PHASE_DESIGN_HISTORY.md`（P1+ 部分） §7）。
  *
  * 用于「ML 皮肤蒙版 ∪ 用户画笔描迹」：画笔是用户**显式补正**（例如 ML 漏了脖子/耳朵），
  * 取 `max` 才符合直觉；若取 `min` 会出现「涂了反而没效果」。

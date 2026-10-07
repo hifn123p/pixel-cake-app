@@ -7,7 +7,7 @@ import com.hifn.pixelcake.core.edit.RetouchMask
  *
  * 内部只持一张**低分辨率**网格（[FloatGrid]，256×256 ≈ 256KB），按需双线性采样到目标分辨率。
  *
- * **内存硬约束（`docs/P1p_DESIGN.md` §8）**：
+ * **内存硬约束（`docs/PHASE_DESIGN_HISTORY.md`（P1+ 部分） §8）**：
  * - `resampleTo(w, h)` **只换目标尺寸、共享同一网格**，绝不分配 `FloatArray(w*h)`
  *   —— 33MP 下那是 131MB，会毁掉 R10 好不容易压下来的 retouch 峰值；
  * - 与 [com.hifn.pixelcake.core.edit.FullMask] 一样，本类是「O(1) 量级」的蒙版实现。

@@ -15,7 +15,7 @@ import com.hifn.pixelcake.core.edit.RetouchMask
  * 中点（[apply] 的 `centroid` / `eyeCentroid`）；两者都不给时退回「蒙版质心猜」= P1 行为，
  * 且与 P1 结果**逐位相同**（由 `BeautyTest` 钉死）。参考 Rust `crates/engine/src/retouch/beauty.rs`。
  *
- * **内存纪律（FIX_LIST F05 / 第二轮复审 R10）**：原先无条件分配整幅 `IntArray(w·h)` 作输出缓冲
+ * **内存纪律（PHASE_DESIGN_HISTORY.md（审查台账） F05 / 第二轮复审 R10）**：原先无条件分配整幅 `IntArray(w·h)` 作输出缓冲
  * （33MP 下 ≈131MB）。现改为**只在蒙版支撑的包围盒**上开缓冲：蒙版外 `mv == 0` 即恒等映射，
  * 本就无需写入，故包围盒外一律**原地保留**。数学上与整幅输出**逐位一致** ——
  * 由 `BeautyTest.bboxBufferMatchesFullFrame` 用朴素参照实现钉死。
@@ -58,7 +58,10 @@ object Beauty {
         rowOffset: Int = 0, centroid: Pair<Float, Float>? = null, fullHeight: Int = h,
         eyeCentroid: Pair<Float, Float>? = null
     ) {
-        if (params.slimFace <= 0f && params.slimJaw <= 0f && params.eyeEnlarge <= 0f) return
+        if (!params.hasWiredLiquify) return
+        // ⚠️ 大眼用合并后的量（`wiredEyeEnlarge`）：历史上这里读的是外层 `eyeEnlarge`，
+        // 于是「眼部」页里那条同名滑块（`bodyParts.eyeEnlarge`）拖了完全不生效。
+        val eyeAmt = params.wiredEyeEnlarge
         // 液化必须有权重作用域：mask 为 null 时全局形变会糊整图，直接跳过。
         val m = mask ?: return
         val c = centroid ?: centroid(m, w, fullHeight) ?: return
@@ -103,9 +106,9 @@ object Beauty {
                 // 此前误写成 `-=`（采更靠内的源点）→ 实际是「放大」，与 KDoc 的「拉向质心（瘦脸）」相反。
                 if (params.slimFace > 0f) dx += mv * params.slimFace * 0.3f * (x - cx)
                 if (params.slimJaw > 0f && ay > cy) dy += mv * params.slimJaw * 0.3f * (ay - cy)
-                if (params.eyeEnlarge > 0f) {
-                    dx = ex + (dx - ex) * (1f - mv * params.eyeEnlarge * 0.3f)
-                    dy = ey + (dy - ey) * (1f - mv * params.eyeEnlarge * 0.3f)
+                if (eyeAmt > 0f) {
+                    dx = ex + (dx - ex) * (1f - mv * eyeAmt * 0.3f)
+                    dy = ey + (dy - ey) * (1f - mv * eyeAmt * 0.3f)
                 }
                 // 源坐标是绝对行号，取样缓冲前换算回缓冲内的局部行
                 out[o] = sampleBilinear(pixels, w, h, dx, dy - rowOffset)

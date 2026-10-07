@@ -74,7 +74,7 @@ object RetouchScale {
      * **无描迹时返回 [FullMask]（作用域 = 整幅），而不是 `null`。** 这是「调用方显式声明作用域」的落点：
      * 编辑器里用户没画画笔时，磨皮/液化本就该作用于整幅（滑杆一拖就有可见效果），由**调用方**表达这个
      * 意图；`null` 则专门留给「不执行」——相机批量链路显式传 `null`，避免把背景一起磨/形变。
-     * 语义约定见 [RetouchMask] KDoc 与 `docs/P1b_DESIGN.md` §4。
+     * 语义约定见 [RetouchMask] KDoc 与 `docs/PHASE_DESIGN_HISTORY.md`（P1b 部分） §4。
      *
      * 只有尺寸非法（`w/h <= 0`，无处可施加）时才返回 `null`。
      */
@@ -90,7 +90,7 @@ object RetouchScale {
 
     /**
      * **编辑器**皮肤蒙版口径（P1p-1b）：把「自动蒙版（ML）」与「画笔描迹」合成为最终作用域。
-     * 口径见 `docs/P1p_DESIGN.md` §7。
+     * 口径见 `docs/PHASE_DESIGN_HISTORY.md`（P1+ 部分） §7。
      *
      * - [autoMask] 为 `null`（自动蒙版关闭 / 模型不可用）：退回 P1 行为 —— 无描迹 ⇒ [FullMask]
      *   （滑杆即有可见效果），有描迹 ⇒ 画笔栅格；
@@ -113,7 +113,7 @@ object RetouchScale {
     }
 
     /**
-     * 把「ML 皮肤蒙版」与「画笔描迹蒙版」合并（P1p-1，口径见 `docs/P1p_DESIGN.md` §7）。
+     * 把「ML 皮肤蒙版」与「画笔描迹蒙版」合并（P1p-1，口径见 `docs/PHASE_DESIGN_HISTORY.md`（P1+ 部分） §7）。
      *
      * 逐点取最大（[MaxMask]）：画笔是用户**显式补正**，取 `max` 才符合直觉。
      * 任一侧为 `null` 时返回另一侧；两侧都 `null` 才返回 `null`（= 该算子不执行）。

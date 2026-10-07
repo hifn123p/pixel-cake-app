@@ -5,10 +5,12 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
+import android.provider.OpenableColumns
 import com.hifn.pixelcake.diag.DebugLog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.BufferedInputStream
+import java.io.IOException
 import java.io.InputStream
 
 /**
@@ -22,10 +24,33 @@ object ArwPreviewDecoder {
         private val resolver: ContentResolver,
         private val uri: Uri
     ) : ArwByteSource {
-        override val size: Long
-            get() = runCatching {
+
+        /**
+         * 文件长度。
+         *
+         * ⚠️ 必须**三级回退**，因为 `ArwContainer.previewJpegRange` 第一行就是
+         * `if (source.size < 8) return null`：
+         *   ① `openAssetFileDescriptor` 是 **provider 可选实现**，很多 DocumentsProvider
+         *      （云备份、部分 MediaStore 代理）不实现 ⇒ 返回 null ⇒ size = 0 ⇒ 整条预览链路静默失效，
+         *      用户看到的是「打开 ARW 没有任何底图」，日志里只有一句 no preview jpeg range found；
+         *   ② 即便实现了，也可能返回 `AssetFileDescriptor.UNKNOWN_LENGTH`（**-1**）。
+         * 以前只有 ①②，于是「我拿不到文件长度」与「这个文件没有预览」在日志里长得一模一样。
+         */
+        override val size: Long by lazy {
+            val fromColumn = runCatching {
+                resolver.query(uri, arrayOf(OpenableColumns.SIZE), null, null, null)?.use { c ->
+                    if (c.moveToFirst() && !c.isNull(0)) c.getLong(0) else 0L
+                } ?: 0L
+            }.getOrDefault(0L)
+            if (fromColumn > 0L) return@lazy fromColumn
+            val fromAfd = runCatching {
                 resolver.openAssetFileDescriptor(uri, "r")?.use { it.length } ?: 0L
             }.getOrDefault(0L)
+            // AFD 可能报 UNKNOWN_LENGTH(-1)，再退到普通 fd 的 statSize
+            if (fromAfd > 0L) fromAfd else runCatching {
+                resolver.openFileDescriptor(uri, "r")?.use { it.statSize } ?: 0L
+            }.getOrDefault(0L)
+        }
 
         override fun read(offset: Long, length: Int): ByteArray {
             resolver.openInputStream(uri)?.use { return readAt(it, offset, length) }
@@ -34,11 +59,24 @@ object ArwPreviewDecoder {
 
         private fun readAt(stream: InputStream, offset: Long, length: Int): ByteArray {
             val buffered = if (stream is BufferedInputStream) stream else BufferedInputStream(stream)
+            // ⚠️ `InputStream.skip` 的契约是「**可能**跳过 0 字节」，经 ContentResolver 包装的流
+            // （尤其带压缩/代理的 provider）返回 0 很常见。以前的 `if (s <= 0L) break` 会带着
+            // `skipped < offset` 继续往下 read ⇒ 读到的是**文件开头**的字节 ⇒ SOI 校验必然失败
+            // ⇒ 返回 null ⇒ 又是「静默无预览」。现在改成逐字节兜底，并且跳不到位就**报错**，
+            // 让上层走错误日志而不是拿错误数据当 JPEG。
             var skipped = 0L
             while (skipped < offset) {
                 val s = buffered.skip(offset - skipped)
-                if (s <= 0L) break
-                skipped += s
+                if (s > 0L) {
+                    skipped += s
+                } else {
+                    // 真正的 fallback：读一个字节丢掉（有些流 skip 恒返回 0 但 read 正常）
+                    if (buffered.read() < 0) break
+                    skipped++
+                }
+            }
+            if (skipped < offset) {
+                throw IOException("cannot seek to $offset (only $skipped bytes skipped)")
             }
             val out = ByteArray(length)
             var read = 0

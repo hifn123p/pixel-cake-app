@@ -17,7 +17,7 @@ data class UsbDeviceSummary(
  * A7C2 直连（P2）USB 设备识别（纯逻辑、零 Android 依赖，可 JVM 单测）。
  *
  * PoC-1 只做「识别」：把 VID/PID 与接口类翻译成人类可读的相机 USB 模式提示，
- * 判定是否为 Sony 机身。真正打开设备 / PTP 会话见后续 PoC 阶段（`docs/P2_DESIGN.md`）。
+ * 判定是否为 Sony 机身。真正打开设备 / PTP 会话见后续 PoC 阶段（`docs/PHASE_DESIGN_HISTORY.md`（P2 部分））。
  */
 object CameraProbe {
 

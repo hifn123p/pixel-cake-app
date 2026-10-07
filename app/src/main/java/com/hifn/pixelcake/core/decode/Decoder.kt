@@ -34,7 +34,7 @@ data class DecodedImage(
  *    LibRaw 失败时降级为纯占位图（[linear] 为 null，按 8-bit sRGB 管线继续）；
  *  - JPEG/HEIF：BitmapFactory 带 inSampleSize 降采样到 longEdge。
  *
- * 预览与导出都从**同一条路径**取底图（FIX_LIST F03），保证所见即所得。
+ * 预览与导出都从**同一条路径**取底图（PHASE_DESIGN_HISTORY.md（审查台账） F03），保证所见即所得。
  */
 object Decoder {
 
@@ -87,7 +87,21 @@ object Decoder {
             return DecodedImage(placeholder, "image/arw", placeholder.width, placeholder.height, isRaw = true)
         }
         // 3) 解出代理分辨率的线性母版
-        val linear = ArwFullDecoder.decodeLinearProxy(cache.absolutePath, longEdge)
+        //
+        // ⚠️ 这一步会抛（代理档 2048 时 `readAll` 也要 ~16MB，紧张环境仍可能 OOM）。
+        // 抛异常时 `decodeToProxy` 的 `catch (t: Throwable)` 会把异常吞掉并返回 null，
+        // 于是**这份 65MB 的缓存文件路径从未交给任何人** ⇒ 彻底泄漏。
+        // F21 修的是「拷贝失败时留半截文件」，没修「拷贝成功但后续失败时留完整文件」。
+        val linear = try {
+            ArwFullDecoder.decodeLinearProxy(cache.absolutePath, longEdge)
+        } catch (t: Throwable) {
+            ArwFullDecoder.releaseCache(cache.absolutePath)
+            DebugLog.e(
+                DebugLog.TAG_DECODE, "arw: linear proxy threw",
+                mapOf("err" to (t.message ?: t.javaClass.simpleName))
+            )
+            null
+        }
         if (linear == null) {
             DebugLog.w(DebugLog.TAG_DECODE, "arw: linear proxy failed, fallback to preview-only")
         }

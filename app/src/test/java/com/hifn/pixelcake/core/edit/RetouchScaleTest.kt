@@ -6,7 +6,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * `RetouchScale.skinMask` 的作用域口径（FIX_LIST §9 R08 的用户决策落点）：
+ * `RetouchScale.skinMask` 的作用域口径（PHASE_DESIGN_HISTORY.md（审查台账） §9 R08 的用户决策落点）：
  *
  * **无描迹 ⇒ [FullMask]（作用域 = 整幅）**，而不是 `null`。`null` 只表示「不执行」，
  * 专留给相机批量链路（`CameraBatch` 显式传 `null`）。编辑器由此保留「滑杆一拖就有可见效果」。
@@ -34,7 +34,7 @@ class RetouchScaleTest {
         assertEquals("尺寸非法时返回 null（无处可施加）", null, RetouchScale.skinMask(0, 0, emptyList(), 0.01f))
     }
 
-    // ---- P1p-1b：编辑器「自动蒙版 ∪ 画笔」合成口径（docs/P1p_DESIGN.md §7）----
+    // ---- P1p-1b：编辑器「自动蒙版 ∪ 画笔」合成口径（docs/PHASE_DESIGN_HISTORY.md（P1+ 部分） §7）----
 
     @Test
     fun brushMaskIsNullWhenNoStrokesOrBadSize() {

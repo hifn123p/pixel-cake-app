@@ -38,14 +38,14 @@ private class BitmapStore(private val bitmap: Bitmap) : PixelStore {
 }
 
 /**
- * retouch 整图 pass 编排（P1b-4 / `docs/P1b_DESIGN.md` §2）。
+ * retouch 整图 pass 编排（P1b-4 / `docs/PHASE_DESIGN_HISTORY.md`（P1b 部分） §2）。
  *
  * 施加顺序：**磨皮 → 液化 → 祛瑕 → 追色**。预览（代理）与导出（全分辨率）用同一算法 + 同一 Mask
  * （经 `resampleTo` 对齐），保证「预览所见即导出所得」。
  *
  * 液化的锚点自 **P1p-2c** 起可由**人脸检测**覆盖（见 [FaceAnchor]）；不给就仍是 P1 的「蒙版质心猜」。
  *
- * **内存纪律（FIX_LIST F05 / 第二轮复审 R10）**：这里曾是最后一个整幅 `IntArray(w·h)`
+ * **内存纪律（PHASE_DESIGN_HISTORY.md（审查台账） F05 / 第二轮复审 R10）**：这里曾是最后一个整幅 `IntArray(w·h)`
  * （33MP 下 ≈131MB，四算子共用）。现改为**全程分带 / 分块**，任何时刻只持有与「带高 + halo」
  * 同量级的缓冲：
  *  1. **磨皮**：逐带读入「[BAND_ROWS] 行 + 上下 `radius` 行 halo」的窗口，在窗口上整体施加，再写回核心行。
@@ -149,14 +149,24 @@ object RetouchLayer {
         val w = store.w
         val h = store.h
         if (w <= 0 || h <= 0) return
-        val m = mask?.resampleTo(w, h)
 
-        val ngOn = m != null && state.neutralGray.strength > 0f
-        val beautyOn = m != null &&
-            (state.beauty.slimFace > 0f || state.beauty.slimJaw > 0f || state.beauty.eyeEnlarge > 0f)
+        // ⚠️ 判空必须**先于** resampleTo：`RasterMask.resampleTo` 会真的分配
+        // `FloatArray(w * h)`（33MP = 131MB）。以前这里是「先付钱、后判空」，
+        // 于是「只开追色、不磨皮不液化」的用户（相机批量、预设缩略图都走这条路）
+        // 每帧白付 131MB 分配 + 一次全图重采样。
+        //
+        // 注意语义没变：`mask == null` 依然是「**不执行**」（R08）——
+        // 只是把「要不要花 131MB 去重采样」与「要不要执行」拆成了两个判据。
+        val wantMask = state.neutralGray.strength > 0f || state.beauty.hasWiredLiquify
         val inpaintOn = state.inpaint.isNotEmpty()
         val ctOn = ColorTransfer.isActive(state.colorTransfer)
-        if (!ngOn && !beautyOn && !inpaintOn && !ctOn) return
+        if (!wantMask && !inpaintOn && !ctOn) return
+        // 只有真的要用蒙版的两段才付重采样的钱
+        val m = if (wantMask) mask?.resampleTo(w, h) else null
+        val ngOn = m != null && state.neutralGray.strength > 0f
+        // `hasWiredLiquify` 与 `Beauty.apply` 的 early-return 是**同一个判据** ——
+        // 两处不一致就会出现「进液化阶段但什么也不做」的白扫一遍包围盒 + 质心。
+        val beautyOn = m != null && state.beauty.hasWiredLiquify
 
         if (ngOn) neutralGrayPhase(store, w, h, state.neutralGray, m!!)
         if (beautyOn) beautyPhase(store, w, h, state.beauty, m!!, faceAnchor)
@@ -174,13 +184,18 @@ object RetouchLayer {
         var y = 0
         var carry = IntArray(0) // 位于 [y-radius, y) 的**原始**像素（带上沿 halo）
         var carryRows = 0
+        // ⚠️ 跨带复用（与 NeutralGray.applyBanded 同一个理由）：以前 `buf` 与 `carry`
+        // 在循环体内 new，33MP + radius≈46 ⇒ 每带约 9.8MB + 1.3MB，18~19 带
+        // ⇒ 约 210MB 垃圾。稳态零分配是这里唯一正确的选择。
+        var buf = IntArray(0)
         while (y < h) {
             val n = minOf(band, h - y)
             val top = (y - radius).coerceAtLeast(0)
             val bot = (y + n - 1 + radius).coerceAtMost(h - 1)
             val headRows = y - top
             val winRows = bot - top + 1
-            val buf = IntArray(winRows * w)
+            val need = winRows * w
+            if (buf.size != need) buf = IntArray(need)
 
             if (headRows > 0) {
                 if (carryRows >= headRows) {
@@ -195,15 +210,18 @@ object RetouchLayer {
             // 顺手留存下一带的顶部 halo（此刻 buf 里这些行仍是原始值）
             if (y + n < h && n >= radius) {
                 carryRows = radius
-                carry = IntArray(radius * w)
-                System.arraycopy(buf, (y + n - radius - top) * w, carry, 0, radius * w)
+                val needCarry = radius * w
+                if (carry.size != needCarry) carry = IntArray(needCarry)
+                System.arraycopy(buf, (y + n - radius - top) * w, carry, 0, needCarry)
             } else {
                 carryRows = 0
-                carry = IntArray(0)
             }
 
-            // 整段窗口施加一次：窗口自带 halo，核心行的 box 窗口恒落在窗口内 ⇒ 与整幅逐位一致
-            NeutralGray.apply(buf, w, winRows, params, OffsetMask(mask, top))
+            // 整段窗口施加一次：窗口自带 halo，核心行的 box 窗口恒落在窗口内 ⇒ 与整幅逐位一致。
+            // ⚠️ 必须用 `applyWindow` 而不是 `apply`：窗口高度 `winRows = band + 2·radius`
+            // 大于 `apply` 的分带阈值（`band + radius`）⇒ 走 `apply` 就成了「分带的分带」，
+            // halo 重复计算、缓冲重复分配。而 `applyWindow` 与 `applyBanded` 逐位一致。
+            NeutralGray.applyWindow(buf, w, winRows, params, OffsetMask(mask, top))
 
             store.setPixels(buf, headRows * w, w, 0, y, w, n)
             y += n

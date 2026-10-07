@@ -72,7 +72,7 @@ import kotlin.math.round
  *
  * @param step 量化步长；传 0 表示不量化（连续）。量化在**回调前**完成，上层拿到的值已对齐。
  * @param onValueChangeFinished 松手回调。撤销栈只应在这里入栈一次，
- *        否则一次拖动会往历史里塞几十条（FIX_LIST F08）。
+ *        否则一次拖动会往历史里塞几十条（PHASE_DESIGN_HISTORY.md（审查台账） F08）。
  */
 // Slider 的「自定义 thumb / track」重载在本项目的 Material3 版本里被标记为实验性 API
 // （报错原文：This material API is experimental and is likely to change or to be removed in the future）⇒ 必须显式 opt-in。

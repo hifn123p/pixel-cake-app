@@ -9,7 +9,7 @@ package com.hifn.pixelcake.core.ml
  * 2. **可换**：将来换 `short_range` 或换 NPU 版本（P1p-3）时，上层 [MlFaceProvider] 不用动。
  *
  * **约定**：实现类**不得向上抛异常** —— 推理失败一律返回 `null`，由调用方按
- * `docs/P1p_DESIGN.md` §9 的降级链回退（退回「按蒙版质心猜」这一 P1 行为）。
+ * `docs/PHASE_DESIGN_HISTORY.md`（P1+ 部分） §9 的降级链回退（退回「按蒙版质心猜」这一 P1 行为）。
  *
  * **坐标口径**：返回的是**[张量归一化坐标]**（相对模型输入方图，`[0,1]`），
  * 不是源图像素 —— 因为投回源图需要源图尺寸，那是 [LetterboxTransform] 的职责。

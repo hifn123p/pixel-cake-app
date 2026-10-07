@@ -23,7 +23,7 @@ object ArwFullDecoder {
 
     /**
      * 把 Uri 内容流式拷贝到应用缓存临时文件，避免把整份 ARW 读进 JVM 堆。
-     * 失败返回 null；异常路径下不留半截临时文件（FIX_LIST F21）。
+     * 失败返回 null；异常路径下不留半截临时文件（PHASE_DESIGN_HISTORY.md（审查台账） F21）。
      */
     fun copyToCache(context: Context, uri: Uri): File? {
         val ext = if (uri.toString().endsWith(".arw", ignoreCase = true)) "arw" else "raw"

@@ -25,6 +25,47 @@ class PtpTransport private constructor(
 
     private var transactionId = 0
 
+    /**
+     * **传输与关闭必须共用同一把锁**（`onDispose` 不能用协程 Mutex）。
+     *
+     * ⚠️ 以前 `close()` 直接 `connection.close()`，与在途的 `bulkTransfer` **没有任何同步**：
+     * 面板离开组合（Home 滚出就会触发 `onDispose`）时，批量下载协程可能正停在
+     * `bulkTransfer(...)` 里 —— 而**取消协程不会中断阻塞中的 bulkTransfer**。
+     * 于是内核传输继续用一个已释放的 fd（下一台相机的 openDevice 很可能拿到同一个 fd 号）
+     * ⇒ native 崩溃，或更糟：把数据传到别的设备。Java 层的 try/catch 兜不住这个。
+     */
+    private val ioLock = Any()
+
+    @Volatile
+    private var closed = false
+
+    /**
+     * 数据流是否已**失步**（stream desync）。
+     *
+     * PTP 没有事务层恢复机制：在数据阶段中途失败（超时/断线）时，IN 端点上还留着未读的
+     * 负载字节。若继续用同一个 transport 发下一条事务，下一次读到的「容器头」其实是上一次的
+     * 残留 —— `length` 随机，可能恰好凑成一个合法 Data 头，把垃圾字节当响应，
+     * 甚至把上一张的残片写进下一张的文件里并**报告成功**。
+     * 唯一正确的处置是「失步即作废会话」。
+     */
+    @Volatile
+    private var desynced = false
+
+    /** 上一次传输是否已失步（true ⇒ 这个会话必须作废并重新连接）。 */
+    val isDesynced: Boolean get() = desynced
+
+    private fun bulkOut(buf: ByteArray, timeoutMs: Int): Int = synchronized(ioLock) {
+        if (closed) -1 else runCatching {
+            connection.bulkTransfer(endpointOut, buf, 0, buf.size, timeoutMs)
+        }.getOrDefault(-1)
+    }
+
+    private fun bulkIn(buf: ByteArray, offset: Int, len: Int, timeoutMs: Int): Int = synchronized(ioLock) {
+        if (closed) -1 else runCatching {
+            connection.bulkTransfer(endpointIn, buf, offset, len, timeoutMs)
+        }.getOrDefault(-1)
+    }
+
     /** 一次事务的结果。 */
     class Transaction(
         val operationCode: Int,
@@ -72,13 +113,20 @@ class PtpTransport private constructor(
      * @param params 命令参数（PTP 最多 5 个；本 PoC 用到 3 个）
      */
     fun execute(operationCode: Int, vararg params: Int): Transaction {
+        // 会话已作废：继续发命令只会把垃圾当成响应。
+        if (closed) {
+            return Transaction.failure(operationCode, 0, "会话已关闭", 0)
+        }
+        if (desynced) {
+            return Transaction.failure(
+                operationCode, 0, "会话已失步（上次传输中断），请重新连接相机", 0
+            )
+        }
         val started = System.currentTimeMillis()
         val txId = ++transactionId
         val command = PtpProtocol.encodeCommand(operationCode, params.toList(), txId)
 
-        val sent = runCatching {
-            connection.bulkTransfer(endpointOut, command, 0, command.size, BULK_TIMEOUT_MS)
-        }.getOrDefault(-1)
+        val sent = bulkOut(command, BULK_TIMEOUT_MS)
         if (sent != command.size) {
             return Transaction.failure(operationCode, txId, "命令发送失败（$sent/${command.size} 字节）", System.currentTimeMillis() - started)
         }
@@ -119,6 +167,18 @@ class PtpTransport private constructor(
         }
         responseHeader = response.first
         responseCode = response.first.code
+        // ⚠️ 必须校验事务号：`Header.transactionId` 被解析出来却从未与 txId 比对过。
+        // 上一次被放弃的事务（超时/取消后调用方直接返回）留下的响应，会被下一次事务
+        // 当成自己的合法响应接受 ⇒ `ok == true` 但数据是上一条命令的。
+        // 这类「静默错位」在真机上极难定位，而代价只是一行判断。
+        if (response.first.transactionId != txId) {
+            desynced = true
+            return Transaction.failure(
+                operationCode, txId,
+                "响应事务号不匹配（期望 $txId，实际 ${response.first.transactionId}）——会话已失步",
+                System.currentTimeMillis() - started
+            )
+        }
         logTransaction(operationCode, txId, responseCode, data, started)
         return Transaction(operationCode, txId, responseCode, data, responseHeader, null, System.currentTimeMillis() - started)
     }
@@ -209,13 +269,15 @@ class PtpTransport private constructor(
         var emptyReads = 0
         while (done < total) {
             val want = minOf(chunk.size.toLong(), total - done).toInt()
-            val read = runCatching {
-                connection.bulkTransfer(endpointIn, chunk, 0, want, DATA_TIMEOUT_MS)
-            }.getOrDefault(-1)
+            val read = bulkIn(chunk, 0, want, DATA_TIMEOUT_MS)
             if (read < 0) {
+                // ⚠️ 数据阶段中途失败 = **会话失步**：IN 端点上还留着未读的负载字节。
+                // 不置位的话，下一次事务会把这些残留当成容器头解析（长度随机，可能恰好
+                // 凑成合法头），甚至把上一张的残片写进下一张的文件并报告成功。
+                desynced = true
                 return Download(
                     false, done, total, -1,
-                    "下载中断：$done/$total 字节（Bulk 读超时或设备已断开）",
+                    "下载中断：$done/$total 字节（Bulk 读超时或设备已断开）——会话已失步，请重新连接",
                     System.currentTimeMillis() - started
                 )
             }
@@ -225,20 +287,32 @@ class PtpTransport private constructor(
                 // 避免零星空包累积触顶而误判中断；只有**连续**超过 MAX_EMPTY_READS 次才放弃。
                 emptyReads += 1
                 if (emptyReads > MAX_EMPTY_READS) {
+                    desynced = true
                     return Download(
                         false, done, total, -1,
-                        "下载中断：$done/$total 字节（连续 $emptyReads 次空包，设备可能已断开）",
+                        "下载中断：$done/$total 字节（连续 $emptyReads 次空包，设备可能已断开）——会话已失步，请重新连接",
                         System.currentTimeMillis() - started
                     )
                 }
                 continue
             }
             emptyReads = 0
-            sink.write(chunk, 0, read)
+            // ⚠️ 本层的契约是「任何失败都返回带原因的结果，绝不抛异常」：`sink.write` 在
+            // 缓存目录满 / /data 满时会抛 IOException，穿出去会让上层在**失步之后**才兜住。
+            if (!writeChunk(sink, chunk, read)) {
+                desynced = true
+                return Download(
+                    false, done, total, -1,
+                    "写入缓存失败（存储空间不足？）", System.currentTimeMillis() - started
+                )
+            }
             done += read
             onProgress(done, total)
         }
-        sink.flush()
+        if (!runCatching { sink.flush() }.isSuccess) {
+            desynced = true
+            return Download(false, done, total, -1, "写入缓存失败（flush）", System.currentTimeMillis() - started)
+        }
 
         val response = readContainer(PtpProtocol.OP_GET_OBJECT, txId)
             ?: return Download(false, done, total, -1, "响应阶段读取失败", System.currentTimeMillis() - started)
@@ -310,19 +384,26 @@ class PtpTransport private constructor(
         var read = 0
         var emptyReads = 0
         while (read < length) {
-            val n = runCatching {
-                connection.bulkTransfer(endpointIn, dst, offset + read, length - read, timeoutMs)
-            }.getOrDefault(-1)
+            val n = bulkIn(dst, offset + read, length - read, timeoutMs)
             if (n < 0) return false
             if (n == 0) {
                 emptyReads += 1
                 if (emptyReads > MAX_EMPTY_READS) return false
                 continue
             }
+            // ⚠️ 必须与 `downloadObject` 同策略清零：`bulkTransfer` 超时时返回**已传输的部分
+            // 字节数**，所以读大负载时这个循环会转很多次，每次循环里都可能夹一个 ZLP。
+            // 以前只在 downloadObject 里清零，这里不清 ⇒ 一次**健康**的长传输会被
+            // 零星空包累积顶到 MAX_EMPTY_READS 而误判中断。
+            emptyReads = 0
             read += n
         }
         return true
     }
+
+    /** 写一块数据到 [sink]，失败返回 false（本层契约：绝不抛异常）。 */
+    private fun writeChunk(sink: OutputStream, buf: ByteArray, len: Int): Boolean =
+        runCatching { sink.write(buf, 0, len) }.isSuccess
 
     private fun logTransaction(
         operationCode: Int,
@@ -343,7 +424,9 @@ class PtpTransport private constructor(
         )
     }
 
-    fun close() {
+    fun close() = synchronized(ioLock) {
+        if (closed) return
+        closed = true
         runCatching { connection.releaseInterface(usbInterface) }
         runCatching { connection.close() }
         DebugLog.i(DebugLog.TAG_CAMERA, "ptp transport closed")

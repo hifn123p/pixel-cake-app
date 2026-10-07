@@ -3,7 +3,7 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <!-- Photo Picker(系统选择器) 与 SAF(ACTION_OPEN_DOCUMENT) 均由系统代持访问权，
-         不需要 READ_MEDIA_IMAGES / READ_MEDIA_VISUAL_USER_SELECTED（FIX_LIST F19）。
+         不需要 READ_MEDIA_IMAGES / READ_MEDIA_VISUAL_USER_SELECTED（PHASE_DESIGN_HISTORY.md（审查台账） F19）。
          不声明读取权限 = 少一项隐私面、少一次授权弹窗。 -->
 
     <!-- P2（相机直连）：声明 USB 宿主能力。required=false —— 非 USB 场景（相册导入/编辑）不受影响，
@@ -24,7 +24,7 @@
         android:theme="@style/Theme.PixelCake">
 
         <!--
-          不再声明 android:colorMode="hdr"（FIX_LIST F18）：管线是 8-bit sRGB，
+          不再声明 android:colorMode="hdr"（PHASE_DESIGN_HISTORY.md（审查台账） F18）：管线是 8-bit sRGB，
           请求系统按广色域合成窗口并不带来任何实际收益，反而名不副实。
           等真正上 RGBA_F16 缓冲 + P3 输出时再打开。
         -->

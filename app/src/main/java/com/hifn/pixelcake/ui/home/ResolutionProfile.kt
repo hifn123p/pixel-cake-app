@@ -11,7 +11,7 @@ package com.hifn.pixelcake.ui.home
  *   - 低 <6GB：长边封顶 4096，代理 1024
  *
  * 注：此前这里带一个 `bitmapConfig` 字段（旗舰档写 "RGBA_F16"），
- * 但全代码落位图处一律硬编码 ARGB_8888，该字段从未被读取，属死字段（FIX_LIST F18）。
+ * 但全代码落位图处一律硬编码 ARGB_8888，该字段从未被读取，属死字段（PHASE_DESIGN_HISTORY.md（审查台账） F18）。
  * 真正要用 F16 需要整条管线（解码输出 → 渲染缓冲 → 编码）一起换，单独改字段只会误导。
  */
 data class ResolutionProfile(

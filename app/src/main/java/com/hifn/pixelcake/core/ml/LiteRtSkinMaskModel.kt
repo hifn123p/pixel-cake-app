@@ -7,7 +7,7 @@ import com.google.ai.edge.litert.CompiledModel
 import com.google.ai.edge.litert.Environment
 
 /**
- * [SkinMaskModel] 的 LiteRT 实现（`docs/P1p_DESIGN.md` §2.2）。
+ * [SkinMaskModel] 的 LiteRT 实现（`docs/PHASE_DESIGN_HISTORY.md`（P1+ 部分） §2.2）。
  *
  * 用 **LiteRT v2 `CompiledModel`**（不是已废弃的 TFLite + NNAPI）：
  * - 依赖 `com.google.ai.edge.litert:litert`（**仅 Google Maven**）；
@@ -72,6 +72,12 @@ class LiteRtSkinMaskModel private constructor(
          * 依次尝试 GPU → CPU 创建模型；全部失败返回 `null`（调用方回退）。
          *
          * 失败一律记 [DebugLog.TAG_ML] 日志，便于真机回传日志定位（模型缺失 / 加速器不可用 / ABI 不符…）。
+         *
+         * ⚠️ **所有失败出口都必须 `env.close()`**：[Environment] 持有 native 上下文
+         * （含 GPU delegate 的 GL/Vulkan 资源池）。以前只有成功路径才把 env 交给实例去关，
+         * 于是「GPU create 抛 → CPU create 抛 → 返回 null」这条最常见的失败路径
+         * 把Environment 整个泄漏掉。类KDoc 里写着「Environment 生命周期必须覆盖 model」，
+         * 说明这件事本来是清楚的，只是失败路径漏了。
          */
         fun createOrNull(context: Context): SkinMaskModel? {
             val appCtx = context.applicationContext
@@ -115,6 +121,8 @@ class LiteRtSkinMaskModel private constructor(
                 }
             }
             DebugLog.e(DebugLog.TAG_ML, "skin mask model unavailable", kv("lastErr", lastErr ?: IllegalStateException("unknown")))
+            // 统一兜底：走到这里说明没有任何实例接管 env，必须亲手关掉（幂等 close 由 SDK 承担）
+            runCatching { env?.close() }
             return null
         }
     }

@@ -152,7 +152,18 @@ fun CameraPanel(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable(enabled = !busy) { selectedName = d.deviceName },
+                                    // ⚠️ 必须显式传 `indication = null`：只写 `clickable(enabled) {}`
+                                    // 会落到「取 LocalIndication」的那个重载（foundation 里
+                                    // **没有 indication 参数**、写死 useLocalIndication = true），
+                                    // 编译与 lint 都一声不响，真机上表现为「按下出现灰色矩形」
+                                    // —— 灰底 + 直角 + 与旁边 RadioButton 的涟漪两个反馈源叠加。
+                                    // 本行不做按下缩放，所以 `interactionSource` 一并传 null
+                                    // （走 Clickable 的快路径，不建指示节点）。
+                                    .clickable(
+                                        interactionSource = null,
+                                        indication = null,
+                                        enabled = !busy
+                                    ) { selectedName = d.deviceName },
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 RadioButton(

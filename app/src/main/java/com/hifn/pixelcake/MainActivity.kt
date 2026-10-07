@@ -63,6 +63,7 @@ import com.hifn.pixelcake.ui.shell.PixelCakeTab
 import com.hifn.pixelcake.ui.theme.LocalLowTransparency
 import com.hifn.pixelcake.ui.theme.PixelCakeTheme
 import com.hifn.pixelcake.ui.theme.PixelCakeWorkspaceTheme
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
@@ -77,7 +78,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.min
 
-/** 滑块拖动时的重渲节流窗口（FIX_LIST F08）。16ms ≈ 一帧，肉眼无感但能挡掉绝大多数中间值。 */
+/** 滑块拖动时的重渲节流窗口（PHASE_DESIGN_HISTORY.md（审查台账） F08）。16ms ≈ 一帧，肉眼无感但能挡掉绝大多数中间值。 */
 private const val RENDER_THROTTLE_MS = 16L
 
 /** 皮肤画笔两描迹的最小归一化距离平方（避免一次拖动塞入成百上千条描迹，拖慢蒙版重建）。 */
@@ -256,7 +257,7 @@ private fun AppRoot(settings: AppSettings) {
     }
 
     // 参数 / retouch / 蒙版 / 自动蒙版开关变化 -> 异步把参数栈 + retouch 重渲到代理图。
-    // 用 snapshotFlow + conflate 做节流（FIX_LIST F08）。
+    // 用 snapshotFlow + conflate 做节流（PHASE_DESIGN_HISTORY.md（审查台账） F08）。
     //
     // ⚠️ **刻意用 `collect` 而不是 `collectLatest`**（2026-10-01 第七轮真机反馈修）。
     //
@@ -297,7 +298,7 @@ private fun AppRoot(settings: AppSettings) {
                 // 不会拿着一个已经过期的值去跑几百毫秒的整帧。
                 delay(RENDER_THROTTLE_MS)
                 // 取本协程的 job：它只在**整张图被换掉**时失效（`imported` 变了 ⇒ `LaunchedEffect`
-                // 重启；或退出编辑器）。渲染器据此在下一个分带边界退出（协作取消，FIX_LIST F08）。
+                // 重启；或退出编辑器）。渲染器据此在下一个分带边界退出（协作取消，PHASE_DESIGN_HISTORY.md（审查台账） F08）。
                 // ⚠️ 参数变化**不会**让它失效 —— 这正是上面改用 `collect` 的目的。
                 val renderJob = currentCoroutineContext().job
                 // 在主线程捕获最新状态，避免在 Dispatchers.Default 内跨线程读快照状态
@@ -323,104 +324,126 @@ private fun AppRoot(settings: AppSettings) {
                 val mlKey = mlCacheKey(srcUri, src.bitmap.width, src.bitmap.height, epochAtStart)
                 var autoMaskNoteOut = ""
                 var liquifyNoteOut = ""
-                val batch = renderMutex.withLock {
-                    // ⚠️ 写入目标**绝不能**是正在被显示的那一块（`rendered`）。
-                    //
-                    // 这条约束比「省内存」硬得多。写入的是**分带**结果：`EditEngine` 每写完一带就
-                    // `Bitmap.setPixels` 一次，而 `setPixels` 会推进位图的 generation id ——
-                    // 正在显示的位图每被推进一次，合成器就会**重新上传一次纹理**。
-                    // 于是屏幕上出现的是一张**写了一半**的图：当前带的边界就是那根
-                    // 「上下颜色不一致的横线」，而每一批渲染它都从顶部重新扫下来，
-                    // 拖动时于是持续闪动（真机反馈：「预览窗口有一根横线，上下颜色不一致，还会闪动」）。
-                    //
-                    // 双缓冲让这件事**结构性地不可能发生**：`rendered` 只读、`renderSpare` 只写，
-                    // 算完再一次性换过来。稳态下**零额外分配**（两块互相轮换），
-                    // 所以「为了省 11MB/批 的 GC 去复用同一块」这个旧做法没有任何必要 ——
-                    // 它换来的正是上面那根横线。
-                    //
-                    // ⚠️ 被换下来的那块要等到**下一批**渲染才会被写，而那时它已经离开画面至少一帧，
-                    // 合成器对它的最后一次读取早已结束 ⇒ 连「刚换下来就被写」的窗口也不存在。
-                    val displayed = rendered
-                    val spare = renderSpare
-                    val bmp = if (spare != null && spare.width == w && spare.height == h && spare !== displayed) {
-                        spare
-                    } else {
-                        // 尺寸不符（换图）或还没有备用缓冲 ⇒ 新建一块。
-                        // 旧的那块**不手动回收**：它可能刚离开画面、合成器仍持有它，
-                        // 而这个分支一张图最多走一次（约 11MB）—— 丢掉交 GC，
-                        // 与 `src.bitmap` 同一个口径（见 `onBack` 的说明）。
-                        Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-                    }
-                    // 单帧渲染耗时（诊断用，零风险）：真机上「滑参数卡不卡」需要的是一条**数字**，
-                    // 不是感觉。它跟着这一批走（见 `RenderBatch.ms`），出锁后连同 stamp 一起打点。
-                    val renderT0 = System.nanoTime()
-                    // ⚠️ 必须接住返回值：`false` = **这张位图没画完**，绝不能当成品提交。
-                    val completed = withContext(Dispatchers.Default) {
-                        val linear = src.linear
-                        // 自动蒙版：首次真正需要时跑一次皮肤分割（失败返回 null → 自动回退画笔/整幅），
-                        // 之后同一 key 命中 MlMaskProvider 缓存，不再重复推理。
-                        val mlMask = if (autoOn) MlMaskProvider.skinMaskFor(context, src.bitmap, mlKey) else null
-                        autoMaskNoteOut = when {
-                            !autoOn -> ""
-                            mlMask != null -> "自动蒙版已启用（${MlMaskProvider.accelerator ?: "?"}）"
-                            else -> "自动蒙版不可用，已回退画笔/整幅"
-                        }
-                        val mask = buildSkinMask(w, h, strokes, radius, mlMask)
-                        val renderRetouch = buildRenderRetouch(rt, w, h, inpStrokes, inpRadius)
-                        // 对象作用域图层（批次 5）：**只在真有层时才去取蒙版** ——
-                        // 没有层的用户（绝大多数）在这里零额外开销，一个作用域网格都不会被构建。
-                        // `objectMasksFor` 与上面的 `skinMaskFor` 共用同一份概率缓存 ⇒ 只推理一次。
-                        val objMasks = if (layerList.isEmpty()) {
-                            null
+                val batch = try {
+                    renderMutex.withLock {
+                        // ⚠️ 写入目标**绝不能**是正在被显示的那一块（`rendered`）。
+                        //
+                        // 这条约束比「省内存」硬得多。写入的是**分带**结果：`EditEngine` 每写完一带就
+                        // `Bitmap.setPixels` 一次，而 `setPixels` 会推进位图的 generation id ——
+                        // 正在显示的位图每被推进一次，合成器就会**重新上传一次纹理**。
+                        // 于是屏幕上出现的是一张**写了一半**的图：当前带的边界就是那根
+                        // 「上下颜色不一致的横线」，而每一批渲染它都从顶部重新扫下来，
+                        // 拖动时于是持续闪动（真机反馈：「预览窗口有一根横线，上下颜色不一致，还会闪动」）。
+                        //
+                        // 双缓冲让这件事**结构性地不可能发生**：`rendered` 只读、`renderSpare` 只写，
+                        // 算完再一次性换过来。稳态下**零额外分配**（两块互相轮换），
+                        // 所以「为了省 11MB/批 的 GC 去复用同一块」这个旧做法没有任何必要 ——
+                        // 它换来的正是上面那根横线。
+                        //
+                        // ⚠️ 被换下来的那块要等到**下一批**渲染才会被写，而那时它已经离开画面至少一帧，
+                        // 合成器对它的最后一次读取早已结束 ⇒ 连「刚换下来就被写」的窗口也不存在。
+                        val displayed = rendered
+                        val spare = renderSpare
+                        val bmp = if (spare != null && spare.width == w && spare.height == h && spare !== displayed) {
+                            spare
                         } else {
-                            MlMaskProvider.objectMasksFor(context, src.bitmap, mlKey)
+                            // 尺寸不符（换图）或还没有备用缓冲 ⇒ 新建一块。
+                            // 旧的那块**不手动回收**：它可能刚离开画面、合成器仍持有它，
+                            // 而这个分支一张图最多走一次（约 11MB）—— 丢掉交 GC，
+                            // 与 `src.bitmap` 同一个口径（见 `onBack` 的说明）。
+                            Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
                         }
-                        // `buildLayerStack` 会剔掉「强度 0 / 参数全中性 / 拿不到蒙版」的层，
-                        // 并且按**目标尺寸**建好每层的程序与蒙版；全被剔掉时返回 EMPTY
-                        // ⇒ 逐像素路径退回「一次 applySrgb8」，与批次 4 完全一致。
-                        val layerStack = buildLayerStack(layerList, { sc -> objMasks?.maskFor(sc) }, w, h)
-                        // 液化锚点（P1p-2c）：**只在真的开了液化参数时**才跑检测 —— 没人碰美型滑块时
-                        // 没必要多付一次推理。取最大的一张脸（`facesFor` 已按面积降序）。
-                        val beautyOn = beautyActive(renderRetouch.beauty)
-                        val faces = if (beautyOn) MlFaceProvider.facesFor(context, src.bitmap, mlKey) else null
-                        val faceAnchor = faces?.firstOrNull()?.let {
-                            RetouchLayer.FaceAnchor.fromDetection(it, src.bitmap.width, src.bitmap.height, w, h)
+                        // 单帧渲染耗时（诊断用，零风险）：真机上「滑参数卡不卡」需要的是一条**数字**，
+                        // 不是感觉。它跟着这一批走（见 `RenderBatch.ms`），出锁后连同 stamp 一起打点。
+                        val renderT0 = System.nanoTime()
+                        // ⚠️ 必须接住返回值：`false` = **这张位图没画完**，绝不能当成品提交。
+                        val completed = withContext(Dispatchers.Default) {
+                            val linear = src.linear
+                            // 自动蒙版：首次真正需要时跑一次皮肤分割（失败返回 null → 自动回退画笔/整幅），
+                            // 之后同一 key 命中 MlMaskProvider 缓存，不再重复推理。
+                            val mlMask = if (autoOn) MlMaskProvider.skinMaskFor(context, src.bitmap, mlKey) else null
+                            autoMaskNoteOut = when {
+                                !autoOn -> ""
+                                mlMask != null -> "自动蒙版已启用（${MlMaskProvider.accelerator ?: "?"}）"
+                                else -> "自动蒙版不可用，已回退画笔/整幅"
+                            }
+                            val mask = buildSkinMask(w, h, strokes, radius, mlMask)
+                            val renderRetouch = buildRenderRetouch(rt, w, h, inpStrokes, inpRadius)
+                            // 对象作用域图层（批次 5）：**只在真有层时才去取蒙版** ——
+                            // 没有层的用户（绝大多数）在这里零额外开销，一个作用域网格都不会被构建。
+                            // `objectMasksFor` 与上面的 `skinMaskFor` 共用同一份概率缓存 ⇒ 只推理一次。
+                            val objMasks = if (layerList.isEmpty()) {
+                                null
+                            } else {
+                                MlMaskProvider.objectMasksFor(context, src.bitmap, mlKey)
+                            }
+                            // `buildLayerStack` 会剔掉「强度 0 / 参数全中性 / 拿不到蒙版」的层，
+                            // 并且按**目标尺寸**建好每层的程序与蒙版；全被剔掉时返回 EMPTY
+                            // ⇒ 逐像素路径退回「一次 applySrgb8」，与批次 4 完全一致。
+                            val layerStack = buildLayerStack(layerList, { sc -> objMasks?.maskFor(sc) }, w, h)
+                            // 液化锚点（P1p-2c）：**只在真的开了液化参数时**才跑检测 —— 没人碰美型滑块时
+                            // 没必要多付一次推理。取最大的一张脸（`facesFor` 已按面积降序）。
+                            val beautyOn = beautyActive(renderRetouch.beauty)
+                            val faces = if (beautyOn) MlFaceProvider.facesFor(context, src.bitmap, mlKey) else null
+                            val faceAnchor = faces?.firstOrNull()?.let {
+                                RetouchLayer.FaceAnchor.fromDetection(it, src.bitmap.width, src.bitmap.height, w, h)
+                            }
+                            liquifyNoteOut = when {
+                                !beautyOn -> ""
+                                faces == null -> "液化锚点：蒙版质心（人脸检测不可用）"
+                                faceAnchor == null -> "液化锚点：蒙版质心（未检测到人脸）"
+                                else -> "液化锚点：人脸检测（${MlFaceProvider.accelerator ?: "?"}）· ${faces.size} 张脸"
+                            }
+                            if (linear != null) {
+                                // 协作取消：`renderJob` 失效（换图 / 退出编辑器）时，这里会在下一带边界退出。
+                                // ⚠️ 它的返回值**必须**往上传 —— `false` 意味着这张位图只写了前 k 带，
+                                // 是**半成品**，绝不能当成品提交（见下面 `RenderBatch.completed`）。
+                                // 注意：renderIntoLinear 内部已在物化目标 Bitmap 上跑过 retouch 整图 pass，
+                                // 这里**不能**再调 RetouchLayer.apply，否则 RAW 预览会重复叠加（与导出不一致）。
+                                EditEngine.renderIntoLinear(
+                                    bmp, linear, p, renderRetouch, mask,
+                                    faceAnchor = faceAnchor, layers = layerStack
+                                ) { !renderJob.isActive }
+                            } else {
+                                // ⚠️ 人像精修已经**收进** renderIntoSrgb：阶段顺序必须是
+                                // `调色 → 精修 → 细节`，与两条 RAW 入口同序。
+                                // 以前这里是「调色 → 细节」再由调用方补一趟精修，等于
+                                // 「先锐化再磨皮」—— 磨皮把刚锐出的边缘糊掉，锐化量程被吃掉一半。
+                                // 返回值必须接住：尺寸不匹配 = 这一帧不是成品。
+                                EditEngine.renderIntoSrgb(
+                                    bmp, src.bitmap, p, renderRetouch, mask, faceAnchor, layerStack
+                                )
+                            }
                         }
-                        liquifyNoteOut = when {
-                            !beautyOn -> ""
-                            faces == null -> "液化锚点：蒙版质心（人脸检测不可用）"
-                            faceAnchor == null -> "液化锚点：蒙版质心（未检测到人脸）"
-                            else -> "液化锚点：人脸检测（${MlFaceProvider.accelerator ?: "?"}）· ${faces.size} 张脸"
+                        // `reused` 用引用相等判定，不重算一遍尺寸条件：回收决策完全依赖
+                        // 「这张位图是不是借来的」，重算等于多一处可能与上面那次判断不一致的地方。
+                        // 借来的那一块是双缓冲的备用块（`renderSpare`），**归属权不在本协程**。
+                        RenderBatch(
+                            bmp = bmp,
+                            reused = bmp === spare,
+                            epoch = epochAtStart,
+                            completed = completed,
+                            ms = (System.nanoTime() - renderT0) / 1_000_000
+                        )
                         }
-                        if (linear != null) {
-                            // 协作取消：`renderJob` 失效（换图 / 退出编辑器）时，这里会在下一带边界退出。
-                            // ⚠️ 它的返回值**必须**往上传 —— `false` 意味着这张位图只写了前 k 带，
-                            // 是**半成品**，绝不能当成品提交（见下面 `RenderBatch.completed`）。
-                            // 注意：renderIntoLinear 内部已在物化目标 Bitmap 上跑过 retouch 整图 pass，
-                            // 这里**不能**再调 RetouchLayer.apply，否则 RAW 预览会重复叠加（与导出不一致）。
-                            EditEngine.renderIntoLinear(
-                                bmp, linear, p, renderRetouch, mask,
-                                faceAnchor = faceAnchor, layers = layerStack
-                            ) { !renderJob.isActive }
-                        } else {
-                            EditEngine.renderIntoSrgb(bmp, src.bitmap, p, layerStack)
-                            // 8-bit sRGB 路径的 renderIntoSrgb 不含 retouch，需在此补一趟整图 pass。
-                            RetouchLayer.apply(bmp, renderRetouch, mask, faceAnchor)
-                            // 这条路径**没有**取消入口（`renderIntoSrgb` / `RetouchLayer.apply`
-                            // 都不收 `isCancelled`）⇒ 能走到这里就必定是完整帧。
-                            true
-                        }
-                    }
-                    // `reused` 用引用相等判定，不重算一遍尺寸条件：回收决策完全依赖
-                    // 「这张位图是不是借来的」，重算等于多一处可能与上面那次判断不一致的地方。
-                    // 借来的那一块是双缓冲的备用块（`renderSpare`），**归属权不在本协程**。
-                    RenderBatch(
-                        bmp = bmp,
-                        reused = bmp === spare,
-                        epoch = epochAtStart,
-                        completed = completed,
-                        ms = (System.nanoTime() - renderT0) / 1_000_000
+                } catch (c: CancellationException) {
+                    // 协程被取消（换图 / 退出编辑器）不是错误，必须原样抛出。
+                    throw c
+                } catch (t: Throwable) {
+                    // ⚠️ 这一段里 `Bitmap.createBitmap`（11MB 级）、ML 推理、`EditEngine.renderInto*`、
+                    // `RetouchLayer.apply`、`target.copy` 全都可能抛 —— 33MP 分配失败是 `OutOfMemoryError`
+                    // （一个 `Error`，不是 `Exception`）。以前这里**没有兜底**，异常会取消整个
+                    // `LaunchedEffect(imported)` ⇒ 这张图之后再也不重渲，界面停在旧帧上、状态栏无任何提示，
+                    // 只能退回再进来。而 `CameraBatch` 早有 `catch Throwable`，两边口径不一致。
+                    DebugLog.e(
+                        DebugLog.TAG_EDIT, "render batch failed",
+                        mapOf("err" to (t.message ?: t.javaClass.simpleName), "epoch" to epochAtStart)
                     )
+                    status = EditorStatus(
+                        StatusKind.Error,
+                        "渲染失败（${t.javaClass.simpleName}），可退回后重试或换一张照片"
+                    )
+                    return@collect
                 }
                 // ⚠️ 出锁后的第一件事是**确认这一批还算不算一帧成品**。两个条件缺一不可。
                 //
@@ -507,6 +530,11 @@ private fun AppRoot(settings: AppSettings) {
         scope.launch {
             loading = true
             status = EditorStatus(StatusKind.Info, "正在解码…")
+            // ⚠️ 换图时必须释放**上一张**的 ARW 临时缓存（65MB/张）：`copyToCache` 每次都新建
+            // `rawbridge_<nanoTime>.arw`，而 `releaseCache` 原先只有 `onBack` 一个调用点
+            // ⇒ 连续打开 10 张 ARW 就在 cacheDir 里堆约 650MB，而且这些文件 mtime 很新、
+            // 不容易被系统 trim 掉。放在解码**之前**取旧值：此时 `imported` 还是上一张。
+            val staleRaw = imported?.rawCachePath
             val dec = runCatching { Decoder.decodeToProxy(context, uri, profile.proxyLongEdge) }.getOrNull()
             if (dec == null) {
                 loading = false
@@ -533,6 +561,10 @@ private fun AppRoot(settings: AppSettings) {
                 loading = false
                 imported = dec
                 srcUri = uri
+                // 异步释放上一张的 ARW 缓存（不阻塞解码收尾；IO 磁盘操作用 IO 调度器）
+                if (staleRaw != null && staleRaw != dec.rawCachePath) {
+                    scope.launch(Dispatchers.IO) { ArwFullDecoder.releaseCache(staleRaw) }
+                }
                 history.reset()
                 params = EditParams()
                 retouch = RetouchState()
@@ -578,6 +610,18 @@ private fun AppRoot(settings: AppSettings) {
         // `val src = imported` 后必须再判一次 null：`imported` 是被多个 lambda 捕获并修改的
         // 局部 `var`，Kotlin 不允许对它做智能转换，只有拷进局部 val 才能安全解包。
         if (src != null) {
+            // ⚠️ 撤销/重做必须**三层一起回填**。曾经只回填 params + retouch，于是：
+            // ① 拖完对象层滑块 → 提交 → 撤销，画面上那层纹丝不动（而 `history.current.layers`
+            //    已经变了）；② 之后再提交一次，`push` 记录的是错的「当前」；
+            // ③ 连续撤销到栈底后 `history.current.layers` 与界面 `layers` 永久漂移。
+            // 这与 `EditModel.kt` 里警告的「撤销一次，全部对象层消失」是同一类**接线漏项** ——
+            // 抽成这一个局部 lambda，就是为了让「漏一层」这件事只有一处可发生。
+            val applySnapshot: (EditSnapshot) -> Unit = { s ->
+                params = s.params
+                retouch = s.retouch
+                layers = s.layers
+                activePresetId = "none"
+            }
             // 编辑页**强制深色**：照片必须是页面上唯一的彩色主体（`docs/UI_DESIGN.md` §8 决策点 1）。
             PixelCakeWorkspaceTheme {
                 EditorScreen(
@@ -669,18 +713,10 @@ private fun AppRoot(settings: AppSettings) {
                         history.push(EditSnapshot(params, retouch, layers))
                     },
                     onUndo = {
-                        if (history.undo()) {
-                            params = history.current.params
-                            retouch = history.current.retouch
-                            activePresetId = "none"
-                        }
+                        if (history.undo()) applySnapshot(history.current)
                     },
                     onRedo = {
-                        if (history.redo()) {
-                            params = history.current.params
-                            retouch = history.current.retouch
-                            activePresetId = "none"
-                        }
+                        if (history.redo()) applySnapshot(history.current)
                     },
                     onExport = {
                         // ⚠️ 这三行必须在 `scope.launch` **之前同步执行**，不能留在协程体里。
@@ -720,128 +756,181 @@ private fun AppRoot(settings: AppSettings) {
                             val fmt = settings.exportFormat
                             val quality = settings.jpegQuality.value
                             val mlKey = mlCacheKey(srcUri, img.bitmap.width, img.bitmap.height, imageEpoch.get())
+                            // 降级导出（拿不到全分辨率时用当前预览）的兜底位图**必须在主线程、
+                            // 进入 withContext 之前**取好，两个理由：
+                            // ① 跨线程读 Compose 快照状态本身就是错的；
+                            // ② 更要命的是 `rendered ?: img.bitmap` —— 用户在导出期间点返回时，
+                            // `onBack` 已把 `rendered` 置为 null，于是 `?:` 会落到**完全没有编辑的
+                            // 代理图**上，而状态行照样显示「已导出（代理分辨率）」。
+                            // 用户拿到的是错的图且毫不知情 —— 这比直接报错危险得多。
+                            val proxyFallback = rendered
                             // A1 取证：导出起点（此刻蒙版/包围盒缓冲都还没分配）
                             DebugLog.i(DebugLog.TAG_EDIT, "export begin", memorySnapshot())
-                            val result: Pair<Uri?, String> = withContext(Dispatchers.Default) {
-                                val rawPath = img.rawCachePath
-                                if (rawPath != null) {
-                                    // 全分辨率 RAW：边解码边分带渲染，不把 196MB 线性图搬进堆
-                                    val (ew, eh) = fitLongEdge(img.width, img.height, profile.fullResLongEdge)
-                                    // 预览阶段的 ML 蒙版按 key 复用；resampleTo 只换尺寸、共享网格（无整幅分配）。
-                                    val mlMask = if (autoOn) MlMaskProvider.skinMaskFor(context, img.bitmap, mlKey) else null
-                                    val mask = buildSkinMask(ew, eh, strokes, radius, mlMask)
-                                    val renderRetouch = buildRenderRetouch(rt, ew, eh, inpStrokes, inpRadius)
-                                    // 对象作用域图层（批次 5）：按**导出分辨率**重建。
-                                    // 代价可以忽略：`ObjectMasks.maskFor` 的网格与目标尺寸无关，
-                                    // `resampleTo(ew, eh)` 只换一个分母（零大分配），
-                                    // 而每层只多一个 `PixelProgram`（几 KB 的 LUT）——
-                                    // 换来的是暗角几何等依赖画面尺寸的量在导出尺寸下同样正确。
-                                    val objMasks = if (layerList.isEmpty()) {
-                                        null
-                                    } else {
-                                        MlMaskProvider.objectMasksFor(context, img.bitmap, mlKey)
-                                    }
-                                    val layerStack =
-                                        buildLayerStack(layerList, { sc -> objMasks?.maskFor(sc) }, ew, eh)
-                                    // 液化锚点（P1p-2c）：预览阶段若已跑过检测，这里直接命中 MlFaceProvider 缓存
-                                    // （同一 mlKey）⇒ 零成本；锚点按**导出分辨率**重新换算（与预览尺寸不同）。
-                                    val faceAnchor = if (beautyActive(renderRetouch.beauty)) {
-                                        MlFaceProvider.facesFor(context, img.bitmap, mlKey)?.firstOrNull()?.let {
-                                            RetouchLayer.FaceAnchor.fromDetection(
-                                                it, img.bitmap.width, img.bitmap.height, ew, eh
-                                            )
-                                        }
-                                    } else null
-                                    // A1 取证：耗峰前一刻（画笔栅格已建，液化条带与包围盒尚未分配）
-                                    DebugLog.i(DebugLog.TAG_EDIT, "raw export pre-render", memorySnapshot())
-                                    val full = EditEngine.renderLinearFile(
-                                        path = rawPath,
-                                        maxLongSide = profile.fullResLongEdge,
-                                        p = params,
-                                        retouch = renderRetouch,
-                                        mask = mask,
-                                        faceAnchor = faceAnchor,
-                                        layers = layerStack
-                                    ) { p ->
-                                        if (p % 20 == 0 || p >= 100) {
-                                            scope.launch(Dispatchers.Main) {
-                                                status = EditorStatus(StatusKind.Info, "正在生成导出… $p%")
-                                            }
-                                        }
-                                        !exportCancelled.get()
-                                    }
-                                    if (full == null) {
-                                        null to "RAW 导出失败"
-                                    } else {
-                                        val out = withContext(Dispatchers.IO) {
-                                            Exporter.export(context, full, fmt, quality)
-                                        }
-                                        full.recycle()
-                                        out to "全分辨率 RAW"
-                                    }
-                                } else {
-                                    var fullBase: DecodedImage? = null
-                                    var fullTarget: Bitmap? = null
-                                    try {
-                                        fullBase = srcUri?.let {
-                                            Decoder.decodeFullRes(context, it, profile.fullResLongEdge)
-                                        }
-                                        if (fullBase != null) {
-                                            // 尺寸先取出来：对象层要按**导出分辨率**建（见 RAW 分支的说明），
-                                            // 所以「建层」必须排在 `renderIntoSrgb` 之前。
-                                            val fw = fullBase.bitmap.width
-                                            val fh = fullBase.bitmap.height
-                                            fullTarget = Bitmap.createBitmap(
-                                                fw, fh, Bitmap.Config.ARGB_8888
-                                            )
-                                            val fobjMasks = if (layerList.isEmpty()) {
-                                                null
-                                            } else {
-                                                MlMaskProvider.objectMasksFor(context, img.bitmap, mlKey)
-                                            }
-                                            val flayerStack =
-                                                buildLayerStack(layerList, { sc -> fobjMasks?.maskFor(sc) }, fw, fh)
-                                            EditEngine.renderIntoSrgb(fullTarget, fullBase.bitmap, params, flayerStack)
-                                            // tonal 之后在已物化目标 Bitmap 上跑 retouch 整图 pass
-                                            val fmlMask = if (autoOn) MlMaskProvider.skinMaskFor(context, img.bitmap, mlKey) else null
-                                            val fmask = buildSkinMask(fw, fh, strokes, radius, fmlMask)
-                                            val fretouch = buildRenderRetouch(rt, fw, fh, inpStrokes, inpRadius)
-                                            // 液化锚点（P1p-2c）：同上，按导出分辨率换算
-                                            val fAnchor = if (beautyActive(fretouch.beauty)) {
-                                                MlFaceProvider.facesFor(context, img.bitmap, mlKey)?.firstOrNull()?.let {
-                                                    RetouchLayer.FaceAnchor.fromDetection(
-                                                        it, img.bitmap.width, img.bitmap.height, fw, fh
-                                                    )
-                                                }
-                                            } else null
-                                            // A1 取证：整幅 retouch 前一刻（目标 Bitmap + 画笔栅格都在堆上，
-                                            // 紧接着 beautyPhase 还会再开两份整幅级缓冲 ⇒ 这里是最可能的爆点）
-                                            DebugLog.i(DebugLog.TAG_EDIT, "srgb export pre-retouch", memorySnapshot())
-                                            RetouchLayer.apply(fullTarget, fretouch, fmask, fAnchor)
-                                            val out = withContext(Dispatchers.IO) {
-                                                Exporter.export(context, fullTarget, fmt, quality)
-                                            }
-                                            out to "全分辨率"
+                            var failure: String? = null
+                            val result: Pair<Uri?, String> = try {
+                                withContext(Dispatchers.Default) {
+                                    val rawPath = img.rawCachePath
+                                    if (rawPath != null) {
+                                        // 全分辨率 RAW：边解码边分带渲染，不把 196MB 线性图搬进堆
+                                        val (ew, eh) = fitLongEdge(img.width, img.height, profile.fullResLongEdge)
+                                        // 预览阶段的 ML 蒙版按 key 复用；resampleTo 只换尺寸、共享网格（无整幅分配）。
+                                        val mlMask = if (autoOn) MlMaskProvider.skinMaskFor(context, img.bitmap, mlKey) else null
+                                        val mask = buildSkinMask(ew, eh, strokes, radius, mlMask)
+                                        val renderRetouch = buildRenderRetouch(rt, ew, eh, inpStrokes, inpRadius)
+                                        // 对象作用域图层（批次 5）：按**导出分辨率**重建。
+                                        // 代价可以忽略：`ObjectMasks.maskFor` 的网格与目标尺寸无关，
+                                        // `resampleTo(ew, eh)` 只换一个分母（零大分配），
+                                        // 而每层只多一个 `PixelProgram`（几 KB 的 LUT）——
+                                        // 换来的是暗角几何等依赖画面尺寸的量在导出尺寸下同样正确。
+                                        val objMasks = if (layerList.isEmpty()) {
+                                            null
                                         } else {
-                                            val proxy = rendered ?: img.bitmap
-                                            val out = withContext(Dispatchers.IO) {
-                                                Exporter.export(context, proxy, fmt, quality)
-                                            }
-                                            out to "代理分辨率"
+                                            MlMaskProvider.objectMasksFor(context, img.bitmap, mlKey)
                                         }
-                                    } finally {
-                                        fullTarget?.recycle()
-                                        fullBase?.bitmap?.recycle()
+                                        val layerStack =
+                                            buildLayerStack(layerList, { sc -> objMasks?.maskFor(sc) }, ew, eh)
+                                        // 液化锚点（P1p-2c）：预览阶段若已跑过检测，这里直接命中 MlFaceProvider 缓存
+                                        // （同一 mlKey）⇒ 零成本；锚点按**导出分辨率**重新换算（与预览尺寸不同）。
+                                        val faceAnchor = if (beautyActive(renderRetouch.beauty)) {
+                                            MlFaceProvider.facesFor(context, img.bitmap, mlKey)?.firstOrNull()?.let {
+                                                RetouchLayer.FaceAnchor.fromDetection(
+                                                    it, img.bitmap.width, img.bitmap.height, ew, eh
+                                                )
+                                            }
+                                        } else null
+                                        // A1 取证：耗峰前一刻（画笔栅格已建，液化条带与包围盒尚未分配）
+                                        DebugLog.i(DebugLog.TAG_EDIT, "raw export pre-render", memorySnapshot())
+                                        val full = EditEngine.renderLinearFile(
+                                            path = rawPath,
+                                            maxLongSide = profile.fullResLongEdge,
+                                            p = params,
+                                            retouch = renderRetouch,
+                                            mask = mask,
+                                            faceAnchor = faceAnchor,
+                                            layers = layerStack
+                                        ) { p ->
+                                            if (p % 20 == 0 || p >= 100) {
+                                                scope.launch(Dispatchers.Main) {
+                                                    status = EditorStatus(StatusKind.Info, "正在生成导出… $p%")
+                                                }
+                                            }
+                                            !exportCancelled.get()
+                                        }
+                                        if (full == null) {
+                                                                            null to "RAW 导出失败"
+                                                                        } else {
+                                                                            // ⚠️ `full` 是 33MP ≈ 132MB 的位图，`recycle()` 必须进 finally：
+                                                                            // 下面 `Exporter.export`（compress）是 OOM 高发点，抛出去就泄漏一整块。
+                                                                            try {
+                                                                                val out = withContext(Dispatchers.IO) {
+                                                                                    Exporter.export(context, full, fmt, quality)
+                                                                                }
+                                                                                out to "全分辨率 RAW"
+                                                                            } finally {
+                                                                                full.recycle()
+                                                                            }
+                                                                        }
+                                    } else {
+                                        var fullBase: DecodedImage? = null
+                                        var fullTarget: Bitmap? = null
+                                        try {
+                                            fullBase = srcUri?.let {
+                                                Decoder.decodeFullRes(context, it, profile.fullResLongEdge)
+                                            }
+                                            if (fullBase != null) {
+                                                // 尺寸先取出来：对象层要按**导出分辨率**建（见 RAW 分支的说明），
+                                                // 所以「建层」必须排在 `renderIntoSrgb` 之前。
+                                                val fw = fullBase.bitmap.width
+                                                val fh = fullBase.bitmap.height
+                                                fullTarget = Bitmap.createBitmap(
+                                                    fw, fh, Bitmap.Config.ARGB_8888
+                                                )
+                                                val fobjMasks = if (layerList.isEmpty()) {
+                                                    null
+                                                } else {
+                                                    MlMaskProvider.objectMasksFor(context, img.bitmap, mlKey)
+                                                }
+                                                val flayerStack =
+                                                    buildLayerStack(layerList, { sc -> fobjMasks?.maskFor(sc) }, fw, fh)
+                                                // ⚠️ retouch 的三个参数必须**在** renderIntoSrgb **之前**算好：
+                                                // 人像精修已经收进该函数内部（阶段顺序
+                                                // `调色 → 精修 → 细节`，与两条 RAW 入口同序）。
+                                                val fmlMask = if (autoOn) MlMaskProvider.skinMaskFor(context, img.bitmap, mlKey) else null
+                                                val fmask = buildSkinMask(fw, fh, strokes, radius, fmlMask)
+                                                val fretouch = buildRenderRetouch(rt, fw, fh, inpStrokes, inpRadius)
+                                                // 液化锚点（P1p-2c）：同上，按导出分辨率换算
+                                                val fAnchor = if (beautyActive(fretouch.beauty)) {
+                                                    MlFaceProvider.facesFor(context, img.bitmap, mlKey)?.firstOrNull()?.let {
+                                                        RetouchLayer.FaceAnchor.fromDetection(
+                                                            it, img.bitmap.width, img.bitmap.height, fw, fh
+                                                        )
+                                                    }
+                                                } else null
+                                                // A1 取证：整幅 retouch 前一刻（目标 Bitmap + 画笔栅格都在堆上，
+                                                // 紧接着 beautyPhase 还会再开两份整幅级缓冲 ⇒ 这里是最可能的爆点）
+                                                DebugLog.i(DebugLog.TAG_EDIT, "srgb export pre-retouch", memorySnapshot())
+                                                // 局部名刻意**不叫** rendered：外层已有一个 Compose 状态 `rendered`，
+                                                // 同名会被遮蔽，将来读代码的人极易误判自己在读哪个。
+                                                val okFull = EditEngine.renderIntoSrgb(
+                                                    fullTarget, fullBase.bitmap, params,
+                                                    fretouch, fmask, fAnchor, flayerStack
+                                                )
+                                                if (!okFull) null to "全分辨率渲染尺寸不匹配"
+                                                else {
+                                                    val out = withContext(Dispatchers.IO) {
+                                                        Exporter.export(context, fullTarget, fmt, quality)
+                                                    }
+                                                    out to "全分辨率"
+                                                }
+                                            } else if (proxyFallback != null) {
+                                                // 降级导出：用**当前预览**那张，而不是「没有编辑的源图」。
+                                                // `proxyFallback` 在主线程取好，这里只读局部 val，
+                                                // 所以「导出期间用户点返回」不可能把它换成未编辑的图。
+                                                val out = withContext(Dispatchers.IO) {
+                                                    Exporter.export(context, proxyFallback, fmt, quality)
+                                                }
+                                                out to "代理分辨率（按当前预览）"
+                                            } else {
+                                                // 兜底也没了（预览已被释放）：必须**明确报错**，
+                                                // 绝不能悄悄导出 `img.bitmap` —— 那是用户没编辑过的原图。
+                                                null to "预览已释放，无法降级导出"
+                                            }
+                                        } finally {
+                                            fullTarget?.recycle()
+                                            fullBase?.bitmap?.recycle()
+                                        }
                                     }
-                                }
+                                    }
+                            } catch (c: CancellationException) {
+                                // 取消（退出编辑器 / scope 被取消）不是失败，原样抛出。
+                                throw c
+                            } catch (t: Throwable) {
+                                // ⚠️ 33MP 路径上的 OOM、Decoder/EditEngine 的 IllegalArgumentException…
+                                // 以前这里**完全没有兜底**：异常会逃出协程，`exporting` 永不复位
+                                // ⇒ 按钮永久停在「导出中」，而且 `onBack` 因为看到 `exporting == true`
+                                // 会跳过位图回收，132MB 一起泄漏。OOM 是 `Error` 不是 `Exception`，
+                                // 所以必须是 `Throwable`。
+                                DebugLog.e(
+                                    DebugLog.TAG_EDIT, "export threw",
+                                    mapOf("err" to (t.message ?: t.javaClass.simpleName))
+                                )
+                                failure = t.javaClass.simpleName
+                                null to "异常"
+                            } finally {
+                                // 无论成功、失败还是抛异常，`exporting` 都必须复位 ——
+                                // 它同时是「导出期间不回收位图」的保护条件，漏复位等于把渲染判死。
+                                exporting = false
+                                DebugLog.i(DebugLog.TAG_EDIT, "export end", memorySnapshot())
                             }
                             val (exportedUri, label) = result
-                            exporting = false
                             status = when {
                                 exportCancelled.get() -> EditorStatus(StatusKind.Info, "已取消导出")
                                 exportedUri != null ->
                                     EditorStatus(StatusKind.Success, "已导出（$label）：$exportedUri")
-                                else -> EditorStatus(StatusKind.Error, "导出失败（$label）")
+                                else -> EditorStatus(
+                                    StatusKind.Error,
+                                    "导出失败（$label）" + (failure?.let { "：$it" } ?: "")
+                                )
                             }
                             DebugLog.i(
                                 DebugLog.TAG_EDIT, "export",
@@ -1046,7 +1135,7 @@ private fun memorySnapshot(): Map<String, Any> {
 /**
  * 编辑器侧的皮肤蒙版（P1p-1b）：委托 [RetouchScale.editorSkinMask]，与相机批处理共用**同一换算口径**。
  *
- * 合成口径（`docs/P1p_DESIGN.md` §7）：
+ * 合成口径（`docs/PHASE_DESIGN_HISTORY.md`（P1+ 部分） §7）：
  * - [autoMask] 为 `null`（自动蒙版关闭/不可用）：无描迹 ⇒ [com.hifn.pixelcake.core.edit.FullMask]
  *   （作用域 = 整幅，滑杆即有可见效果）；有描迹 ⇒ 画笔栅格；
  * - [autoMask] 非 `null`：无描迹 ⇒ ML 蒙版；有描迹 ⇒ `max(ML, 画笔)`。
@@ -1124,15 +1213,16 @@ private fun buildPresetThumbs(base: Bitmap, presets: List<Preset>): Map<String, 
     val out = LinkedHashMap<String, Bitmap>(presets.size)
     for (preset in presets) {
         val target = square.copy(Bitmap.Config.ARGB_8888, true) ?: continue
-        // 影调：与预览/导出同一条 sRGB 管线。
-        EditEngine.renderIntoSrgb(target, square, preset.params)
         // retouch：缩略图上作用域取**整幅**（FullMask）—— 预设的磨皮/追色必须可见，
         // 不能因为「没画蒙版」就整段跳过（那正是 mask = null 的语义）。
+        // ⚠️ 它必须在渲染**之前**算好并作为参数传入：人像精修已收进 renderIntoSrgb 内部，
+        // 以保证 `调色 → 精修 → 细节` 的顺序与预览/导出完全一致。
         val rt = buildRenderRetouch(
             preset.retouch.copy(beauty = BeautyParams(), inpaint = emptyList()),
             side, side
         )
-        RetouchLayer.apply(target, rt, FullMask)
+        // 影调 + 精修 + 细节：与预览/导出同一条 sRGB 管线（retouch 在内部按 FullMask 生效）。
+        EditEngine.renderIntoSrgb(target, square, preset.params, rt, FullMask)
         out[preset.id] = target
     }
     square.recycle()
@@ -1156,5 +1246,11 @@ private fun fitLongEdge(srcW: Int, srcH: Int, longEdge: Int): Pair<Int, Int> {
  * `RetouchLayer.beautyPhase` 会整段跳过，此时检测出来的锚点根本用不上，
  * 白花一次推理（Pixel 6 基准 GPU ≈71ms / CPU ≈218ms，大图更久）。
  */
-private fun beautyActive(b: BeautyParams): Boolean =
-    b.slimFace > 0f || b.slimJaw > 0f || b.eyeEnlarge > 0f
+/**
+ * 是否要跑人脸检测（液化锚点）。
+ *
+ * ⚠️ 必须与 [Beauty.apply] / `RetouchLayer` 的判据**逐字一致**（现在都走
+ * [BeautyParams.hasWiredLiquify]）—— 否则会出现「白跑一次几十毫秒~数秒的检测」，
+ * 或者更糟：「液化生效但没喂锚点」而退回蒙版质心。
+ */
+private fun beautyActive(b: BeautyParams): Boolean = b.hasWiredLiquify

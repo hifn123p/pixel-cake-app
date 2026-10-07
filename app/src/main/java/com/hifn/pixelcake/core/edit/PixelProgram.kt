@@ -9,7 +9,7 @@ import kotlin.math.pow
  *
  * 存在的意义是性能：此前 `processPixel` 每像素返回 `Triple`，内部四个子函数再各返回
  * 一个 `Triple`，33MP 导出约 1.6 亿次对象分配 + 装箱，与「亚秒级」的注释自相矛盾
- * （FIX_LIST F06）。这里把参数在 **渲染开始前** 塌缩成标量字段**与查表**，逐像素路径上
+ * （PHASE_DESIGN_HISTORY.md（审查台账） F06）。这里把参数在 **渲染开始前** 塌缩成标量字段**与查表**，逐像素路径上
  * 只有浮点乘加与查表，零分配、零装箱。
  *
  * ## 塌缩成查表，而不是逐像素算权重（批次 1 / 2 / 3 的关键设计）
@@ -119,6 +119,22 @@ class PixelProgram(
 
     private val lutId: String = params.lutId
     private val lutIntensity: Float = params.lutIntensity.coerceIn(0f, 1f)
+
+    /**
+     * 内置 LUT 的**构造期**收敛结果：`0` = 不执行，`1`=bw `2`=warm `3`=cool `4`=film。
+     *
+     * 为什么不能留字符串：逐像素路径上做 `String.equals` + `when (lutId)` 每像素至少 2 次
+     * 字符串比较，33MP 导出约 6600 万次。顺带修掉「未知 id 静默 no-op 但 `isNeutral()`
+     * 认为它有效」⇒ 会造出一个「建了层、拖参数没反应」的对象层。
+     */
+    private val lutOp: Int = when {
+        lutIntensity <= 0f -> 0
+        lutId == "bw" -> 1
+        lutId == "warm" -> 2
+        lutId == "cool" -> 3
+        lutId == "film" -> 4
+        else -> 0
+    }
 
     // ——————————————— 需要坐标的两级（批次 3）———————————————
 
@@ -258,8 +274,9 @@ class PixelProgram(
             val exp = 1.6f - 1.2f * params.grainRoughness.coerceIn(0f, 1f)
             val amp = params.grainAmount.coerceIn(0f, 1f) * GRAIN_GAIN
             grainShape = FloatArray(256) { b ->
-                val n = (b - 128) / 128f
-                (if (n < 0f) -(-n).pow(exp) else n.pow(exp)) * amp
+                // 映射语义集中在 [GrainNoise.shapeOf]：下标是「带符号字节 `and 0xff`」，
+                // 必须先还原符号再整形，否则噪声与颗粒强度**反向**（详见那里的说明）。
+                GrainNoise.shapeOf(b, exp, amp)
             }
         }
     }
@@ -474,41 +491,47 @@ class PixelProgram(
         }
 
         // ── 分通道曲线（R / G / B）────────────────────────────────
+        // ⚠️ 三张表在**构造期各自独立**地判恒等（`curveOrNull(params.xPoints)`），
+        // 所以这里判空也必须逐通道：只判红通道 ⇒ 用户只调「绿色/蓝色曲线」时
+        // 整段被跳过，滑块拖动完全无反应（静默失效，三层检查都看不出来）。
         val rl = redLut
-        if (rl != null) {
-            r = rl[(r * 255f + 0.5f).toInt().coerceIn(0, 255)] / 255f
-            g = greenLut!![(g * 255f + 0.5f).toInt().coerceIn(0, 255)] / 255f
-            b = blueLut!![(b * 255f + 0.5f).toInt().coerceIn(0, 255)] / 255f
+        val gl = greenLut
+        val bl = blueLut
+        if (rl != null || gl != null || bl != null) {
+            if (rl != null) r = rl[(r * 255f + 0.5f).toInt().coerceIn(0, 255)] / 255f
+            if (gl != null) g = gl[(g * 255f + 0.5f).toInt().coerceIn(0, 255)] / 255f
+            if (bl != null) b = bl[(b * 255f + 0.5f).toInt().coerceIn(0, 255)] / 255f
         }
 
         // ── 内置 LUT ──────────────────────────────────────────────
-        if (lutIntensity > 0f && lutId != "none") {
-            when (lutId) {
-                "bw" -> {
-                    val l = 0.2126f * r + 0.7152f * g + 0.0722f * b
-                    r = l
-                    g = l
-                    b = l
-                }
-                "warm" -> {
-                    r = (r * (1f + 0.16f * lutIntensity)).coerceIn(0f, 1f)
-                    b = (b * (1f - 0.12f * lutIntensity)).coerceIn(0f, 1f)
-                }
-                "cool" -> {
-                    r = (r * (1f - 0.12f * lutIntensity)).coerceIn(0f, 1f)
-                    b = (b * (1f + 0.16f * lutIntensity)).coerceIn(0f, 1f)
-                }
-                "film" -> {
-                    val c = 0.16f * lutIntensity
-                    r = ColorMath.applyContrast((r * (1f + 0.08f * lutIntensity)).coerceIn(0f, 1f), c)
-                    g = ColorMath.applyContrast(g, c)
-                    b = ColorMath.applyContrast((b * (1f - 0.06f * lutIntensity)).coerceIn(0f, 1f), c)
-                    val l2 = 0.2126f * r + 0.7152f * g + 0.0722f * b
-                    val f2 = 1f + 0.12f * lutIntensity
-                    r = l2 + (r - l2) * f2
-                    g = l2 + (g - l2) * f2
-                    b = l2 + (b - l2) * f2
-                }
+        // opcode 在**构造期**由 lutId 收敛成 Int：逐像素做 `String.equals` + `when(lutId)`
+        // 意味着每像素 2 次以上字符串比较，33MP 导出约 6600 万次 —— 与本文件
+        // 「逐像素只有浮点乘加与查表」的核心纪律冲突。未知 id 收敛成 0（no-op）。
+        when (lutOp) {
+            1 -> {
+                val l = 0.2126f * r + 0.7152f * g + 0.0722f * b
+                r = l
+                g = l
+                b = l
+            }
+            2 -> {
+                r = (r * (1f + 0.16f * lutIntensity)).coerceIn(0f, 1f)
+                b = (b * (1f - 0.12f * lutIntensity)).coerceIn(0f, 1f)
+            }
+            3 -> {
+                r = (r * (1f - 0.12f * lutIntensity)).coerceIn(0f, 1f)
+                b = (b * (1f + 0.16f * lutIntensity)).coerceIn(0f, 1f)
+            }
+            4 -> {
+                val c = 0.16f * lutIntensity
+                r = ColorMath.applyContrast((r * (1f + 0.08f * lutIntensity)).coerceIn(0f, 1f), c)
+                g = ColorMath.applyContrast(g, c)
+                b = ColorMath.applyContrast((b * (1f - 0.06f * lutIntensity)).coerceIn(0f, 1f), c)
+                val l2 = 0.2126f * r + 0.7152f * g + 0.0722f * b
+                val f2 = 1f + 0.12f * lutIntensity
+                r = l2 + (r - l2) * f2
+                g = l2 + (g - l2) * f2
+                b = l2 + (b - l2) * f2
             }
         }
 

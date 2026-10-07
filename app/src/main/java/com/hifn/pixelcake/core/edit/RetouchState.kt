@@ -2,7 +2,7 @@ package com.hifn.pixelcake.core.edit
 
 /**
  * P1b-4 人像算子参数（独立于 tonal 的 [EditParams]，作为 retouch 附加层）。
- * 见 `docs/P1b_DESIGN.md` §3：扁平 [EditParams] 保持不动，retouch 走这里，
+ * 见 `docs/PHASE_DESIGN_HISTORY.md`（P1b 部分） §3：扁平 [EditParams] 保持不动，retouch 走这里，
  * 撤销/重做与 tonal 同生命周期管理。
  */
 data class NeutralGrayParams(
@@ -65,6 +65,11 @@ data class BodyPartBeautyParams(
  * 人像精修总开关：哪些部位的美容生效。
  *
  * 当用户只想局部精修（如只放大眼睛、不做磨皮）时，通过此开关控制。
+ *
+ * ⚠️ **当前只有「头部/眼部/面部磨皮」三个开关真正接进了管线**（它们控制的是
+ * [BeautyParams.slimFace] / [slimJaw] / [wiredEyeEnlarge] 这三个**已实现**的量）。
+ * 其余四个开关对应的部位级算子尚未实现，UI 已不再暴露它们（见 [BodyPartBeautyParams]
+ * 的「接线状态」一节）—— 暴露一个不生效的开关比不暴露更糟：用户会以为功能坏了。
  */
 data class RetouchSwitches(
     val enableHead: Boolean = true,
@@ -97,7 +102,28 @@ data class BeautyParams(
     val neckRefine: Float = 0f,
     val shoulderRefine: Float = 0f,
     val waistSlender: Float = 0f,
-)
+) {
+    /**
+     * **真正驱动液化管线**的大眼量。
+     *
+     * ⚠️ 历史上这里有两个**同名不同字段**的「大眼」：[eyeEnlarge] 与
+     * [BodyPartBeautyParams.eyeEnlarge]，而渲染侧只读前者 ⇒ 用户在「眼部」页拖的那条
+     * 完全不生效（而 UI 上它看起来和其他滑块毫无区别）。现在统一取**两者较大值**，
+     * 两处入口都只认这一个判据，`Beauty.apply` / `RetouchLayer` 的 early-return
+     * 也因此与真正会执行的算子一致。
+     */
+    val wiredEyeEnlarge: Float get() = maxOf(eyeEnlarge, bodyParts.eyeEnlarge)
+
+    /**
+     * 是否真的会改变像素（供 [RetouchLayer] 判断要不要进液化阶段）。
+     *
+     * 只认**已接线**的三项：瘦脸 / 下颌 / 大眼。其余字段（`skinSmoothingStrength`、
+     * `teethWhiten`、`noseSlim` …）目前**没有任何算子读取**，把它们算进来会让
+     * 「拖了没反应的滑块」白白触发一次包围盒扫描 + 蒙版质心计算。
+     */
+    val hasWiredLiquify: Boolean
+        get() = slimFace > 0f || slimJaw > 0f || wiredEyeEnlarge > 0f
+}
 
 data class InpaintStroke(
     val x: Int,

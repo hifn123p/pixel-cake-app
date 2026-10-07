@@ -144,7 +144,14 @@ fun ExportSheet(
             Spacer(Modifier.height(Spacing.xs))
 
             if (exporting) {
-                OutlinedButton(onClick = onCancelExport, modifier = Modifier.fillMaxWidth()) {
+                // ⚠️ 三个按钮**必须同高同形**。以前只有这一条没写 `height` ⇒
+                // 同一列里出现三种高度（取消 40dp / 再导一次 48dp / 导出 48dp），
+                // 视觉上像坏掉了。「取消」靠**材质**（描边）表达次级，而不是靠更矮。
+                OutlinedButton(
+                    onClick = onCancelExport,
+                    modifier = Modifier.fillMaxWidth().height(Spacing.controlHeight),
+                    shape = Radius.chip
+                ) {
                     Text("取消导出")
                 }
             } else if (status.kind == StatusKind.Success) {
@@ -159,7 +166,8 @@ fun ExportSheet(
                 // 并补一行「不必重复导出」的说明。任何一项都能单独拦住误触，三项叠加几乎不可能误判。
                 OutlinedButton(
                     onClick = onExport,
-                    modifier = Modifier.fillMaxWidth().height(Spacing.controlHeight)
+                    modifier = Modifier.fillMaxWidth().height(Spacing.controlHeight),
+                    shape = Radius.chip
                 ) {
                     Text("再导一次")
                 }
@@ -171,7 +179,8 @@ fun ExportSheet(
             } else {
                 Button(
                     onClick = onExport,
-                    modifier = Modifier.fillMaxWidth().height(Spacing.controlHeight)
+                    modifier = Modifier.fillMaxWidth().height(Spacing.controlHeight),
+                    shape = Radius.chip
                 ) {
                     Text(if (exportFormat == ExportFormat.PNG) "导出到相册（PNG）" else "导出到相册（JPEG）")
                 }

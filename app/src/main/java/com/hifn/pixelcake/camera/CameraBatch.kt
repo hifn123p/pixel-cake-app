@@ -9,7 +9,6 @@ import com.hifn.pixelcake.core.decode.Exporter
 import com.hifn.pixelcake.core.edit.EditEngine
 import com.hifn.pixelcake.core.edit.RetouchScale
 import com.hifn.pixelcake.core.edit.preset.Preset
-import com.hifn.pixelcake.core.edit.retouch.RetouchLayer
 import com.hifn.pixelcake.diag.DebugLog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -23,7 +22,8 @@ import java.io.File
  *
  * 复用 P1 管线，零算法改动：
  * - RAW：`EditEngine.renderLinearFile`（边解码边分带渲染，不把整幅线性图搬进堆）
- * - JPEG/HEIF：`Decoder.decodeFullRes` → `renderIntoSrgb` + `RetouchLayer` 整图 pass
+ * - JPEG/HEIF：`Decoder.decodeFullRes` → `renderIntoSrgb`（人像精修与细节都已在该入口内部，
+ *   阶段顺序与编辑器导出、RAW 路径完全同序）
  *
  * **取消语义**：只在**文件边界**判断取消。中途停止 `GetObject` 的数据阶段会让数据流与响应错位、
  * 会话必须废弃，因此不做「半张拉取就中断」。
@@ -147,7 +147,7 @@ object CameraBatch {
 
                 onProgress(Progress(index + 1, photos.size, name, "套预设 + 导出"))
                 // 单张兜底：渲染/解码可能抛 OOM（`Error` 也算），一律转成失败项记入 items，
-                // 绝不让一张毁掉整批（P2_DESIGN §D6「任何一步失败都返回带原因的报告」）。
+                // 绝不让一张毁掉整批（PHASE_DESIGN_HISTORY.md（P2 部分） §D6「任何一步失败都返回带原因的报告」）。
                 val result = try {
                     processOne(context, target, photo, preset, longEdge)
                 } catch (c: kotlinx.coroutines.CancellationException) {
@@ -223,9 +223,15 @@ object CameraBatch {
                     val w = decoded.bitmap.width
                     val h = decoded.bitmap.height
                     target = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-                    EditEngine.renderIntoSrgb(target, decoded.bitmap, preset.params)
-                    // sRGB 路径不含 retouch，需在此补一趟整图 pass（与编辑器导出口径一致）
-                    RetouchLayer.apply(target, RetouchScale.toRenderState(preset.retouch, w, h), null)
+                    // ⚠️ 人像精修已收进 renderIntoSrgb：阶段顺序 `调色 → 精修 → 细节`
+                    // 与编辑器导出、RAW 路径完全同序（以前这里是「调色 → 细节」再补精修，
+                    // 等于「先锐化再磨皮」，锐化量程被吃掉一半）。
+                    // mask 传 null = 不圈定作用域 → 精修不执行（与编辑器无画笔时同口径）。
+                    val ok = EditEngine.renderIntoSrgb(
+                        target, decoded.bitmap, preset.params,
+                        RetouchScale.toRenderState(preset.retouch, w, h), null
+                    )
+                    if (!ok) throw IllegalStateException("srgb render size mismatch ${w}x$h")
                     export(context, target, name)
                 } finally {
                     target?.recycle()

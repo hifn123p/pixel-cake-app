@@ -15,7 +15,7 @@ import java.util.concurrent.Executors
  *  - [renderIntoLinear]      ：底图是 [LinearImage]（ARW 的 16-bit 线性母版，滑块实时预览走这条）；
  *  - [renderLinearFile]      ：导出专用，全分辨率 RAW 边解码边分带渲染，不落 JVM 堆。
  *
- * 内存与性能（FIX_LIST F05/F06/F08；P1b-4 `docs/P1b_DESIGN.md` §2）：
+ * 内存与性能（PHASE_DESIGN_HISTORY.md（审查台账） F05/F06/F08；P1b-4 `docs/PHASE_DESIGN_HISTORY.md`（P1b 部分） §2）：
  *  - 一律**分带**处理：一次只持有 `BAND_ROWS` 行的源/目标缓冲，
  *    不再出现「整幅 IntArray + jbyteArray + Bitmap」同时在世的 500MB 峰值；
  *  - 带内**按行切片**并行（见 [runBand]），每帧只构建一次 [PixelProgram]，逐像素零装箱；
@@ -74,13 +74,30 @@ object EditEngine {
 
     private val cores: Int get() = Runtime.getRuntime().availableProcessors().coerceAtLeast(2)
 
-    /** 8-bit sRGB 底图 -> 目标位图（复用同一目标位图，避免每帧重分配）。 */
+    /**
+     * 8-bit sRGB 底图 -> 目标位图（复用同一目标位图，避免每帧重分配）。
+     *
+     * 阶段顺序与 [renderIntoLinear] / [renderLinearFile] **完全一致**：
+     * `逐像素调色（含对象层） → 人像精修 → 细节`。
+     *
+     * ⚠️ 以前 retouch 是由调用方事后补的，于是 JPEG/HEIF 的实际顺序变成
+     * `调色 → 细节 → 精修`，与 RAW 的 `调色 → 精修 → 细节` **相反** ——
+     * 也就是「先锐化再磨皮」，磨皮把刚锐出的边缘糊掉，锐化量程被吃掉一半
+     * （`DetailPass` 的 KDoc 专门论证过「锐化必须晚于磨皮」）。同一张 JPEG 与同一张 RAW
+     * 走同一套参数会得到不同的锐化观感。现在把 retouch 收进本函数，让三条入口同构。
+     *
+     * @return `true` = 这一帧是完整帧；`false` = 尺寸不匹配（**调用方必须消费这个返回值**，
+     *   否则一张尺寸不对的旧位图会被当成品上屏）。
+     */
     fun renderIntoSrgb(
         target: Bitmap,
         base: Bitmap,
         p: EditParams,
+        retouch: RetouchState? = null,
+        mask: RetouchMask? = null,
+        faceAnchor: RetouchLayer.FaceAnchor? = null,
         layers: LayerStack = LayerStack.EMPTY
-    ) {
+    ): Boolean {
         val w = base.width
         val h = base.height
         if (target.width != w || target.height != h) {
@@ -88,7 +105,7 @@ object EditEngine {
                 DebugLog.TAG_EDIT, "render size mismatch",
                 mapOf("target" to "${target.width}x${target.height}", "base" to "${w}x$h")
             )
-            return
+            return false
         }
         val program = PixelProgram(p, frameW = w, frameH = h)
         val ls = layers.layers
@@ -111,9 +128,12 @@ object EditEngine {
             target.setPixels(band, 0, w, 0, y, w, rows)
             y += rows
         }
-        // 细节（批次 4）：整条管线里唯一的**邻域**阶段，在已物化的目标位图上再跑一遍分带。
+        // ① 人像精修（磨皮 / 液化 / 祛瑕 / 追色）—— 与另两条入口同位置：在细节**之前**。
+        if (retouch != null) RetouchLayer.apply(target, retouch, mask, faceAnchor)
+        // ② 细节（批次 4）：整条管线里唯一的**邻域**阶段，在已物化的目标位图上再跑一遍分带。
         // 它**只在整图**——对象层进不来（邻域算子要一张低频参考图，见 ObjectLayer 的剥离规则）。
         applyDetailPass(target, p, logAlways = false)
+        return true
     }
 
     /**

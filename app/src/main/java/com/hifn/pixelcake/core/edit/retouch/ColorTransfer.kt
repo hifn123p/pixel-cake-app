@@ -118,19 +118,42 @@ object ColorTransfer {
         val ref = REFS[params.refId] ?: return
         val intensity = params.intensity.coerceIn(0f, 1f)
         if (intensity <= 0f) return
-        // mono 模式下三通道共用一个亮度 z-score（亮度权重 BT.601），这样才是真正的去色；
-        // 若仍各用各的 z-score，像素会被「按各通道分别反推」⇒ 纯色像素会跑出彩边。
-        val lumaZ = if (ref.mono) {
-            ((stats.mr * 0.299 + stats.mg * 0.587 + stats.mb * 0.114) / stats.sdr).toFloat()
+        // mono 模式下三通道共用**当前像素**的亮度 z-score（亮度权重 BT.601），这样才是真正的
+        // 去色，且**保留了亮度结构**；若仍各用各的 z-score，像素会被「按各通道分别反推」
+        // ⇒ 纯色像素跑出彩边。
+        //
+        // ⚠️ 这里曾经写成「循环外算一次」的常量：
+        //     lumaZ = (mr*0.299 + mg*0.587 + mb*0.114) / sdr
+        // 它与被处理的像素无关 ⇒ 实际执行的是「向一个常量灰偏移 + 按 intensity 线性混合」，
+        // 对比被压掉、亮部被拉向 248 附近（典型图 lumaZ ≈ 2.0 → 目标 248），
+        // 观感是「发灰发白」而不是「黑白」。
+        val lumaMean = if (ref.mono) {
+            (stats.mr * 0.299 + stats.mg * 0.587 + stats.mb * 0.114).toFloat()
         } else 0f
+        // 亮度标准差由逐通道标准差合成（**忽略通道间协方差**）：不精确，但在只有逐通道
+        // 统计量的前提下这是可得的最好近似，且远比「常量 z-score」正确 ——
+        // 关键在于它把「当前像素有多亮」这个信息真正用上了。
+        val lumaStd = if (ref.mono) {
+            val varR = stats.sdr * stats.sdr
+            val varG = stats.sdg * stats.sdg
+            val varB = stats.sdb * stats.sdb
+            sqrt(
+                0.299 * 0.299 * varR + 0.587 * 0.587 * varG + 0.114 * 0.114 * varB
+            ).toFloat().coerceAtLeast(1f)
+        } else 1f
+        val mono = ref.mono
         for (i in 0 until length) {
             val a = pixels[i] and 0xff000000.toInt()
             val or = (pixels[i] shr 16) and 0xff
             val og = (pixels[i] shr 8) and 0xff
             val ob = pixels[i] and 0xff
-            val zr = if (ref.mono) lumaZ else ((or - stats.mr) / stats.sdr).toFloat()
-            val zg = if (ref.mono) lumaZ else ((og - stats.mg) / stats.sdg).toFloat()
-            val zb = if (ref.mono) lumaZ else ((ob - stats.mb) / stats.sdb).toFloat()
+            val zr = if (mono) {
+                ((or * 0.299f + og * 0.587f + ob * 0.114f) - lumaMean) / lumaStd
+            } else {
+                ((or - stats.mr) / stats.sdr).toFloat()
+            }
+            val zg = if (mono) zr else ((og - stats.mg) / stats.sdg).toFloat()
+            val zb = if (mono) zr else ((ob - stats.mb) / stats.sdb).toFloat()
             val tr = (ref.mr + zr * ref.sr) * intensity + or * (1f - intensity)
             val tg = (ref.mg + zg * ref.sg) * intensity + og * (1f - intensity)
             val tb = (ref.mb + zb * ref.sb) * intensity + ob * (1f - intensity)

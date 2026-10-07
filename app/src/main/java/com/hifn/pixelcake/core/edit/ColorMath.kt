@@ -35,7 +35,7 @@ object ColorMath {
      *
      * 此前只有 256 项且建在线性域均匀网格上：线性 0~1/255 已对应 sRGB 0~0.19，
      * 暗部整段塌进第一格，必然出色带。加密到 65536 项后每格宽度 = 1/65535，
-     * 暗部台阶宽度降到原来的 1/256，肉眼不可辨（FIX_LIST F07）。
+     * 暗部台阶宽度降到原来的 1/256，肉眼不可辨（PHASE_DESIGN_HISTORY.md（审查台账） F07）。
      */
     private val LINEAR16_TO_SRGB: FloatArray = FloatArray(65536) { i ->
         linearToSrgb(i / 65535f)
@@ -439,6 +439,24 @@ object GrainNoise {
      * 而 `EditEngine` 确实会从多个渲染线程同时调用进来）。
      */
     val tile: ByteArray by lazy { build() }
+
+    /**
+     * 瓦片查表下标（`0..255`，即带符号字节 `and 0xff`）→ 该处的**亮度扰动**（已含幂整形与强度）。
+     *
+     * ⚠️ [index] **不是**噪声值本身，而是它在字节数组里的下标 —— 必须先符号扩展还原。
+     * 这里的 bug 代价特别大：写成 `(index - 128) / 128f` 会让映射整个反过来，
+     * 于是「噪声越接近 0（最平滑处）颗粒越强、越粗糙处反而越弱」，
+     * 而且 [EditParams.grainRoughness] 的幂整形也作用在错的量上（越平滑越被顶狠）。
+     * 抽成具名函数就是为了让「下标 ≠ 值」这件事在代码里显式，测试能钉住方向。
+     *
+     * @param exp 幂指数（1.0 = 恒等）
+     * @param amp 幅度（已含 `grainAmount` 与 `GRAIN_GAIN`）
+     */
+    fun shapeOf(index: Int, exp: Float, amp: Float): Float {
+        val v = index.toByte().toInt()          // 符号扩展回 [-127, 127]（build 已排除 -128）
+        val n = v / 128f
+        return (if (n < 0f) -(-n).pow(exp) else n.pow(exp)) * amp
+    }
 
     /** 整数哈希（xorshift 混合）。取高位做噪声，`(x, y)` 相同的输入永远得到相同的输出。 */
     private fun hash(x: Int, y: Int): Int {

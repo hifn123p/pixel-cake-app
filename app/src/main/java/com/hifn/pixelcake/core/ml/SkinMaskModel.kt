@@ -9,7 +9,7 @@ package com.hifn.pixelcake.core.ml
  * 2. **可换**：将来上人脸解析（P1p-3）或 NPU 版本模型时，上层的 [MlMaskProvider] 不用动。
  *
  * **约定**：实现类**不得向上抛异常**——推理失败一律返回 `null`，由调用方按
- * `docs/P1p_DESIGN.md` §9 的降级链回退（回退到画笔蒙版 → `FullMask`）。
+ * `docs/PHASE_DESIGN_HISTORY.md`（P1+ 部分） §9 的降级链回退（回退到画笔蒙版 → `FullMask`）。
  */
 interface SkinMaskModel {
 

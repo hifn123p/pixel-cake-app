@@ -111,7 +111,7 @@ e: .../MainActivity.kt:158:75  Argument type mismatch: actual type is 'MatchGrou
 ### 4. 文档同步
 
 - `README.md`：特性表由「规划中」更新为「已实现」，模块树与技术栈对齐当前实现。
-- `docs/UI_DESIGN.md` / `docs/UI_REDESIGN.md`：控件高度（44→48dp）、chip 行改为换行组、滑块拇指尺寸等与实现对齐。
+- `docs/UI_DESIGN.md`（含 §4.0.8）：控件高度（44→48dp）、chip 行改为换行组、滑块拇指尺寸等与实现对齐。
 
 ## ⭐ 复盘（供后人少走弯路）
 

@@ -73,7 +73,7 @@ class NeutralGrayTest {
     }
 
     /**
-     * 分带等价性（FIX_LIST R10 方案 A）：`NeutralGray.apply` 在**大图**上走分带路径
+     * 分带等价性（PHASE_DESIGN_HISTORY.md（审查台账） R10 方案 A）：`NeutralGray.apply` 在**大图**上走分带路径
      * （`h > BAND_ROWS + radius`），必须与「朴素整幅实现」逐位一致 —— 否则分带就是把画质悄悄改了。
      *
      * 参照实现对 box blur 与混合公式**逐像素直算**（不复用被测代码），是最强的口径。

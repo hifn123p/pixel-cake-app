@@ -2,7 +2,7 @@
 
 > 参照 Lightroom 的「蒙版 / 局部调整」：**同一套调色参数，作用域可以是整图，也可以是识别到的某个对象。**
 > 本文是这一批（下称「批次 5」）的**唯一设计依据**。姊妹文档：`docs/TONING_DESIGN.md`（参数体系）、
-> `docs/UI_DESIGN.md`（界面）、`docs/P1p_DESIGN.md`（端侧推理栈）。三者冲突时以本文为对象作用域部分的准。
+> `docs/UI_DESIGN.md`（界面）、`docs/PHASE_DESIGN_HISTORY.md` P1+ 部分（端侧推理栈）。三者冲突时以本文为对象作用域部分的准。
 
 ---
 

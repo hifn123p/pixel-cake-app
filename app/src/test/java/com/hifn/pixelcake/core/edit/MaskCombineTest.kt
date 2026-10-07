@@ -7,7 +7,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * 蒙版合并口径单测（P1p-1，`docs/P1p_DESIGN.md` §7）：`max` 语义 + `null` 分支。
+ * 蒙版合并口径单测（P1p-1，`docs/PHASE_DESIGN_HISTORY.md`（P1+ 部分） §7）：`max` 语义 + `null` 分支。
  */
 class MaskCombineTest {
 

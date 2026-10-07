@@ -7,7 +7,7 @@ coreKtx = "1.17.0"
 activityCompose = "1.12.3"
 lifecycleRuntimeKtx = "2.10.0"
 
-# P1+（docs/P1p_DESIGN.md）：端侧推理改走 LiteRT（TFLite 继任者）。
+# P1+（docs/PHASE_DESIGN_HISTORY.md（P1+ 部分））：端侧推理改走 LiteRT（TFLite 继任者）。
 # 版本对齐 LiteRT main 分支源码（Environment.create / CompiledModel.create(AssetManager,...) /
 # Accelerator{NONE,CPU,GPU,NPU}）；Google Maven 上 <latest> 即 2.2.0。
 # 注意：litert 只在 Google Maven（settings.gradle.kts 已配 google()）。

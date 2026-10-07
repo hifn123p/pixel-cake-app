@@ -7,7 +7,7 @@ import kotlin.math.abs
 /**
  * 像素管线纯函数单测（JVM，无需设备）。
  *
- * 管线重构（FIX_LIST F06）后，逐像素逻辑从 `ColorMath.processPixel` 迁移到
+ * 管线重构（PHASE_DESIGN_HISTORY.md（审查台账） F06）后，逐像素逻辑从 `ColorMath.processPixel` 迁移到
  * [PixelProgram]：`processPixel` 每像素返回 `Triple`、内部四子函数再各返回 `Triple`，
  * 已被塌缩成「预编译标量增益 + 查表」、逐像素零分配零装箱。这里改测 [PixelProgram]，
  * 语义与原用例一致——输入为 8-bit sRGB，输出为打包的 0xAARRGGBB。

@@ -7,7 +7,7 @@ import com.google.ai.edge.litert.CompiledModel
 import com.google.ai.edge.litert.Environment
 
 /**
- * [FaceDetector] 的 LiteRT 实现（P1p-2b，`docs/P1p_DESIGN.md` §15）。
+ * [FaceDetector] 的 LiteRT 实现（P1p-2b，`docs/PHASE_DESIGN_HISTORY.md`（P1+ 部分） §15）。
  *
  * 与 [LiteRtSkinMaskModel] 同构：**LiteRT v2 `CompiledModel`**、`Accelerator.GPU → CPU` 显式级联、
  * 一切失败收敛为 `null`。模型文件随包：
@@ -144,6 +144,10 @@ class LiteRtFaceDetector private constructor(
                 "face detector unavailable",
                 kv("lastErr", lastErr ?: IllegalStateException("unknown")),
             )
+            // ⚠️ 全部档位失败 ⇒ 没有任何实例接管 env ⇒ 必须亲手close，
+            // 否则 Environment 持有的 native 上下文（GPU delegate 的资源池）整块泄漏。
+            // 与 `LiteRtSkinMaskModel.createOrNull` 同一处理。
+            runCatching { env?.close() }
             return null
         }
     }
