@@ -366,8 +366,37 @@ ktlint / detekt **未引入**（无本地构建环境时盲开容易让 CI 误�
 
 ### 5.3 本地 → GitHub：推送机制与 shell 纪律
 
-**⚠️ push 必须走 `ssh.github.com:443`**：本机 `hosts` 把 `github.com` 黑洞到 `127.0.0.1`
-（连带 `api.github.com` / `raw.githubusercontent.com`），直连 22 端口 = `Connection refused` / `reset`。
+> 🔴 **2026-10-07 更新：SSH 通道在本机已完全不可用，push/fetch 一律走 HTTPS。**
+> 详见下面的「通道实测」。**不要再按老办法试 SSH**，那会白等 3~4 次超时。
+
+#### 通道实测（2026-10-07）
+
+| 通道 | 结果 |
+|---|---|
+| `ssh.github.com:443`（§1.3 老办法） | ❌ `Connection reset` / `Connection timed out`（TCP 能建，SSH 层被阻断） |
+| `github.com:22` | ❌ `Connection refused` |
+| `ssh.github.com` DNS | 只解析到 `20.205.243.160`（单IP，无备选） |
+| `https://github.com` | ✅ **200，且无 MITM 证书问题** |
+| 系统 credential manager | ✅ 已有 github.com 凭据（`credential.helper = manager`） |
+
+⇒ **可用路径 = HTTPS**（凭据走系统管理器，仓库内仍零 `.env`、零 token）：
+
+```bash
+# 推送（不改仓库 remote 配置，只在这条命令上用 URL）
+git push https://github.com/hifn123p/pixel-cake-app.git main
+# 刷新远端跟踪引用并核对 sha
+git fetch https://github.com/hifn123p/pixel-cake-app.git main:refs/remotes/origin/main
+git rev-parse HEAD origin/main          # 两个 sha 必须一致
+```
+
+⚠️ 查 GitHub API（CI 状态 / job 日志）也走 HTTPS：`api.github.com` 同样是 200，
+token 从 `git credential fill` 取，**只在进程内存里**，不落盘、不打印。
+⚠️ job 日志端点会 **302 到 blob 签名 URL** —— 第二个请求**绝不能**再带
+`Authorization` 头（会 401），所以要手动处理重定向。
+
+<details><summary>老办法（SSH，当前已知不可用，留作网络恢复后的备选）</summary>
+
+**⚠️ push 走 `ssh.github.com:443`**：本机 `hosts` 把 `github.com` 黑洞到 `127.0.0.1`，直连 22 端口 = refused。
 **只在单条命令上临时覆盖，不改仓库 / 全局配置**：
 
 ```bash
@@ -375,18 +404,32 @@ GIT_SSH_COMMAND="ssh -o StrictHostKeyChecking=no -o ConnectTimeout=20 -p 443 -o 
   git push origin main
 ```
 
+</details>
+
+#### 其余推送纪律（仍然有效）
+
 - **全量推送**：`git add -A` 提交**全部**改动，不挑拣、不逐项询问；
   **fast-forward，绝不 force push / 改历史**。
+- ⚠️ **`git add -A` 之后必须确认子模块没被误删**（`git diff --cached --name-status | findstr LibRaw`
+  应无输出）。两个子模块在 index 里是 `mode 160000` 的 gitlink，未初始化时目录为空 ——
+  历史上在这里丢过子模块。**不要用 `git commit -a`**。
 - **commit / tag 的消息一律走实体文件**：`git commit -F <msgfile>`（`tag` 同理）。
   - ⚠️ `-m` 里的**反引号会被 bash 当命令替换执行** ⇒ 消息里被反引号包住的标识符
     **静默消失**（还吐 `xxx: command not found`）；
   - ⚠️ `-F /dev/stdin` 在本机 shell **读不到**（`/proc/self/fd/0` 不存在）⇒ 必须写**真实文件**。
+  - ⚠️ **必须写绝对路径**：`git commit -F .git/XXX.txt` 在本机解析异常（报「系统找不到指定的路径」），
+    而 `git commit -F "D:/AI_Project/.git/XXX.txt"` 正常。
 - ⚠️ **本机 shell 会重复执行同一条命令** ⇒ `git commit` 回显 `nothing to commit, working tree clean`
   是**假警报**（其实第一次已提交成功）；`git tag -a X` 报 `already exists` 是**已建好**。
   应对：commit / tag **拆成单独命令**，用 `git log` / `git rev-parse HEAD` /
   `git ls-remote --tags` 复核；push 重复无害。
 - 汇报前用 `git rev-parse HEAD origin/main` 确认两个 sha 相同（工作树与远程对齐）。
-- CI 轮询须**前台 + 长超时**（脚本 `ci_status.py`，单次上限 1200s，超时按 `run_id` 续轮）。
+- CI 轮询须**前台 + 长超时**（单次上限 1200s，超时按 `run_id` 续轮）。
+- ⚠️ **PowerShell 传参的坑**（本机 shell 在 cmd / PowerShell 间会变）：
+  - `| head -20`、`| grep` 这类 Unix 管道**不存在**，用 `| Out-String`；
+  - `python -c "..."` 里的 **反引号会被 PowerShell 当转义符**、`$` 会被展开** ⇒ 代码里两者都不能出现**；
+  - `git credential fill` 的多行输入经PowerShell 管道会丢字段（报 `missing protocol field`）⇒ 改用
+    `python` 的 `subprocess.run(input=...)`，或把脚本写成文件。
 
 ### 5.4 发版两步走 + run 数规律
 
