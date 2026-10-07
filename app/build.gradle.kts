@@ -16,8 +16,9 @@ android {
         targetSdk = libs.versions.targetSdk.get().toInt()
         // 与 GitHub Release tag 一一对应：打 v0.4.3 时同步抬这里，
         // 否则「关于」页(AboutSheet 显示 v${versionName} (${versionCode}))会与 Release 页对不上。
-        versionCode = 11
-        versionName = "0.4.6"
+        // v0.4.7：全量代码审查修复（21 个 P0 + 性能批次 + UI 规范），详见 docs/Github_CI.md。
+        versionCode = 12
+        versionName = "0.4.7"
 
         // 刻意**不声明** testInstrumentationRunner（审计 M8）：本项目没有 androidTest 源集、
         // 也没有 androidx.test 依赖，裸声明是死配置 —— 一旦有人加仪器测试会因缺依赖直接红；

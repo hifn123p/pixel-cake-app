@@ -9,7 +9,7 @@
 [![targetSdk](https://img.shields.io/badge/targetSdk-36-blue)](https://developer.android.com)
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.2.21-7F52FF?logo=kotlin)](https://kotlinlang.org)
 [![Compose](https://img.shields.io/badge/Jetpack%20Compose-Material3%204285F4?logo=jetpackcompose)](https://developer.android.com/jetpack/compose)
-[![Version](https://img.shields.io/badge/version-v0.4.6-success)](https://github.com/hifn123p/pixel-cake-app/releases)
+[![Version](https://img.shields.io/badge/version-v0.4.7-success)](https://github.com/hifn123p/pixel-cake-app/releases)
 [![Build](https://img.shields.io/badge/Build-GitHub%20Actions-2088FF?logo=githubactions)](https://github.com/features/actions)
 [![License](https://img.shields.io/badge/License-TBD-lightgrey)](#许可)
 
@@ -139,12 +139,13 @@ com.hifn.pixelcake
 
 | 版本 | 内容 |
 |---|---|
+| `v0.4.7` | **全量代码审查修复**：21 个 P0（撤销丢对象层、绿/蓝曲线静默跳过、颗粒映射反向、JPEG 与 RAW 阶段顺序不一致、导出 0 字节图、native 句柄竞态、USB close 竞态、PTP 失步、19 个美容滑块无效果等）+ 性能批次（逐像素 64 位除法、900MB 分带垃圾、131MB 无谓重采样）+ UI 规范修复 + 新增 13 条回归断言 |
 | `v0.4.6` | ML 缓存键改为**会话代次**（修「同 URI 更新后误用旧人脸/分割」）+ 渲染提交判据补 `completed`；chip/预设改按宽度换行；控件尺寸回调（一级分类 48dp、滑块拇指 20dp） |
 | `v0.4.5` | 细部位美容 + 44 套分类预设 + 追色 mono 去色 + 曲线/直方图工具 |
 | `v0.4.4` | UI Redesign v2.0 |
 | `v0.4.0` / `v0.4.1` | 调色批次 1~4（81 项）/ 批次 5 对象作用域 |
 
-（`v0.1.0` → `v0.4.6` tag 齐全，Release 页可下载签名 APK。）
+（`v0.1.0` → `v0.4.7` tag 齐全，Release 页可下载签名 APK。）
 
 ---
 
