@@ -411,7 +411,8 @@ private fun AppRoot(settings: AppSettings) {
                                 // 「先锐化再磨皮」—— 磨皮把刚锐出的边缘糊掉，锐化量程被吃掉一半。
                                 // 返回值必须接住：尺寸不匹配 = 这一帧不是成品。
                                 EditEngine.renderIntoSrgb(
-                                    bmp, src.bitmap, p, renderRetouch, mask, faceAnchor, layerStack
+                                    bmp, src.bitmap, p, renderRetouch, mask,
+                                    faceAnchor = faceAnchor, layers = layerStack
                                 )
                             }
                         }
@@ -873,7 +874,8 @@ private fun AppRoot(settings: AppSettings) {
                                                 // 同名会被遮蔽，将来读代码的人极易误判自己在读哪个。
                                                 val okFull = EditEngine.renderIntoSrgb(
                                                     fullTarget, fullBase.bitmap, params,
-                                                    fretouch, fmask, fAnchor, flayerStack
+                                                    fretouch, fmask,
+                                                    faceAnchor = fAnchor, layers = flayerStack
                                                 )
                                                 if (!okFull) null to "全分辨率渲染尺寸不匹配"
                                                 else {

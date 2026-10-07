@@ -803,10 +803,6 @@ private fun BeautyPartPanel(
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
-    @Composable
-    fun eyesSliders() {
-        slider("大眼", bp.eyeEnlarge, 0f..1f) { p, v -> p.copy(eyeEnlarge = v) }
-    }
 
     if (tabId == ALL_PARTS_ID) {
         eyesSliders()

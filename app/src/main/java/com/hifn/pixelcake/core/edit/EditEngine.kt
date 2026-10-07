@@ -380,7 +380,9 @@ object EditEngine {
         layers: LayerStack = LayerStack.EMPTY
     ): Bitmap {
         val out = Bitmap.createBitmap(base.width, base.height, Bitmap.Config.ARGB_8888)
-        renderIntoSrgb(out, base, p, layers)
+        // ⚠️ 必须用具名参数传 `layers`：`renderIntoSrgb` 的第 4 个形参是 `retouch`，
+        // 位置传参会把 LayerStack 塞给 RetouchState?（编译期才发现，但白等一轮 CI）。
+        renderIntoSrgb(out, base, p, layers = layers)
         if (recycleBase) base.recycle()
         return out
     }
