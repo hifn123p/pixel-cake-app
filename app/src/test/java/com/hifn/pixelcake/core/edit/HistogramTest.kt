@@ -61,9 +61,12 @@ class HistogramTest {
 
     @Test
     fun meanShift_brighterAfterMeansPositive() {
-        val before = IntArray(4)
+        // ⚠️ 数组必须开满 [Histogram.BINS]：索引 10 / 200 分别是「暗端」与「亮端」的落点。
+        // 写成 `IntArray(4)` 会在 `before[10] = 100` 处抛 IndexOutOfBoundsException ——
+        // 表现出来是「测试 FAILED 但没有 expected/but was」，很容易被误读成断言不通过。
+        val before = IntArray(Histogram.BINS)
         before[10] = 100
-        val after = IntArray(4)
+        val after = IntArray(Histogram.BINS)
         after[200] = 100
         // 平均灰阶从 10 抬到 200：(200-10)/128 ≈ +1.48
         assertEquals((200 - 10) / 128f, Histogram.meanShift(before, after), 1e-3f)
@@ -71,7 +74,7 @@ class HistogramTest {
 
     @Test
     fun meanShift_identicalIsZero() {
-        val b = IntArray(4).also { it[3] = 7; it[9] = 3 }
+        val b = IntArray(Histogram.BINS).also { it[3] = 7; it[9] = 3 }
         assertEquals(0f, Histogram.meanShift(b, b.copyOf()), 1e-6f)
     }
 }

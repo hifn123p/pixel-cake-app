@@ -582,6 +582,14 @@ python .workbuddy/tools/kotlin_gates.py --root app/src/main/java --extra-root ap
 - 修「静默跳过」类 bug ⇒ 断言**该参数单独作用时输出真的变**。
 - 修「效果弱化」类 bug ⇒ 断言**动态范围**（如 bw 后的 `hi - lo`），
   只断言「三通道相等」一定漏。
+- ⚠️ **2026-10-25 追加：CI 日志里「测试 FAILED」但**没有** `expected:/but was:` 行
+  ⇒ 大概率不是断言不通过，而是**测试自己抛了异常**（`IndexOutOfBoundsException` 之类）。
+  本地无编译器时这个区别极易误判：会以为是「被测代码算错了」，于是去改**生产代码**。
+  实际那次是 `HistogramTest` 里 `IntArray(4)` 却写 `before[10] = 100` ⇒ 越界。
+  ⇒ **读 CI 日志的第一件事**：先确认有没有 `expected/but was`；没有就去看 `at <测试类>.<方法>(行号)`
+  指向哪一行 —— 那是**抛异常的那一行**，不是「断言失败的那一行」。
+  ⇒ 写测试时的对应纪律：**数组/集合的尺寸要覆盖你打算写入的索引**，
+  写 `IntArray(BINS)` 而不是 `IntArray(4)`（前者表达意图，后者在越界时炸）。
 
 ### 7.6 本次未做、留作后续
 
