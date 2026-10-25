@@ -389,6 +389,37 @@ git fetch https://github.com/hifn123p/pixel-cake-app.git main:refs/remotes/origi
 git rev-parse HEAD origin/main          # 两个 sha 必须一致
 ```
 
+#### 🔴 `github.com` 的 connect 会被**抽样阻断** ⇒ push 必须带重试
+
+2026-10-25 实测（发 v0.5.0 时）：
+
+| 现象 | 说明 |
+|---|---|
+| `https://api.github.com` | ✅ 稳定 200 |
+| `https://github.com`（git 端点） | ❌ `Failed to connect ... after 21s`（**connect 超时**，不是 TLS 或 HTTP 错误） |
+| 同一 IP（`20.205.243.166`）用 python 直连 | ✅ 握手成功并返回 200 |
+| 换 IP（`140.82.112.3` / `20.27.177.116` / `140.82.121.3`） | ✅ TLSv1.3 握手成功 |
+
+⇒ 结论：**同一时刻不同 IP 的可达性不同，且同一 IP 的可达性随时间变化** ——
+是链路层抽样阻断，不是配置错误、不是证书问题、也不是 hosts 黑洞。
+
+⇒ **push 的正确姿势（两条一起用）**：
+
+```bash
+# 1) 轮换 IP（curloptResolve 只作用于本条命令，不改仓库/全局配置；git 2.53 支持）
+git -c http.curloptResolve=github.com:443:140.82.112.3 \
+    push https://github.com/hifn123p/pixel-cake-app.git main
+# 2) 失败就重试（push 幂等，重试无害）
+```
+
+实测：直连 `github.com` 连推 12 次全失败，改用 `curloptResolve` 固定到
+`140.82.112.3` 后**一次成功**。选 IP 的办法是先用 TLS 握手探一遍
+（`socket.create_connection` + `ssl.wrap_socket(server_hostname='github.com')`），
+握手成功的 IP 再交给 git。
+
+⚠️ **别把「连不上」误判成「仓库/凭据/权限问题」** —— 先看错误类型：
+`Failed to connect after Ns` = 链路层；`401/403` = 凭据；`SSL` = 证书/代理。
+
 ⚠️ 查 GitHub API（CI 状态 / job 日志）也走 HTTPS：`api.github.com` 同样是 200，
 token 从 `git credential fill` 取，**只在进程内存里**，不落盘、不打印。
 ⚠️ job 日志端点会 **302 到 blob 签名 URL** —— 第二个请求**绝不能**再带

@@ -1,7 +1,12 @@
 package com.hifn.pixelcake.core.edit
 
 /**
- * 亮度直方图（`docs/CURVE_HISTOGRAM_DESIGN.md` §1）。
+ * 亮度直方图。
+ *
+ * ⚠️ 2026-10-25：KDoc 原先指向 `docs/CURVE_HISTOGRAM_DESIGN.md` §1 ——
+ * 那份文档**从来不存在**（悬空引用挂了至少两个版本，`docs/Github_CI.md` 也记过它）。
+ * 曲线与直方图的设计约定实际写在 `docs/TONING_DESIGN.md`（曲线参数与管线顺序）
+ * 与 `docs/UI_DESIGN.md` §4.0.10（直方图的 UI 入口在「明暗」页），此处按实际归属登记。
  *
  * ## 为什么要有它
  *
