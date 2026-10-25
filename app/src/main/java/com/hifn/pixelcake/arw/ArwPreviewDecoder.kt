@@ -128,11 +128,22 @@ object ArwPreviewDecoder {
         }
     }
 
-    private fun computeSampleSize(w: Int, h: Int, maxEdge: Int): Int {
-        if (w <= 0 || h <= 0) return 1
+    /**
+     * inSampleSize 采样：先按 AOSP 惯例（只在对折后仍 ≥ maxEdge 时继续对折），
+     * 再补一条**超预算再对折**：结果长边超过 maxEdge 的 1.5 倍就再降半档。
+     *
+     * 为什么需要第二条：纯 AOSP 惯例在 7008px 源 / 2048 目标下会停在 s=2（3504×2336
+     * ≈ 31MB ARGB），是「长边 ≤2048 ≈ 11MB」预算的 3 倍，而这张位图整个编辑会话常驻
+     * （占位图 / proxyFallback / ML 推理源）。补档后 7008 → 1752×1168 ≈ 8MB，
+     * 4000px 源 → 2000（恰好命中目标）；只有 1.0~1.5 倍的小幅超预算（如 3000 → 3000）保留，
+     * 避免为省几 MB 把预览降得过软。
+     */
+    internal fun computeSampleSize(w: Int, h: Int, maxEdge: Int): Int {
+        if (w <= 0 || h <= 0 || maxEdge <= 0) return 1
         val longEdge = maxOf(w, h)
         var s = 1
         while (longEdge / (s * 2) >= maxEdge) s *= 2
+        if (longEdge / s > maxEdge * 3 / 2) s *= 2
         return s
     }
 }

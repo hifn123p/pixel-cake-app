@@ -449,11 +449,14 @@ GIT_SSH_COMMAND="ssh -o StrictHostKeyChecking=no -o ConnectTimeout=20 -p 443 -o 
 
 ### 5.5 已发布的 tag
 
-`v0.1.0` → `v0.4.6` **全部齐全**（`v0.4.3` / `v0.4.4` / `v0.4.5` / `v0.4.6` 均已发布）。
+`v0.1.0` → `v0.5.0` **全部齐全**（`v0.4.3` / `v0.4.4` / `v0.4.5` / `v0.4.6` / `v0.4.7` / `v0.5.0` 均已发布）。
 
 - `v0.4.0` 调色批次 1~4（81 项）；`v0.4.1` 批次 5 对象作用域；
   `v0.4.4` UI Redesign v2.0；`v0.4.5` 细部位美容 + 44 套分类预设 + 追色 mono 去色 + 曲线/直方图；
-  `v0.4.6` ML 缓存键改为会话代次 + 渲染提交判据（`completed`）+ `GlassChipRow`/`PresetThumbRow` 换行 + UI 尺寸回调。
+  `v0.4.6` ML 缓存键改为会话代次 + 渲染提交判据（`completed`）+ `GlassChipRow`/`PresetThumbRow` 换行 + UI 尺寸回调；
+  `v0.4.7` **第一轮全量审查**（21 个 P0 + 性能批次 + UI 规范 + 13 条回归断言，详见 §7）；
+  `v0.5.0` **第二轮全量审查**（3 个 P1 + 12 个 P2 + 删 `ui/editor/curves/` 死代码 + 3 个新测试）
+  与 **UI v2.1**（预览缩放手势 + 调色菜单 7→6 + 尺寸回调 + RGB 直方图，详见 §8 与 `UI_DESIGN.md` §4.0.9/§4.0.10）。
 - ⚠️ **任何用作判据的记忆值，用前先 `git grep` 复核一次**。
   （曾两次因为「记着的版本号 / 尺寸」而误判，两次都是记忆过期，不是代码有问题。）
 
@@ -586,9 +589,55 @@ python .workbuddy/tools/kotlin_gates.py --root app/src/main/java --extra-root ap
 |---|---|---|
 | `MainActivity`（1200 行）拆 `RenderCoordinator` / `ExportController` / `EditDocument` | `MainActivity.kt` | 是本项目**最大**的改动面，需独立一轮；§7.2 第 4 条已先把最危险的三条判据钉死 |
 | `chromeAlpha` 在 `EditorScreen` 主体读取 ⇒ 淡出期间每帧重组整个编辑页 | `EditorScreen.kt` | 需重构成 `@Stable RenderHolder`，与上一条同一轮做 |
-| `curves/` 三个文件是**死代码**，且内含 3 个 P0（`pointerInput(Unit)` 捕获陈旧值、命中测试把 dp 当 px、拖动灵敏度 1:1） | `ui/editor/curves/` | 要么接回曲线分类（同批修那 3 条），要么整包删除。**当前默认「不接」** —— 曲线功能已由 `ParamPanel` 的 `CurveTab`（亮度/R/G/B）覆盖 |
+| ~~`curves/` 三个文件是死代码，且内含 3 个 P0~~ **已处置（2026-10-25）**：整包删除，同时删掉包内第 4 个 P0（chip `clickable` 未传 `indication = null`）。曲线功能由 `ParamPanel` 的 `CurveTab`（亮度/R/G/B）承担 | ~~`ui/editor/curves/`~~ | 已按「不接」分支执行；删除前 grep 核实包外零引用 |
 | 部位级美容算法（面部/身体/腿部磨皮、唇部、祛黑眼圈、瘦头/额头、腿长、手部） | `core/edit/retouch/` | 需要新算子（分区蒙版强度 / 局部形变），不是接线能解决的 |
-| `PtpTransport` 抽 `BulkIo` 接口以便 JVM 打桩 | `camera/PtpTransport.kt` | §7.4 已把最危险的两条堵住；打桩化收益很大，但会改动传输层结构 |
+| `PtpTransport` 抽 `BulkIo` 接口以便 JVM 打桩 | `camera/PtpTransport.kt` | §7.4 已把最危险的两条堵住（2026-10-25 又补上 `downloadObject` 命令发送绕锁的一处）；打桩化收益很大，但会改动传输层结构 |
 | ML 推理移出 `renderMutex`；分带缓冲复用到 `DetailPass` 之外的全部路径 | 多处 | 属于性能批次，需配合真机耗时日志验证 |
+
+---
+
+## §8 第二轮全量审查（2026-10-25）的产物与新纪律
+
+> 覆盖 `app/src` 全部文件（含 cpp）：`core/edit`、`core/ml`、`camera` 逐文件人工精读，
+> `decode/ARW/JNI` 与 `ui/MainActivity` 两域由子代理精读、人工逐条验证后修复。
+> 修复前基线：v0.4.7、括号配平 0 问题、CI 全绿。本轮共修 **3 个 P1 + 12 个 P2**，删死代码 3 文件，
+> 新增/补充 3 个测试文件（采样档位、直方图纯函数、ARW 超大候选回退）。
+
+### 8.1 本轮修复清单（按域）
+
+| 域 | 修复 |
+|---|---|
+| camera | **P1** `PtpTransport.downloadObject` 的命令发送直接调 `connection.bulkTransfer`，**绕过了 §7.4 的 ioLock**（入口也无 closed/desynced 检查）→ 改走 `bulkOut` + 入口判据 |
+| decode | **P1** 代理解码欠降采样：AOSP 采样惯例在 33MP/2048 下停在 3504×2336（≈31MB，预算 3 倍且整会话常驻）→ 两个采样函数补「超目标 1.5 倍再对折」档（`ProxySampleSizeTest` 钉住） |
+| ui | **P1** 拖滑块途中第二根手指点未 inert 的 chip（二级分组/作用域/画布工具）会销毁正在拖的 `ParamSlider`，M3 Slider 销毁时**不回调** `onValueChangeFinished` ⇒ `dragging` 卡 true、顶栏永久 `alpha=0` 且不可点 → `ParamSlider` 加 `DisposableEffect` onDispose 兜底复位 |
+| ui | 导出协程在 `Dispatchers.Default` 内读快照状态 `params`（两处渲染入口）→ 主线程先捕获 `tonalParams`；`onBack` 主线程同步删 ARW 缓存 → 切 `Dispatchers.IO`；`openInEditor` 外层 `runCatching` 吞掉 Decoder rethrow 的取消 → 显式 catch 重抛 |
+| decode | `Decoder` 两个入口 `catch(Throwable)` 吞 `CancellationException`（取消伪装成「无法解码」）→ 先 rethrow；`RawLinearSource` readRows/close 加互斥锁（关掉「快照句柄→JNI」与 close 的窗口）+ `linearDims/linearMeta` 异常时 closeLinear（native 196MB 不再在 OOM 时刻泄漏）；JNI `readLinearRows` 的 jsize 截断改 jlong 比较 |
+| arw | `ArwContainer` header/SubIFD 两处短读越界防护；扫描异常在 `extract` 内收拢；最大预览候选超 32MB 时**回退到合规次大候选**（不再「整张 ARW 打不开」）；`Exporter` 检查 `IS_PENDING` 清零的 `update` 返回值 |
+| edit | `Histogram.clippedMedian` 中位数阈值 `(clip+total)/2` → `clip+total/2`（读数系统性偏暗 clip/2 分位）；`meanShift` 分母误用两图合计样本数（指示幅度减半）→ 各图独立求均值。`HistogramTest` 用「旧新阈值给出不同桶」的分布钉住方向 |
+| ui | `ExportSheet` 硬编码「JPEG 质量 92」与可配置设置脱节 → 参数化透传；`BodyPartTab.wired` 死字段删除（接线真相在 `when(tabId)`，见 8.2-4） |
+
+### 8.2 ⭐ 新增纪律（本轮换来的）
+
+1. **「加了锁」必须等于「全部路径都走锁」**。`PtpTransport` 的 ioLock 盖住了 `bulkOut/bulkIn`，
+   但 `downloadObject` 自己手写了一次 `connection.bulkTransfer` —— 锁只保护「走它的调用」，
+   不保护「同类调用」。加锁后要 grep 该资源（`connection.`）的全部裸用点。
+2. **AOSP 的 inSampleSize 惯例是「宁大勿小」**：只保证对折后仍 ≥ 目标就继续折，
+   结果可以超目标任意倍。凡是有「内存预算注释」的地方（如 2048≈11MB），
+   必须对采样结果**单独断言上界**，惯例本身给不了这个保证。
+3. **`runCatching` 会吞 `CancellationException`**。内层按纪律 rethrow 的取消，
+   会被外层一行 `runCatching{}.getOrNull()` 重新吞掉 —— 跨「取消边界」的调用链上，
+   取消重抛要**每一层**都做，任何一层用 `runCatching` 前都要先想这一下。
+4. **表驱动 UI 的「接线状态」字段若无人读取，比没有更糟**：`BodyPartTab.wired` 标了 `true`
+   但分支从不读它，将来加部位必然两处漂移。接线真相只允许有一个落点（`when(tabId)` 分支）。
+5. **「按住拖动中途，组合可能被换掉」是 Compose 交互的一类固有风险**：
+   任何「拖动开始置位、结束复位」的跨组件状态（如 `dragging` 隐身交互），
+   都必须有 `onDispose` 兜底 —— M3 Slider 在节点销毁时**不会**回调 `onValueChangeFinished`。
+
+### 8.3 死代码处置
+
+- `ui/editor/curves/` 三文件（§7.6 第 3 条）**整包删除**：包外零引用（grep 核实），
+  包内含 4 个 P0（3 个原有 + `clickable` 未传 `indication=null`）。曲线功能由
+  `ParamPanel` 的 `CurveTab` 承担。README 特性表同步删去「直方图」
+  （`HistogramDisplay` 就在被删的死代码里 —— 该功能从未真正接到 UI 上）。
 
 ---

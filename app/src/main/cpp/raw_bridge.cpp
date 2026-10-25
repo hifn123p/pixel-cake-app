@@ -214,10 +214,14 @@ Java_com_hifn_pixelcake_core_decode_RawNative_readLinearRows(
     if (!s || !s->image || !outArray) return -1;
     if (y0 < 0 || rows <= 0 || y0 + rows > s->height) return -1;
 
-    const jsize need = (jsize)((size_t)rows * (size_t)s->width * 3);
-    const jsize have = env->GetArrayLength(outArray);
+    // 用 64 位 jlong 比较：rows*width*3 先按 size_t 算再截断成 jsize（32 位）时，
+    // 超过 2^31 会变负数 ⇒ `have < need` 判小失效 ⇒ 后续裸指针写出数组边界。
+    // RawLinearSource.readRows 的 Long 校验挡住了正规调用；这里再挡一层直接调 JNI 的路径。
+    const jlong need = (jlong)(size_t)rows * (jlong)s->width * 3;
+    const jlong have = (jlong)env->GetArrayLength(outArray);
     if (have < need) {
-        LOGE("readLinearRows: buffer too small need=%d have=%d", (int)need, (int)have);
+        LOGE("readLinearRows: buffer too small need=%lld have=%lld",
+             (long long)need, (long long)have);
         return -2;
     }
 

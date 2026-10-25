@@ -1,6 +1,8 @@
 package com.hifn.pixelcake.ui.editor
 
 import android.graphics.Bitmap
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -15,12 +17,13 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import com.hifn.pixelcake.core.edit.BodyPartBeautyParams
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.unit.dp
 import com.hifn.pixelcake.core.edit.ColorGrading
 import com.hifn.pixelcake.core.edit.ColorMath
 import com.hifn.pixelcake.core.edit.EditParams
@@ -35,6 +38,7 @@ import com.hifn.pixelcake.core.edit.retouch.ColorTransfer
 import com.hifn.pixelcake.ui.components.GlassChipRow
 import com.hifn.pixelcake.ui.components.ParamSlider
 import com.hifn.pixelcake.ui.components.PresetThumbRow
+import com.hifn.pixelcake.ui.theme.Radius
 import com.hifn.pixelcake.ui.theme.Spacing
 import kotlin.math.abs
 
@@ -89,23 +93,23 @@ private val LUT_OPTIONS = listOf(
 // ———————————————————————————————————————————————————————————————
 
 /**
- * 「调色」分类的二级分组。
+ * 「明暗」分类的二级分组（§4.0.10：原「调色·影调/白平衡/偏好」更名重排）。
  *
- * 顺序即**使用频次**（与一级分类同一条约定，见 [EditorCategory]）：曝光/对比度是最高频的两个
- * 动作，所以「影调」排第一并作为默认落点；白平衡在暗房工作流里更靠前，但它一天动不了几次，
- * 让它默认占据面板等于每次调曝光都要多点一次。
+ * 顺序即**使用频次**（与一级分类同一条约定）：曝光/对比度是最高频的两个动作，
+ * 所以「明暗」排第一并作为默认落点；白平衡在暗房工作流里更靠前，但它一天动不了几次，
+ * 让它默认占据面板等于每次调曝光都要多点一次。原「偏好」更名「氛围」——
+ * 自然饱和度/饱和度/去朦胧调的是画面的「气氛」而不是个人偏好，按功能命名。
  */
-enum class ToneTab(val label: String) {
-    Tone("影调"),
+enum class LightTab(val label: String) {
+    Light("明暗"),
     WhiteBalance("白平衡"),
-    Preference("偏好")
+    Atmosphere("氛围")
 }
 
-/** 「颜色」分类的二级分组。LUT 由一级降到这里（见 [EditorCategory] 的说明）。 */
+/** 「颜色」分类的二级分组（§4.0.10：LUT 移入「预设」，只剩两个逐像素工具）。 */
 enum class ColorTab(val label: String) {
     Mix("混色"),
-    Grading("分级"),
-    Lut("LUT")
+    Grading("分级")
 }
 
 /** 「曲线」分类的二级分组：一条亮度曲线 + 三条分通道曲线。 */
@@ -117,42 +121,38 @@ enum class CurveTab(val label: String) {
 }
 
 /**
- * 「效果」分类的二级分组（批次 3：暗角 / 颗粒）。
+ * 「细节」分类的二级分组（批次 4 + §4.0.10：吸收原「效果」分类）。
  *
- * ⚠️ **两组是二级 chip 行的下限**，不是随便定的：只有一组时，这行 chip 就恒等于一个
- * 永远选中的按钮 —— 纯噪音。这正是「人像」分类不渲染子模式 chip 行的同一个判据
- * （见 [ParamSubBar]）：它的「画布工具」是一行**组内**控件，不是一个导航层级。
+ * ## 5 组 = 「管哪一段频带 / 画面哪里」的归并
  *
- * 顺序即使用频次：暗角是几乎每张照片都会碰的收尾动作，颗粒是风格化的选择。
- */
-enum class EffectTab(val label: String) {
-    Vignette("暗角"),
-    Grain("颗粒")
-}
-
-/**
- * 「细节」分类的二级分组（批次 4：锐化 / 降噪 / 质感）。
+ * 「锐化」加最高频边缘；「降噪」唯一往外**抹**；「质感」加中频体积感；
+ * 「暗角」管画面**几何**（四角），「颗粒」加整幅确定性噪声 —— 五者同为**收尾阶段**
+ * （§4.0.10 之前暗角/颗粒单列一个一级分类，属层级错位：它们与锐化一样都是
+ * 「调色做完之后往画面上加东西」）。
  *
- * ## 10 个参数为什么切成这三组
+ * ## 顺序即**使用频次**（与 [LightTab] 同一条约定）
  *
- * 按「管哪一段频带、以及是往里**加**还是往外**抹**」归并（`docs/TONING_DESIGN.md` §12）：
- * 「降噪」是唯一往外**抹**东西的一组；「锐化」加的是最高频的**边缘**；
- * 「质感」加的是中间频带的**体积感**。清晰度与纹理是同一个中频算子的两个旋钮
- * （半径与阈值不同），拆成两个二级分组只会让用户在两个几乎一样的页面之间来回跳。
- *
- * ## 顺序即**使用频次**（与 [ToneTab] 同一条约定，不是工作流顺序）
- *
- * 锐化几乎每张照片都会给一点；降噪只在脏图 / 高 ISO 才动；质感是风格化选择。
- * 所以默认落点是锐化而不是降噪 —— 与「影调排第一」的理由完全一样：让最高频的动作用户
- * 一点开就在手边，而不是每次都要先多点一次 chip。
- *
- * ⚠️ 三组是二级 chip 行的**下限之上**（下限是 2，见 [EffectTab]），所以这里不必论证必要性，
- * 只须说明为什么不是四组。
+ * 锐化几乎每张照片都会给一点；降噪只在脏图 / 高 ISO 才动；暗角是常见的构图收尾；
+ * 质感与颗粒是风格化选择。默认落点是锐化 —— 让最高频的动作用户一点开就在手边。
  */
 enum class DetailTab(val label: String) {
     Sharpen("锐化"),
     Noise("降噪"),
-    Presence("质感")
+    Vignette("暗角"),
+    Presence("质感"),
+    Grain("颗粒")
+}
+
+/**
+ * 「预设」分类的二级分组（§4.0.10 新增）。
+ *
+ * 「风格」是按当前照片渲染真缩略图的**参数栈**预设（44 套）；「滤镜」是内置 LUT。
+ * 两者合进同一分类的理由：用户想「一键换个风格」时只看一个地方，不用在
+ * 「预设」与旧「颜色→LUT」之间来回找 —— LUT 本质上就是一套固化调色的预设。
+ */
+enum class PresetTab(val label: String) {
+    Style("风格"),
+    Filter("滤镜")
 }
 
 /**
@@ -169,11 +169,11 @@ enum class DetailTab(val label: String) {
  * `(PanelSelection) -> Unit`，面板里任何一处改动都走 `copy`，不会出现「某一格忘了传 setter」。
  */
 data class PanelSelection(
-    val toneTab: ToneTab = ToneTab.Tone,
+    val lightTab: LightTab = LightTab.Light,
     val colorTab: ColorTab = ColorTab.Mix,
     val curveTab: CurveTab = CurveTab.Luma,
     val detailTab: DetailTab = DetailTab.Sharpen,
-    val effectTab: EffectTab = EffectTab.Vignette,
+    val presetTab: PresetTab = PresetTab.Style,
     /** HSL 混色当前编辑的色相通道下标（见 [HslBands.LABELS]）。 */
     val hslBand: Int = 0,
     /** 彩色分级当前编辑的分区下标（见 [ColorGrading.ZONE_LABELS]）。 */
@@ -206,11 +206,11 @@ fun ParamSubBar(
 ) {
     val bar = modifier.padding(horizontal = Spacing.cardInner, vertical = Spacing.m)
     when (category) {
-        EditorCategory.Tone -> GlassChipRow(
-            items = ToneTab.entries,
-            selected = selection.toneTab,
+        EditorCategory.Light -> GlassChipRow(
+            items = LightTab.entries,
+            selected = selection.lightTab,
             label = { it.label },
-            onSelect = { onSelectionChange(selection.copy(toneTab = it)) },
+            onSelect = { onSelectionChange(selection.copy(lightTab = it)) },
             modifier = bar
         )
 
@@ -238,15 +238,15 @@ fun ParamSubBar(
             modifier = bar
         )
 
-        EditorCategory.Effect -> GlassChipRow(
-            items = EffectTab.entries,
-            selected = selection.effectTab,
+        EditorCategory.Preset -> GlassChipRow(
+            items = PresetTab.entries,
+            selected = selection.presetTab,
             label = { it.label },
-            onSelect = { onSelectionChange(selection.copy(effectTab = it)) },
+            onSelect = { onSelectionChange(selection.copy(presetTab = it)) },
             modifier = bar
         )
 
-        EditorCategory.Portrait, EditorCategory.Preset -> Unit
+        EditorCategory.Portrait -> Unit
     }
 }
 
@@ -300,6 +300,10 @@ fun ParamPanel(
     activeLayer: ObjectLayer?,
     // 预设 id → 缩略图（由上层按**原图**渲染一次，见 `MainActivity.buildPresetThumbs`）。缺失即占位。
     presetThumbs: Map<String, Bitmap> = emptyMap(),
+    // 当前渲染图的 RGB 直方图（三条**已按峰值归一**的曲线，见 `Histogram.normalize`）。
+    // 由 `EditorScreen` 随每次渲染完成在后台重算；只在「明暗」页顶部展示 —— 它是「先看分布
+    // 再动手」的底，null（首帧/失败）时该区域不占位。
+    histogram: Triple<FloatArray, FloatArray, FloatArray>? = null,
     onSelectionChange: (PanelSelection) -> Unit,
     onParamChange: (EditParams) -> Unit,
     onParamCommit: () -> Unit,
@@ -365,8 +369,8 @@ fun ParamPanel(
                     onAutoMaskChange, onDraggingChange
                 )
 
-                EditorCategory.Tone -> ToneParams(
-                    params, selection.toneTab, onParamChange, onParamCommit, onDraggingChange
+                EditorCategory.Light -> LightParams(
+                    params, selection.lightTab, histogram, onParamChange, onParamCommit, onDraggingChange
                 )
 
                 EditorCategory.Color -> ColorParams(
@@ -381,11 +385,10 @@ fun ParamPanel(
                     params, selection.detailTab, onParamChange, onParamCommit, onDraggingChange
                 )
 
-                EditorCategory.Effect -> EffectParams(
-                    params, selection.effectTab, onParamChange, onParamCommit, onDraggingChange
+                EditorCategory.Preset -> PresetParams(
+                    presets, activePresetId, presetThumbs, onPreset,
+                    selection.presetTab, params, onParamChange, onParamCommit, onDraggingChange
                 )
-
-                EditorCategory.Preset -> PresetParams(presets, activePresetId, presetThumbs, onPreset)
             }
         }
     }
@@ -631,19 +634,17 @@ private fun PortraitParams(
         onValueChange = { onRetouchChange(retouch.copy(beauty = retouch.beauty.copy(slimJaw = it))) },
         onValueChangeFinished = onRetouchCommit, onDraggingChange = onDraggingChange
     )
-        ParamSlider(
+    ParamSlider(
         label = "大眼", value = retouch.beauty.eyeEnlarge, valueRange = 0f..1f, step = 0.05f,
         onValueChange = { onRetouchChange(retouch.copy(beauty = retouch.beauty.copy(eyeEnlarge = it))) },
         onValueChangeFinished = onRetouchCommit, onDraggingChange = onDraggingChange
     )
 
-    // —— 批次 5：细部位美容 ——
-    BeautyPartPanel(
-        retouch = retouch,
-        onRetouchChange = onRetouchChange,
-        onRetouchCommit = onRetouchCommit,
-        onDraggingChange = onDraggingChange
-    )
+    // —— 细部位美容（§4.0.10 删）——
+    // 原「细部位美容」面板（8 个部位 chip）已整体移除：渲染侧真正接线的只有大眼
+    // （且它就是上面「美型」组里的那条），其余 7 个 chip 点进去全是「尚未接入」的空态，
+    // 还与「美型」组重复展示同一条大眼滑块 —— 按本项目「宁可不给，不给假的」的口径删除。
+    // 待分区磨皮 / 局部形变算子落地（DEV_PLAN P4）时，随算子一起恢复。
 
     GroupLabel("追色")
     GlassChipRow(
@@ -668,186 +669,43 @@ private fun PortraitParams(
 }
 
 /**
- * 部位 chip 行的一项。
- *
- * @param wired 该部位的算子是否**已接进渲染管线**。2026-10-07 起只有「眼部」为 `true`
- *   （大眼）；其余部位 chip 仍可选，但点进去给的是一句「尚未接入」说明而不是假滑块。
- * @param enabledKey 对应 [com.hifn.pixelcake.core.edit.RetouchSwitches] 里哪个开关。
- *   ⚠️ **当前无读取方**：`RetouchSwitches` 的 7 个开关从未参与渲染判据（见类KDoc）。
- *   保留字段是为了将来接线时不必改数据表 —— 但在接线之前**不要**把它渲染成开关控件。
- */
-private data class BodyPartTab(
-    val id: String,
-    val label: String,
-    val enabledKey: String,
-    val wired: Boolean = false
-)
-
-private const val ALL_PARTS_ID = "__all__"
-
-private val BODY_PART_TABS: List<BodyPartTab> = listOf(
-    BodyPartTab("head", "轮廓", "enableHead"),
-    BodyPartTab("eyes", "眼部", "enableEyes", wired = true),
-    BodyPartTab("lips", "唇部", "enableLips"),
-    BodyPartTab("face", "面部", "enableFaceSkin"),
-    BodyPartTab("body", "身体", "enableBodySkin"),
-    BodyPartTab("legs", "腿部", "enableLegs"),
-    BodyPartTab("hands", "手部", "enableHands"),
-    BodyPartTab(ALL_PARTS_ID, "全部", "", wired = true)
-)
-
-/**
- * 细部位美容面板（批次 5）：先选部位，再调该部位的滑块。
- *
- * ## ⚠️ 2026-10-07：从「全量暴露」改为「只暴露已接线的」
- *
- * 这个面板曾经把 13 个部位滑块 + 7 个开关全铺出来，而渲染侧只读三个量
- * （[BeautyParams.slimFace] / `slimJaw` / 大眼）⇒ 「面部磨皮 / 身体磨皮 / 腿部磨皮 /
- * 唇部 / 祛黑眼圈 / 瘦头 / 下巴 / 额头 / 腿部拉长 / 手部…」拖下去画面纹丝不动，
- * 而 [RetouchSwitches] 那 7 个开关**根本不参与任何判据**。
- *
- * 暴露一堆不生效的控件比不暴露**更糟**：用户的第一反应是「这个 App 的滑块坏了」，
- * 而不是「这个功能没做」。所以现在的口径是**宁可不给，不给假的**
- * （与 `docs/OBJECT_TONE_DESIGN.md` §9.4「对象作用域同理」一致）：
- *只有真正接线的大眼留滑块，其余部位给一句说明。
- *
- * 待接线清单（实现顺序建议见 `docs/DEV_PLAN.md` 的 P4）：
- * 面部/身体/腿部磨皮 → 映射到 [NeutralGrayParams] 的**分区**强度（按部位切蒙版）；
- * 唇部/祛黑眼圈/瘦头/额头/腿长/手部 → 需要新的局部算子。
- */
-@Composable
-private fun BeautyPartPanel(
-    retouch: RetouchState,
-    onRetouchChange: (RetouchState) -> Unit,
-    onRetouchCommit: () -> Unit,
-    onDraggingChange: (Boolean) -> Unit
-) {
-    var tabId by rememberSaveable { mutableStateOf("eyes") }
-
-    GroupHeader(
-        text = "细部位美容",
-        showReset = !retouch.beauty.bodyParts.isIdentity,
-        onReset = {
-            onRetouchChange(retouch.copy(beauty = retouch.beauty.copy(bodyParts = BodyPartBeautyParams())))
-            onRetouchCommit()
-        }
-    )
-
-    // 「全部」的 `enabledKey` 是空串 ⇒ 下面查不到分支 ⇒ `enabled` 落回 true，
-    // 即「全部」下所有滑块都可拖（它本来就不该有单一开关）。
-    val cur = BODY_PART_TABS.firstOrNull { it.id == tabId }
-    val isAll = cur?.id == ALL_PARTS_ID
-
-    // ⚠️ 2026-10-07：这里曾按 `enabledKey` 查 [com.hifn.pixelcake.core.edit.RetouchSwitches]
-    // 决定「部位开关 → 滑块是否变灰」。那 7 个开关**没有任何渲染判据读它们**，
-    // 于是「拨了开关 → 滑块变灰 → 但画面本来就没变化」整套都是假的，已整段移除。
-    val enabled = true
-
-    GlassChipRow(
-        items = BODY_PART_TABS,
-        selected = cur,
-        label = { it.label },
-        onSelect = { tabId = it.id }
-    )
-
-    val bp = retouch.beauty.bodyParts
-    // 滑块统一走这一个 lambda。
-    // ⚠️ 局部函数内要调 @Composable（ParamSlider）⇒ 这个局部函数**自己也必须标 @Composable**，
-    //    否则报 "Functions which invoke @Composable functions must be marked with the @Composable annotation"。
-    @Composable
-    fun slider(
-        label: String,
-        value: Float,
-        range: ClosedFloatingPointRange<Float>,
-        write: (BodyPartBeautyParams, Float) -> BodyPartBeautyParams
-    ) {
-        ParamSlider(
-            label = label,
-            value = value,
-            valueRange = range,
-            step = 0.05f,
-            enabled = enabled,
-            onValueChange = {
-                onRetouchChange(
-                    retouch.copy(beauty = retouch.beauty.copy(bodyParts = write(bp, it)))
-                )
-            },
-            onValueChangeFinished = onRetouchCommit,
-            onDraggingChange = onDraggingChange
-        )
-    }
-
-    // 「全部」把所有部位平铺；其余只列当前部位。
-    //
-    // ⚠️ **只暴露真正接进渲染管线的滑块**。这里曾经把 13 个部位滑块 + 7 个开关全部铺出来，
-    // 而 `Beauty.apply` 只读三个量：外层 `slimFace`（上面「美型」组的瘦脸）、
-    // 外层 `slimJaw`（收下颌），以及大眼（现已合并 `bodyParts.eyeEnlarge`）。
-    // ⇒「面部磨皮 / 身体磨皮 / 腿部磨皮 / 唇部 / 祛黑眼圈 / 瘦头 / 下巴 / 额头…」拖下去
-    // 画面纹丝不动 —— 看起来就像滑块坏了。这比「功能少」严重得多：
-    // 用户会把整个 App 判成「不靠谱」。
-    //
-    // 因此口径与 `docs/OBJECT_TONE_DESIGN.md` §9.4 一致：**宁可不给，不给假的** ——
-    // 未实现的部位给一句说明 + 明确出口，而不是一排灰控件。
-    @Composable
-    fun eyesSliders() {
-        // 唯一真正接线的一条：走 [BeautyParams.wiredEyeEnlarge]，与「美型」组同源。
-        slider("大眼", bp.eyeEnlarge, 0f..1f) { p, v -> p.copy(eyeEnlarge = v) }
-    }
-
-    /** 未接线的部位：给一句说明（而不是一排拖了没反应的滑块）。 */
-    @Composable
-    fun notWiredYet(label: String) {
-        Text(
-            "$label 尚未接入渲染管线（算法待落地）。可用效果见上方「美型」组：瘦脸 / 收下颌 / 大眼。",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
-
-    if (tabId == ALL_PARTS_ID) {
-        eyesSliders()
-        notWiredYet("其余部位美容")
-    } else {
-        when (tabId) {
-            "eyes" -> eyesSliders()
-            "head", "lips", "face", "body", "legs", "hands" ->
-                notWiredYet(BODY_PART_TABS.first { it.id == tabId }.label)
-        }
-    }
-
-    Hint("大眼与「美型」组的瘦脸 / 收下颌 走同一条液化管线（锚点取人脸检测的双眼中点）；其余部位算法尚未落地，因此这里不提供滑块——「宁可不给，不给假的」。")
-}
-
-/**
- * 「调色」分类：白平衡 / 影调 / 偏好（`docs/TONING_DESIGN.md` §2.1 / §2.2）。
+ * 「明暗」分类：明暗 / 白平衡 / 氛围（§4.0.10，原「调色」，`docs/TONING_DESIGN.md` §2.1 / §2.2）。
  *
  * ## 分组内的顺序是有讲究的
  *
- * 影调组按 Lightroom 的顺序排：曝光 → 对比度 → 高光 → 阴影 → 白色色阶 → 黑色色阶。
+ * 明暗组按 Lightroom 的顺序排：曝光 → 对比度 → 高光 → 阴影 → 白色色阶 → 黑色色阶。
  * 这**不是**从亮到暗的数学顺序，而是「先定整体、再分别管两端」的暗房习惯：
  * 先高光后阴影，因为压高光是比提阴影更常见的动作（天空总是先爆）。
  * 随机排序会让用户在滑块之间来回找，这是调色界面最容易踩的坑。
  *
  * ⚠️ 四个滑块的正方向**统一为「往亮推」**（与 Lightroom 一致，见 [EditParams] 的类文档）。
+ *
+ * ## 直方图（§4.0.10 新增）
+ *
+ * 「明暗」页顶部铺当前渲染图的 RGB 直方图 —— 拖动下面的滑块时分布实时变化，
+ * 「先看像素堆在哪儿、再决定往哪边推」不再是盲调。数据由 `EditorScreen` 随每次渲染
+ * 完成在后台重算（采样步长 4/8），不在渲染热路径上。
  */
 @Composable
-private fun ToneParams(
+private fun LightParams(
     params: EditParams,
-    tab: ToneTab,
+    tab: LightTab,
+    histogram: Triple<FloatArray, FloatArray, FloatArray>?,
     onParamChange: (EditParams) -> Unit,
     onCommit: () -> Unit,
     onDraggingChange: (Boolean) -> Unit
 ) {
     when (tab) {
-        ToneTab.WhiteBalance -> {
+        LightTab.WhiteBalance -> {
             GroupLabel("白平衡")
             EditSlider("色温", params.temperature, -1f, 1f, 0.05f, { p, v -> p.copy(temperature = v) }, params, onParamChange, onCommit, onDraggingChange, format = PERCENT)
             EditSlider("色调", params.tint, -1f, 1f, 0.05f, { p, v -> p.copy(tint = v) }, params, onParamChange, onCommit, onDraggingChange, format = PERCENT)
             Hint("色温正 = 偏暖（增红减蓝）；色调正 = 偏品红。RAW 上这两项改的是线性增益，不会像 JPEG 那样一拉就出色阶断层。")
         }
 
-        ToneTab.Tone -> {
-            GroupLabel("影调")
+        LightTab.Light -> {
+            HistogramView(histogram)
+            GroupLabel("明暗")
             EditSlider("曝光", params.exposureEv, -2f, 2f, 0.1f, { p, v -> p.copy(exposureEv = v) }, params, onParamChange, onCommit, onDraggingChange, format = EV)
             EditSlider("对比度", params.contrast, -1f, 1f, 0.05f, { p, v -> p.copy(contrast = v) }, params, onParamChange, onCommit, onDraggingChange, format = PERCENT)
             EditSlider("高光", params.highlights, -1f, 1f, 0.05f, { p, v -> p.copy(highlights = v) }, params, onParamChange, onCommit, onDraggingChange, format = PERCENT)
@@ -857,11 +715,11 @@ private fun ToneParams(
 
             GroupLabel("高光找回")
             EditSlider("强度", params.highlightRecovery, 0f, 1f, 0.05f, { p, v -> p.copy(highlightRecovery = v) }, params, onParamChange, onCommit, onDraggingChange, format = PERCENT_U)
-            Hint("四个影调滑块的正方向一律是「往亮推」（Lightroom 口径）。高光找回把线性域的压肩起点往下移：被曝光推到白点以上的云层只有它救得回来，其余滑块都只能压「已经存在」的亮度。")
+            Hint("四个明暗滑块的正方向一律是「往亮推」（Lightroom 口径）。高光找回把线性域的压肩起点往下移：被曝光推到白点以上的云层只有它救得回来，其余滑块都只能压「已经存在」的亮度。")
         }
 
-        ToneTab.Preference -> {
-            GroupLabel("偏好")
+        LightTab.Atmosphere -> {
+            GroupLabel("氛围")
             EditSlider("自然饱和度", params.vibrance, -1f, 1f, 0.05f, { p, v -> p.copy(vibrance = v) }, params, onParamChange, onCommit, onDraggingChange, format = PERCENT)
             EditSlider("饱和度", params.saturation, -1f, 1f, 0.05f, { p, v -> p.copy(saturation = v) }, params, onParamChange, onCommit, onDraggingChange, format = PERCENT)
             EditSlider("去朦胧", params.dehaze, -1f, 1f, 0.05f, { p, v -> p.copy(dehaze = v) }, params, onParamChange, onCommit, onDraggingChange, format = PERCENT)
@@ -870,7 +728,44 @@ private fun ToneParams(
     }
 }
 
-/** 「颜色」分类：混色 / 分级 / LUT。 */
+/**
+ * RGB 三通道直方图（§4.0.10）：三条按峰值归一的曲线各以本通道色低透明度叠加，
+ * 叠加处自然混出青/品红/黄 —— 偏色（R 峰与 B 峰错开 40 灰阶）一眼可见。
+ * 数据缺失（首帧 / 读取失败）时**不占位**，与「不渲染空容器」同一条口径。
+ */
+@Composable
+private fun HistogramView(h: Triple<FloatArray, FloatArray, FloatArray>?, modifier: Modifier = Modifier) {
+    if (h == null) return
+    Canvas(
+        modifier = modifier
+            .fillMaxWidth()
+            // 64dp：组件自身尺寸（非间距），不进 Spacing 标尺；与 48dp 控件高拉开一档层次。
+            .height(64.dp)
+            .clip(Radius.chip)
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+    ) {
+        val bins = minOf(h.first.size, h.second.size, h.third.size)
+        if (bins < 2) return@Canvas
+        val bw = size.width / bins
+        listOf(
+            h.first to Color(0xFFF26D6D),
+            h.second to Color(0xFF6CD08A),
+            h.third to Color(0xFF6FA8FF)
+        ).forEach { (arr, channelColor) ->
+            val path = Path()
+            path.moveTo(0f, size.height)
+            for (i in 0 until bins) {
+                val v = arr[i].coerceIn(0f, 1f)
+                path.lineTo(i * bw, size.height * (1f - v))
+            }
+            path.lineTo(size.width, size.height)
+            path.close()
+            drawPath(path, channelColor.copy(alpha = 0.42f))
+        }
+    }
+}
+
+/** 「颜色」分类：混色 / 分级（LUT 已移入「预设」，§4.0.10）。 */
 @Composable
 private fun ColorParams(
     params: EditParams,
@@ -892,8 +787,6 @@ private fun ColorParams(
             { onSelectionChange(selection.copy(gradeZone = it)) },
             onParamChange, onCommit, onDraggingChange
         )
-
-        ColorTab.Lut -> LutGroup(params, onParamChange, onCommit, onDraggingChange)
     }
 }
 
@@ -1077,94 +970,21 @@ private fun CurveParams(
 }
 
 /**
- * 效果分类（批次 3）：暗角 / 颗粒。
+ * 细节分类（批次 4 + §4.0.10 吸收原「效果」）：锐化 / 降噪 / 暗角 / 质感 / 颗粒。
  *
- * ## 为什么这两个是同一个一级分类
+ * ## 为什么值一个独立的一级分类
  *
- * 它们共享的是**实现前提**而不是观感：都需要像素坐标（`docs/TONING_DESIGN.md` §2.4），
- * 也都是「调色做完之后往画面上加质感」的收尾动作。合成一类，用户想「给照片加点味道」时
- * 只需要看一个地方。
- *
- * ## 两组都做成了「一组滑块 + 一个重置」
- *
- * 而不是「每个参数一个分组」：暗角那 4 项是**同一个几何**的四个旋钮（形状、范围、软硬、强度），
- * 拆成四段只会让面板变长、让用户以为它们是四件独立的事。这与 HSL 混色 / 彩色分级的做法一致
- * （那里是「先选通道、再调三项」，这里是「一个对象、四个旋钮」）。
- *
- * ## ⚠️ 重置用的「默认值」是与 [EditParams] 的字面量对齐的
- *
- * 与 [GradingGroup] 里 `blending = 0.5f` 的做法相同。改模型里的默认值时，
- * **这两个地方必须一起改** —— 否则「重置」会把参数恢复到一个既不是旧默认、也不是新默认的值。
- */
-@Composable
-private fun EffectParams(
-    params: EditParams,
-    tab: EffectTab,
-    onParamChange: (EditParams) -> Unit,
-    onCommit: () -> Unit,
-    onDraggingChange: (Boolean) -> Unit
-) {
-    when (tab) {
-        EffectTab.Vignette -> {
-            GroupHeader(
-                text = "暗角",
-                showReset = params.vignetteAmount != 0f ||
-                    params.vignetteMidpoint != 0.5f ||
-                    params.vignetteFeather != 0.5f ||
-                    params.vignetteRoundness != 0f,
-                onReset = {
-                    onParamChange(
-                        params.copy(
-                            vignetteAmount = 0f, vignetteMidpoint = 0.5f,
-                            vignetteFeather = 0.5f, vignetteRoundness = 0f
-                        )
-                    )
-                    onCommit()
-                }
-            )
-            EditSlider("强度", params.vignetteAmount, -1f, 1f, 0.05f, { p, v -> p.copy(vignetteAmount = v) }, params, onParamChange, onCommit, onDraggingChange, format = PERCENT)
-            EditSlider("起点", params.vignetteMidpoint, 0f, 1f, 0.05f, { p, v -> p.copy(vignetteMidpoint = v) }, params, onParamChange, onCommit, onDraggingChange, format = PERCENT_U)
-            EditSlider("过渡", params.vignetteFeather, 0f, 1f, 0.05f, { p, v -> p.copy(vignetteFeather = v) }, params, onParamChange, onCommit, onDraggingChange, format = PERCENT_U)
-            EditSlider("圆度", params.vignetteRoundness, -1f, 1f, 0.05f, { p, v -> p.copy(vignetteRoundness = v) }, params, onParamChange, onCommit, onDraggingChange, format = PERCENT)
-            Hint("正 = 提亮四角（负 = 压暗），与四个影调滑块同一条符号约定。几何量按长边归一化 ⇒ 预览与导出的暗角范围完全一致；画面中心永远不动。")
-        }
-
-        EffectTab.Grain -> {
-            GroupHeader(
-                text = "颗粒",
-                showReset = params.grainAmount != 0f ||
-                    params.grainSize != 0.35f ||
-                    params.grainRoughness != 0.5f,
-                onReset = {
-                    onParamChange(
-                        params.copy(grainAmount = 0f, grainSize = 0.35f, grainRoughness = 0.5f)
-                    )
-                    onCommit()
-                }
-            )
-            EditSlider("强度", params.grainAmount, 0f, 1f, 0.05f, { p, v -> p.copy(grainAmount = v) }, params, onParamChange, onCommit, onDraggingChange, format = PERCENT_U)
-            EditSlider("尺寸", params.grainSize, 0f, 1f, 0.05f, { p, v -> p.copy(grainSize = v) }, params, onParamChange, onCommit, onDraggingChange, format = PERCENT_U)
-            EditSlider("对比", params.grainRoughness, 0f, 1f, 0.05f, { p, v -> p.copy(grainRoughness = v) }, params, onParamChange, onCommit, onDraggingChange, format = PERCENT_U)
-            Hint("亮度噪声（三通道同加），所以不会出现高 ISO 那种彩噪。尺寸按长边归一化 ⇒ 预览与导出的颗粒粗细一致；噪声是确定性哈希，拖动滑块时画面不会「沸腾」。")
-        }
-    }
-}
-
-/**
- * 细节分类（批次 4）：锐化 / 降噪 / 质感。
- *
- * ## 10 个参数为什么值一个独立的一级分类
- *
- * 它们是**邻域**算子（`DetailPass`）：输出的像素要问「你周围一圈长什么样」。
+ * 锐化/降噪/质感是**邻域**算子（`DetailPass`）：输出的像素要问「你周围一圈长什么样」。
  * 这在界面上表现为**响应性质不同** —— 逐像素参数拖到哪儿就是哪儿，而邻域参数的实际量感
  * 还取决于画面自身的纹理密度（同一档锐化，拍羽毛和拍天空的效果完全不同）。
- * 所以这组参数必须离预览最近，且一次只显示一组。
+ * 暗角与颗粒（§4.0.10 并入）与它们同属**收尾阶段**：先定信息量，再加质感。
  *
- * ## 三个二级分组各自守一个承诺
+ * ## 各二级分组各自守一个承诺
  *
  * - **锐化**：只加「细于 rFine」的高频，且有边缘蒙版 ⇒ 想锐哪儿锐哪儿，不把高 ISO 噪声一起提亮；
  * - **降噪**：唯一**往外抹**的一组，且**亮度 / 色度两条通路独立** —— 只拉色度就能压掉彩噪
  *   而几乎不糊细节，这是「要不要降噪」这个问题最实用的答案；
+ * - **暗角 / 颗粒**：画面几何与整幅噪声，同为「加味道」的收尾动作（原效果分类）；
  * - **质感**：清晰度与纹理都作用在**中频**（`docs/TONING_DESIGN.md` §12），
  *   一个是让画面更立体、一个是让画面更耐看。
  *
@@ -1176,7 +996,7 @@ private fun EffectParams(
  *
  * ## 重置用的默认值必须与 [EditParams] 的字面量对齐
  *
- * 与 [GradingGroup]（`blending = 0.5f`）、[EffectParams] 同一约定：改模型默认值时这几个 `copy`
+ * 与 [GradingGroup]（`blending = 0.5f`）同一约定：改模型默认值时这几个 `copy`
  * 要一起改，否则「重置」会回到一个既不是旧默认、也不是新默认的值。
  */
 @Composable
@@ -1247,41 +1067,98 @@ private fun DetailParams(
             EditSlider("纹理", params.texture, -1f, 1f, 0.05f, { p, v -> p.copy(texture = v) }, params, onParamChange, onCommit, onDraggingChange, format = PERCENT)
             Hint("清晰度动的是大范围明暗过渡（让主体更立体），纹理动的是细密的重复结构。两者都避开了边缘 ⇒ 不会像锐化过度那样出白边；负值可以做出柔焦感。")
         }
+
+        // —— 以下两组来自原「效果」分类（§4.0.10 并入），参数与重置语义原样未动 ——
+        DetailTab.Vignette -> {
+            GroupHeader(
+                text = "暗角",
+                showReset = params.vignetteAmount != 0f ||
+                    params.vignetteMidpoint != 0.5f ||
+                    params.vignetteFeather != 0.5f ||
+                    params.vignetteRoundness != 0f,
+                onReset = {
+                    onParamChange(
+                        params.copy(
+                            vignetteAmount = 0f, vignetteMidpoint = 0.5f,
+                            vignetteFeather = 0.5f, vignetteRoundness = 0f
+                        )
+                    )
+                    onCommit()
+                }
+            )
+            EditSlider("强度", params.vignetteAmount, -1f, 1f, 0.05f, { p, v -> p.copy(vignetteAmount = v) }, params, onParamChange, onCommit, onDraggingChange, format = PERCENT)
+            EditSlider("起点", params.vignetteMidpoint, 0f, 1f, 0.05f, { p, v -> p.copy(vignetteMidpoint = v) }, params, onParamChange, onCommit, onDraggingChange, format = PERCENT_U)
+            EditSlider("过渡", params.vignetteFeather, 0f, 1f, 0.05f, { p, v -> p.copy(vignetteFeather = v) }, params, onParamChange, onCommit, onDraggingChange, format = PERCENT_U)
+            EditSlider("圆度", params.vignetteRoundness, -1f, 1f, 0.05f, { p, v -> p.copy(vignetteRoundness = v) }, params, onParamChange, onCommit, onDraggingChange, format = PERCENT)
+            Hint("正 = 提亮四角（负 = 压暗），与四个影调滑块同一条符号约定。几何量按长边归一化 ⇒ 预览与导出的暗角范围完全一致；画面中心永远不动。")
+        }
+
+        DetailTab.Grain -> {
+            GroupHeader(
+                text = "颗粒",
+                showReset = params.grainAmount != 0f ||
+                    params.grainSize != 0.35f ||
+                    params.grainRoughness != 0.5f,
+                onReset = {
+                    onParamChange(
+                        params.copy(grainAmount = 0f, grainSize = 0.35f, grainRoughness = 0.5f)
+                    )
+                    onCommit()
+                }
+            )
+            EditSlider("强度", params.grainAmount, 0f, 1f, 0.05f, { p, v -> p.copy(grainAmount = v) }, params, onParamChange, onCommit, onDraggingChange, format = PERCENT_U)
+            EditSlider("尺寸", params.grainSize, 0f, 1f, 0.05f, { p, v -> p.copy(grainSize = v) }, params, onParamChange, onCommit, onDraggingChange, format = PERCENT_U)
+            EditSlider("对比", params.grainRoughness, 0f, 1f, 0.05f, { p, v -> p.copy(grainRoughness = v) }, params, onParamChange, onCommit, onDraggingChange, format = PERCENT_U)
+            Hint("亮度噪声（三通道同加），所以不会出现高 ISO 那种彩噪。尺寸按长边归一化 ⇒ 预览与导出的颗粒粗细一致；噪声是确定性哈希，拖动滑块时画面不会「沸腾」。")
+        }
     }
 }
 
 /**
- * 预设（`docs/UI_DESIGN.md` §1.5 的 **A 档**：卡片带**真实缩略图**，不再是纯文字 chip）。
+ * 预设分类（§4.0.10 起含两个二级分组）：
+ * - **风格**（`docs/UI_DESIGN.md` §1.5 的 **A 档**）：卡片带**真实缩略图**的参数栈预设；
+ * - **滤镜**：内置 LUT（从「颜色」迁入 —— LUT 就是一套固化调色，与预设同属「一键风格」）。
  *
- * 缩略图由上层按**原图**渲染（每个预设一张，只在换图时算一次）—— 所以这里的职责只是「怎么摆」，
- * 不含任何渲染逻辑。`presetThumbs` 缺失时 [PresetThumbRow] 会显示占位底色，不会崩也不会空白。
+ * 缩略图由上层按**原图**渲染（每个预设一张，只在换图时算一次）—— 所以这里的职责只是
+ * 「怎么摆」，不含任何渲染逻辑。`presetThumbs` 缺失时 [PresetThumbRow] 会显示占位底色。
  */
 @Composable
 private fun PresetParams(
     presets: List<Preset>,
     activePresetId: String,
     presetThumbs: Map<String, Bitmap>,
-    onPreset: (Preset) -> Unit
+    onPreset: (Preset) -> Unit,
+    tab: PresetTab,
+    params: EditParams,
+    onParamChange: (EditParams) -> Unit,
+    onCommit: () -> Unit,
+    onDraggingChange: (Boolean) -> Unit
 ) {
-    GroupLabel("预设（参数栈）")
-    PresetThumbRow(
-        items = presets,
-        selected = presets.firstOrNull { it.id == activePresetId },
-        label = { it.name },
-        thumb = { presetThumbs[it.id] },
-        onSelect = onPreset
-    )
-    Text(
-        if (activePresetId == "none") {
-            "缩略图按「当前照片」渲染，所以每个预设的效果是所见即所得。" +
-                "选一个作为起点，再在其它分类里微调；手动改动任一参数后高亮会取消。"
-        } else {
-            "已套用预设；手动改动任一参数即视为「已偏离预设」，高亮取消。"
-        },
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(top = Spacing.s)
-    )
+    when (tab) {
+        PresetTab.Style -> {
+            GroupLabel("预设（参数栈）")
+            PresetThumbRow(
+                items = presets,
+                selected = presets.firstOrNull { it.id == activePresetId },
+                label = { it.name },
+                thumb = { presetThumbs[it.id] },
+                onSelect = onPreset
+            )
+            Text(
+                if (activePresetId == "none") {
+                    "缩略图按「当前照片」渲染，所以每个预设的效果是所见即所得。" +
+                        "选一个作为起点，再在其它分类里微调；手动改动任一参数后高亮会取消。"
+                } else {
+                    "已套用预设；手动改动任一参数即视为「已偏离预设」，高亮取消。"
+                },
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = Spacing.s)
+            )
+        }
+
+        PresetTab.Filter -> LutGroup(params, onParamChange, onCommit, onDraggingChange)
+    }
 }
 
 // ———————————————————————————————————————————————————————————————

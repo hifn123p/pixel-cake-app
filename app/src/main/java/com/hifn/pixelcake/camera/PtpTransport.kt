@@ -213,12 +213,25 @@ class PtpTransport private constructor(
         onProgress: (Long, Long) -> Unit = { _, _ -> }
     ): Download {
         val started = System.currentTimeMillis()
+        // 与 execute() 同一套入口判据：会话已关闭/失步时绝不再碰 USB。
+        // （downloadObject 走 bulkOut/bulkIn，因此命令发送同样被 ioLock 盖住。）
+        if (closed) {
+            return Download(false, 0L, 0L, -1, "会话已关闭", System.currentTimeMillis() - started)
+        }
+        if (desynced) {
+            return Download(
+                false, 0L, 0L, -1,
+                "会话已失步（上次传输中断），请重新连接相机",
+                System.currentTimeMillis() - started
+            )
+        }
         val txId = ++transactionId
         val command = PtpProtocol.encodeCommand(PtpProtocol.OP_GET_OBJECT, listOf(handle), txId)
 
-        val sent = runCatching {
-            connection.bulkTransfer(endpointOut, command, 0, command.size, BULK_TIMEOUT_MS)
-        }.getOrDefault(-1)
+        // ⚠️ 必须走 bulkOut（ioLock 内）：这里的 bulkTransfer 若直接调 connection，
+        // 就绕过了「传输与 close 串行化」——onDispose 的 close() 恰好插进这次发送时，
+        // 内核会用已释放的 fd 完成传输（v0.4.7 修的正是这类竞态，这里不能留缺口）。
+        val sent = bulkOut(command, BULK_TIMEOUT_MS)
         if (sent != command.size) {
             return Download(
                 false, 0L, 0L, -1,

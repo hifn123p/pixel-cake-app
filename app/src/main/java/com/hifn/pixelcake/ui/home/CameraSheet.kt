@@ -34,8 +34,9 @@ import java.io.File
  * 注意：这与改动前的行为**量级相同**（旧版面板放在 `LazyColumn` 的 item 里，
  * 滑出屏幕同样会 dispose），只是从「不确定何时被回收」变成「一个明确的位置」。
  *
- * [CameraPanel] 保持**零改动**：它自带的描边卡在 Sheet 里就是内容块，不再另加标题，
- * 避免出现两层标题。它的 token 迁移（旧圆角 / 旧间距）是独立待办。
+ * [CameraPanel] 保持**零逻辑改动**：§4.0.9 已完成它的视觉迁移（`OutlinedCard` →
+ * `GlassCard` 实心容器 + 全量 `Spacing` token），在 Sheet 里就是标准内容块，
+ * 不再另加标题，避免出现两层标题。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

@@ -536,7 +536,19 @@ private fun AppRoot(settings: AppSettings) {
             // ⇒ 连续打开 10 张 ARW 就在 cacheDir 里堆约 650MB，而且这些文件 mtime 很新、
             // 不容易被系统 trim 掉。放在解码**之前**取旧值：此时 `imported` 还是上一张。
             val staleRaw = imported?.rawCachePath
-            val dec = runCatching { Decoder.decodeToProxy(context, uri, profile.proxyLongEdge) }.getOrNull()
+            // 取消必须原样上抛（Decoder 内部已按同一纪律 rethrow），runCatching 会把它
+            // 重新吞掉、伪装成「无法解码该文件」——这里用显式 catch 与之对齐。
+            val dec = try {
+                Decoder.decodeToProxy(context, uri, profile.proxyLongEdge)
+            } catch (c: CancellationException) {
+                throw c
+            } catch (t: Throwable) {
+                DebugLog.w(
+                    DebugLog.TAG_DECODE, "decode failed",
+                    mapOf("uri" to uri.toString(), "err" to (t.message ?: t.javaClass.simpleName))
+                )
+                null
+            }
             if (dec == null) {
                 loading = false
                 status = EditorStatus(StatusKind.Error, "无法解码该文件")
@@ -651,6 +663,7 @@ private fun AppRoot(settings: AppSettings) {
                     status = status,
                     exporting = exporting,
                     exportFormat = settings.exportFormat,
+                    jpegQuality = settings.jpegQuality.value,
                     onParamChange = {
                         // F08：拖动过程中只更新参数，不进撤销栈
                         //
@@ -745,6 +758,10 @@ private fun AppRoot(settings: AppSettings) {
                             val img = decoded
                             // 在主线程捕获 retouch/mask 状态，避免跨线程读快照状态
                             val rt = retouch
+                            // tonal 参数同批捕获：下面两处渲染入口都跑在 Dispatchers.Default，
+                            // 直接读 `params` 既违反本文件自己的「Default 线程不读快照状态」纪律，
+                            // 也会让导出在用户拖滑块时用到与预览不一致的参数。
+                            val tonalParams = params
                             // 对象作用域图层（批次 5）：导出必须与预览用**同一套层参数**
                             // —— 这是「预览所见 = 导出所得」在对象层上的前提。
                             val layerList = layers
@@ -804,7 +821,7 @@ private fun AppRoot(settings: AppSettings) {
                                         val full = EditEngine.renderLinearFile(
                                             path = rawPath,
                                             maxLongSide = profile.fullResLongEdge,
-                                            p = params,
+                                            p = tonalParams,
                                             retouch = renderRetouch,
                                             mask = mask,
                                             faceAnchor = faceAnchor,
@@ -873,7 +890,7 @@ private fun AppRoot(settings: AppSettings) {
                                                 // 局部名刻意**不叫** rendered：外层已有一个 Compose 状态 `rendered`，
                                                 // 同名会被遮蔽，将来读代码的人极易误判自己在读哪个。
                                                 val okFull = EditEngine.renderIntoSrgb(
-                                                    fullTarget, fullBase.bitmap, params,
+                                                    fullTarget, fullBase.bitmap, tonalParams,
                                                     fretouch, fmask,
                                                     faceAnchor = fAnchor, layers = flayerStack
                                                 )
@@ -988,7 +1005,14 @@ private fun AppRoot(settings: AppSettings) {
                                 renderMutex.withLock { retired.forEach { it.recycle() } }
                             }
                         }
-                        ArwFullDecoder.releaseCache(src.rawCachePath)
+                        // 磁盘删除与导入路径（openInEditor 里 staleRaw 的释放）同口径：走 IO
+                        // 调度器，别在主线程给返回手势加一拍磁盘 I/O。
+                        val rawPathToRelease = src.rawCachePath
+                        if (rawPathToRelease != null) {
+                            scope.launch(Dispatchers.IO) {
+                                ArwFullDecoder.releaseCache(rawPathToRelease)
+                            }
+                        }
                         // 退出编辑器：清掉 ML 缓存（下次打开重新推理，避免用错图）。
                         scope.launch(Dispatchers.Default) {
                             MlMaskProvider.invalidate()

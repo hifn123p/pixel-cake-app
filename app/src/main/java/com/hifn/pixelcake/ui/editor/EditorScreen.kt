@@ -12,8 +12,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
-import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -29,6 +31,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -41,26 +44,33 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.getDistance
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.hifn.pixelcake.core.decode.ExportFormat
 import com.hifn.pixelcake.core.edit.EditParams
+import com.hifn.pixelcake.core.edit.Histogram
 import com.hifn.pixelcake.core.edit.ObjectLayer
 import com.hifn.pixelcake.core.edit.ObjectScope
 import com.hifn.pixelcake.core.edit.RetouchState
@@ -78,7 +88,11 @@ import com.hifn.pixelcake.ui.theme.blurredBackdrop
 import com.hifn.pixelcake.ui.theme.glassSurface
 import com.hifn.pixelcake.ui.theme.pressScale
 import com.hifn.pixelcake.ui.theme.rememberGlassTint
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
+import kotlin.math.abs
+import kotlin.math.roundToInt
 
 /**
  * 顶栏高度。
@@ -149,6 +163,15 @@ private const val SPLIT_DEFAULT = 0.45f
  */
 private val SPLIT_HANDLE_HEIGHT = 28.dp
 
+/** 预览缩放上限。8x 已接近预览位图（长边 2048）的像素极限，再放大只会看到马赛克。 */
+private const val MAX_PREVIEW_ZOOM = 8f
+
+/** 双击放大档位（再次双击复位）。取 2.5x：人像看皮肤细节的常用档。 */
+private const val DOUBLE_TAP_ZOOM = 2.5f
+
+/** 双击的两次按下间隔上限（毫秒）。 */
+private const val DOUBLE_TAP_MS = 280L
+
 /**
  * 静态模糊底图的不透明度。
  *
@@ -166,7 +189,9 @@ private const val BACKDROP_ALPHA = 0.26f
  * ┌─ 顶栏 48dp ── 返回 / 撤销 重做 重置 / 导出          ← 一次性动作
  * ├─ 预览区 weight(previewFraction) ── 照片 + 手势 + 胶囊提示
  * ├─ 分隔条 28dp ── 上下拖动即改「预览 : 工具区」比例     ← 用户可调（真机反馈新增）
- * ├─ 一级工具条 48dp ── 人像 调色 颜色 曲线 细节 效果 预设 ← 分类导航
+ * ├─ 一级工具条 48dp ── 人像 明暗 颜色 曲线 细节 预设 ← 分类导航
+ * │（§4.0.10：原 7 类按「功能」重排为 6 类 —— 调色拆成「明暗/颜色」、
+ * │  「效果」并入「细节」、「预设」吸收 LUT，详见 UI_DESIGN.md §4.0.10）
  * └─ 参数区 weight(1-previewFraction) ── 当前分类的 3~7 个滑块 ← 高频动作
  * ```
  *
@@ -297,6 +322,8 @@ fun EditorScreen(
     onExport: () -> Unit,
     onExportFormatChange: (ExportFormat) -> Unit = {},
     onCancelExport: () -> Unit = {},
+    /** 实际生效的 JPEG 质量（设置页可配），透传给导出 Sheet 的说明文案。 */
+    jpegQuality: Int = 92,
     onBack: () -> Unit
 ) {
     var showOriginal by remember { mutableStateOf(false) }
@@ -364,6 +391,22 @@ fun EditorScreen(
         }
     }
 
+    // ———— 预览缩放 / 平移（§4.0.10）————
+    //
+    // `previewZoom` 是相对 fit 基准（[fitContentRect]）的放大倍数，`previewPan` 是图片中心
+    // 相对预览区中心的偏移（px）。`remember(original)` ⇒ 换图即整体复位。
+    //
+    // ## 手势（详见 [previewGestures]）
+    // - 双指捏合/拖动：缩放 + 平移（三种 retouchTool 下都可用 —— 编辑时也要能放大精修）；
+    // - 未放大时单指：查看模式按住看原图；画笔模式涂抹；祛瑕模式点选；
+    // - 放大后单指：查看/祛瑕模式拖动平移；画笔模式仍是涂抹（平移交给双指）；
+    // - 双击：2.5x ↔ 1x 切换（以点击处为锚）。
+    var previewZoom by remember(original) { mutableStateOf(1f) }
+    var previewPan by remember(original) { mutableStateOf(Offset.Zero) }
+    // 上一帧的 fit 宽度：分隔条拖动改的是预览框，框变 ⇒ fit 变 ⇒ 若不补偿，
+    // 已放大的图片会被框「牵着走」地缩放。补偿见预览区内的用法。
+    val lastFitWidth = remember(original) { mutableStateOf(0f) }
+
     // 对比基准：优先用上层给的**零编辑渲染图**（同一条管线、同一次口径），
     // 缺省才退回导入预览（语义上不严谨，但好过空指针）。
     val compareSource: Bitmap = compareBase ?: original
@@ -390,6 +433,38 @@ fun EditorScreen(
     // UI-5：静态模糊底图。用 `remember(original)` 钉住 —— 换图才重算一次，
     // 拖动滑块 / 滚动面板 / 切分类都**不重算**（这是「不做实时 backdrop 模糊」的落地方式）。
     val backdrop = remember(original) { blurredBackdrop(original) }
+
+    // —— 直方图数据（§4.0.10，「明暗」页顶部展示）——
+    //
+    // 随每次渲染完成（renderVersion 变化）在后台重算，不在渲染热路径上：
+    // 2048×1366 全幅 getPixels + 步长采样约几毫秒，放 Default 线程足够。
+    // runCatching 兜底位图竞态（理论上「正在显示的位图只读」的纪律保证了它安全，
+    // 但读像素失败时不该让编辑页崩 —— null 时直方图区域直接不占位）。
+    val histogram by produceState<Triple<FloatArray, FloatArray, FloatArray>?>(null, renderVersion, rendered) {
+        val bmp = rendered ?: return@produceState
+        value = withContext(Dispatchers.Default) {
+            runCatching {
+                val w = bmp.width
+                val h = bmp.height
+                if (w <= 0 || h <= 0) return@runCatching null
+                val px = IntArray(w * h)
+                bmp.getPixels(px, 0, w, 0, 0, w, h)
+                val n = px.size
+                val r = ByteArray(n)
+                val g = ByteArray(n)
+                val b = ByteArray(n)
+                for (i in 0 until n) {
+                    val p = px[i]
+                    r[i] = ((p shr 16) and 0xff).toByte()
+                    g[i] = ((p shr 8) and 0xff).toByte()
+                    b[i] = (p and 0xff).toByte()
+                }
+                val step = if (n > 1_500_000) 8 else 4
+                val (br, bg, bb) = Histogram.computeRgb(r, g, b, n, step)
+                Triple(Histogram.normalize(br), Histogram.normalize(bg), Histogram.normalize(bb))
+            }.getOrNull()
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -469,45 +544,121 @@ fun EditorScreen(
             val imagePx = display?.let { IntSize(it.width, it.height) } ?: IntSize.Zero
             val fit = fitContentRect(boxPx, imagePx)
 
+            // ———— 分隔条拖动不牵动已放大的图片（§4.0.10）————
+            //
+            // 框变 ⇒ fit 变；按新旧 fit 之比**反向补偿 zoom**，让「绝对显示尺寸」保持不变。
+            // 用户放大看的是照片本身：预览框变大变小只应改变「看得见多少」，不该改照片大小。
+            // （组合期回写会立刻触发一次重组合并收敛 —— 比 SideEffect 少一帧的尺寸抖动。）
+            if (previewZoom > 1f && lastFitWidth.value > 0f && fit.width > 0f &&
+                abs(fit.width - lastFitWidth.value) > 0.5f
+            ) {
+                previewZoom = ((previewZoom * lastFitWidth.value) / fit.width).coerceIn(1f, MAX_PREVIEW_ZOOM)
+            }
+            if (fit.width > 0f) lastFitWidth.value = fit.width
+
+            // 放大后的显示尺寸；平移钳位（图片永远不脱出预览框 ⇒ 不会露出「图外」的底）。
+            val dispW = fit.width * previewZoom
+            val dispH = fit.height * previewZoom
+            val clampedPan = clampPreviewPan(
+                previewPan, boxPx.width.toFloat(), boxPx.height.toFloat(), dispW, dispH
+            )
+            if (clampedPan != previewPan) previewPan = clampedPan
+
             if (display != null && fit.width > 0f && fit.height > 0f) {
-                Image(
-                    bitmap = display,
-                    contentDescription = "编辑预览",
-                    // contentScale 必须**显式**写出：手势归一化要靠它反算内容矩形（见 previewGestures）。
-                    // 依赖默认值的话，一旦 Compose 改了默认值就会静默改变落点换算。
-                    // 此处内层已按 Fit 的结果定尺，Fit 实际是恒等映射 —— 显式写出只为钉住语义。
-                    contentScale = ContentScale.Fit,
+                // 手势挂在**裁剪容器**上而不是 Image 上：放大后的 Image 比容器大，
+                // 挂在 Image 上会让「视觉上已被裁掉的部分」继续吃指针事件（盖住工具条的可点区）。
+                Box(
                     modifier = Modifier
-                        .size(
-                            with(density) { fit.width.toDp() },
-                            with(density) { fit.height.toDp() }
-                        )
-                        // 圆角改由**照片自己**承担：预览容器已经没有背景了，
-                        // 再让容器去 clip 就等于「裁一块没有内容的圆角」。
-                        //
-                        // ⚠️ 取最小的 14dp（`Radius.chip`），**不能**沿用容器的 40dp（`Radius.shell`）。
-                        // 真机反馈：「预览窗口圆角过大，丢失边缘细节」。
-                        // 这是一条很容易搞反的规则 —— 圆角阶梯是给**容器**定的（大容器配大圆角），
-                        // 而照片是**内容**：40dp 在 428dp 宽的照片上会啃掉四角一大块，
-                        // 而照片四角常常正好是有用信息（天空、地面、人物肩线）。**内容一律取最小档。**
-                        .clip(Radius.chip)
-                        // 1px 极淡描边：照片现在是直接落在模糊底图上的，需要一个边界兜底 ——
-                        // 否则浅色照片的边缘会与底图糊在一起，读起来像「没装进框里」。
-                        // 取 `outlineVariant`（工作台主题里是 #33313A）：只兜底、不装饰，
-                        // 与 §2.2「不画粗边框」是同一条规矩。
-                        // ⚠️ 形状必须与上面的 `clip` 一致，否则描边会画在照片**已经被裁掉**的角上。
-                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, Radius.chip)
+                        .fillMaxSize()
+                        .clipToBounds()
                         .previewGestures(
                             retouchTool = retouchTool,
-                            // 预览矩形 == 内容矩形 ⇒ 直接把 Fit 的结果当基准传下去，
-                            // 归一化于是退化为「除以照片尺寸」，与语义完全一致。
-                            previewSize = IntSize(fit.width.toInt(), fit.height.toInt()),
+                            boxPx = boxPx,
                             contentSize = imagePx,
+                            // ⚠️ 手势协程不能以 zoom/pan 为 key（平移时它们每帧都在变，
+                            // key 一变协程就被重启、平移当场断掉），用 getter 读活值。
+                            readZoom = { previewZoom },
+                            readPan = { previewPan },
+                            onTransform = { zoomFactor, panDelta ->
+                                previewZoom = (previewZoom * zoomFactor).coerceIn(1f, MAX_PREVIEW_ZOOM)
+                                previewPan += panDelta
+                            },
+                            onDoubleTapToggle = { tap ->
+                                val f = fitContentRect(boxPx, imagePx)
+                                if (f.width > 0f && f.height > 0f) {
+                                    val newZoom = if (previewZoom > 1.05f) 1f else DOUBLE_TAP_ZOOM
+                                    // 以点击处为锚：切换前后点住的照片内容不动
+                                    previewPan = panAnchorAtPoint(
+                                        tap, boxPx.width.toFloat(), boxPx.height.toFloat(),
+                                        f.width, f.height, previewZoom, previewPan, newZoom
+                                    )
+                                    previewZoom = newZoom
+                                }
+                            },
                             onBrushStroke = onBrushStroke,
                             onInpaintStroke = onInpaintStroke,
                             onPressChanged = { showOriginal = it }
                         )
-                )
+                ) {
+                    Image(
+                        bitmap = display,
+                        contentDescription = "编辑预览",
+                        // contentScale 必须**显式**写出：手势归一化要靠它反算内容矩形（见 previewGestures）。
+                        // 此处内层已按 Fit 的结果定尺，Fit 实际是恒等映射 —— 显式写出只为钉住语义。
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .size(
+                                with(density) { dispW.toDp() },
+                                with(density) { dispH.toDp() }
+                            )
+                            // 平移只在**放置阶段**读取状态（lambda 版 offset），不触发重组。
+                            .offset { IntOffset(previewPan.x.roundToInt(), previewPan.y.roundToInt()) }
+                            // 圆角改由**照片自己**承担：预览容器已经没有背景了，
+                            // 再让容器去 clip 就等于「裁一块没有内容的圆角」。
+                            //
+                            // ⚠️ 取最小的 14dp（`Radius.chip`），**不能**沿用容器的 40dp（`Radius.shell`）。
+                            // 真机反馈：「预览窗口圆角过大，丢失边缘细节」。
+                            // 这是一条很容易搞反的规则 —— 圆角阶梯是给**容器**定的（大容器配大圆角），
+                            // 而照片是**内容**：40dp 在 428dp 宽的照片上会啃掉四角一大块，
+                            // 而照片四角常常正好是有用信息（天空、地面、人物肩线）。**内容一律取最小档。**
+                            .clip(Radius.chip)
+                            // 1px 极淡描边：照片现在是直接落在模糊底图上的，需要一个边界兜底 ——
+                            // 否则浅色照片的边缘会与底图糊在一起，读起来像「没装进框里」。
+                            // 取 `outlineVariant`（工作台主题里是 #33313A）：只兜底、不装饰，
+                            // 与 §2.2「不画粗边框」是同一条规矩。
+                            // ⚠️ 形状必须与上面的 `clip` 一致，否则描边会画在照片**已经被裁掉**的角上。
+                            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, Radius.chip)
+                    )
+                }
+
+                // 放大中的「复位」胶囊：出口必须可见可点 —— 放大后单指已被平移占用，
+                // 不能逼用户精确捏合回 1x。不做按下缩放 ⇒ indication/interactionSource 一并传 null。
+                if (previewZoom > 1.01f) {
+                    val tint = rememberGlassTint(opaque = true)
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(Spacing.s)
+                            .clip(Radius.pill)
+                            .clickable(
+                                interactionSource = null,
+                                indication = null
+                            ) {
+                                previewZoom = 1f
+                                previewPan = Offset.Zero
+                            }
+                            .glassSurface(tint, Radius.pill)
+                            .padding(horizontal = Spacing.m, vertical = Spacing.s),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            "已放大 ${(previewZoom * 100).roundToInt()}% · 复位",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = tint.content
+                        )
+                    }
+                }
             } else {
                 Text("渲染中…", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
@@ -665,6 +816,7 @@ fun EditorScreen(
                                 activeScope = scope,
                                 activeLayer = activeLayer,
                                 presetThumbs = presetThumbs,
+                                histogram = histogram,
                                 onSelectionChange = { selection = it },
                                 onParamChange = writeParams,
                                 onParamCommit = onParamCommit,
@@ -708,7 +860,8 @@ fun EditorScreen(
             status = status,
             onExport = onExport,
             onCancelExport = onCancelExport,
-            onDismiss = { showExport = false }
+            onDismiss = { showExport = false },
+            jpegQuality = jpegQuality
         )
     }
 }
@@ -944,62 +1097,197 @@ internal fun fitContentRect(box: IntSize, image: IntSize): Rect {
 }
 
 /**
- * 预览区的指针交互。抽成 [Modifier] 扩展是为了让 [EditorScreen] 的布局部分读起来是布局，
- * 而不是被三段 `pointerInput` 代码块淹没。
+ * 预览区的指针交互（§4.0.10 起含缩放 / 平移）。抽成 [Modifier] 扩展是为了让
+ * [EditorScreen] 的布局部分读起来是布局，而不是被一整段手势状态机淹没。
  *
- * 坐标一律先换算到**内容矩形**内的 [0..1] 再上报（换算依据见 [fitContentRect]）。
+ * ## 一个状态机管全部手势（而不是三个 detector 叠罗汉）
  *
- * ⚠️ `pointerInput` 的 key 必须带上 [previewSize] / [contentSize]：这两个参数是**普通值**
- * （不是 state 读取），首帧拿到的是 `IntSize.Zero`；不把它们作为 key 重启手势协程，
- * 归一化就会一直用首帧的零尺寸，涂抹落点会永远贴着角落。
+ * 旧版按 `retouchTool` 分三个 `pointerInput`（拖动 / 点按 / 按住）。加入缩放后这条路走不通：
+ * `detectDragGestures` 会把**两指捏合的位移**当成第一根手指的拖动（涂抹会跟着缩放一起画），
+ * 而 `detectTapGestures` 的 `onPress` 在双指刚按下时就触发（对比图闪一下）。于是改成
+ * **单协程状态机**，判定规则一次写清：
+ *
+ * | 手势 | 查看模式（none） | 画笔（skin） | 祛瑕（blemish） |
+ * |---|---|---|---|
+ * | 双指捏合/拖动 | 缩放 + 平移 | 缩放 + 平移 | 缩放 + 平移 |
+ * | 单指拖动（已放大） | 平移 | **涂抹**（平移交给双指） | 平移 |
+ * | 单指按住 | 看原图（抬起还原） | 涂抹 | — |
+ * | 单击（未拖动） | —（双击=缩放切换） | 涂抹一点 | 落一个祛瑕点 |
+ *
+ * 「画笔模式下单指永远是涂抹」是刻意的：精修皮肤时手指不该突然从「画」变成「挪图」——
+ * 想挪图就用两根手指，规则只有一条且永不变。
+ *
+ * ## 坐标换算：缩放后也要落在照片上
+ *
+ * 上报坐标仍然一律归一化到 [0..1]（硬约定：预览尺寸 ≠ 源图/导出分辨率）。缩放后
+ * 图片不再与预览框重合，基准从「fit 矩形」改为「fit·zoom + pan 的显示矩形」
+ * （见 [pointToContentNorm]）—— 涂在哪儿就是哪儿，放大只是看得更清，不改变落点语义。
+ *
+ * ⚠️ `pointerInput` 的 key 带上 [boxPx] / [contentSize]（首帧是零尺寸，不做 key 会永远贴角落），
+ * 但**绝不能**带 zoom/pan（平移中每帧变 ⇒ 协程被重启 ⇒ 平移当场断掉）——它们经
+ * [readZoom] / [readPan] 读活值。
  */
 private fun Modifier.previewGestures(
     retouchTool: String,
-    previewSize: IntSize,
+    boxPx: IntSize,
     contentSize: IntSize,
+    readZoom: () -> Float,
+    readPan: () -> Offset,
+    onTransform: (zoomFactor: Float, panDelta: Offset) -> Unit,
+    onDoubleTapToggle: (Offset) -> Unit,
     onBrushStroke: (Float, Float) -> Unit,
     onInpaintStroke: (Float, Float) -> Unit,
     onPressChanged: (Boolean) -> Unit
-): Modifier = when (retouchTool) {
-    "skin" -> pointerInput(previewSize, contentSize) {
-        detectDragGestures { change, _ ->
-            change.consume()
-            val rect = fitContentRect(previewSize, contentSize)
-            if (rect.width <= 0f || rect.height <= 0f) return@detectDragGestures
-            // 拖动越界用 clamp（不能让手指划出画面就断笔），但基准是内容矩形而不是 Box。
-            onBrushStroke(
-                ((change.position.x - rect.left) / rect.width).coerceIn(0f, 1f),
-                ((change.position.y - rect.top) / rect.height).coerceIn(0f, 1f)
-            )
+): Modifier = pointerInput(retouchTool, boxPx, contentSize) {
+    // 手势模式：0=未定（刚按下） 1=单指 2=双指（一旦进入，抬到单指也保持——
+    // 捏合中途抬一根手指不该突然变成「涂抹/平移跳变」）。
+    // tap 判定的 slop：手指按下总会有几像素微抖，不设门槛会把单击全判成拖动。
+    val slopPx = 8.dp.toPx()
+    var lastTapUp = 0L
+    awaitEachGesture {
+        val first = awaitFirstDown(requireUnconsumed = false)
+        first.consume()
+        var mode = 0
+        var dragged = false
+        // 查看模式：按下即看原图（保持既有语义，抬起/进入双指时还原）。
+        if (retouchTool == "none") onPressChanged(true)
+        try {
+            while (true) {
+                val event = awaitPointerEvent()
+                val pressed = event.changes.filter { it.pressed }
+                if (pressed.isEmpty()) break
+                if (pressed.size >= 2) {
+                    if (mode != 2 && retouchTool == "none") onPressChanged(false)
+                    mode = 2
+                    val zf = event.calculateZoom()
+                    val pd = event.calculatePan()
+                    if (zf != 1f || pd != Offset.Zero) {
+                        onTransform(zf, pd)
+                        event.changes.forEach { it.consume() }
+                    }
+                } else {
+                    val c = pressed[0]
+                    val delta = c.positionChange()
+                    if (delta != Offset.Zero) {
+                        if (mode == 2) {
+                            // 双指抬到单指：继续平移（随时可再落回双指）
+                            onTransform(1f, delta)
+                            c.consume()
+                        } else if (retouchTool == "skin") {
+                            // clampToContent：手指划出画面不断笔（旧版 detectDragGestures 的语义）
+                            pointToContentNorm(
+                                c.position, boxPx, contentSize, readZoom(), readPan(),
+                                clampToContent = true
+                            )?.let { onBrushStroke(it.first, it.second) }
+                            dragged = true
+                            c.consume()
+                        } else if (readZoom() > 1f) {
+                            onTransform(1f, delta)
+                            dragged = true
+                            c.consume()
+                        } else {
+                            // 未放大时的单指拖动：超过 slop 才算「拖过」（微抖不算，别误杀 tap），
+                            // 不消费、不动作（查看模式的按住对比由 onPressChanged 承担）。
+                            if ((c.position - first.position).getDistance() > slopPx) dragged = true
+                        }
+                    }
+                    mode = if (mode == 2) 2 else 1
+                }
+            }
+        } finally {
+            if (retouchTool == "none") onPressChanged(false)
+        }
+        // —— 抬指判定：没拖过、没进过多指 ⇒ 是一次 tap ——
+        if (!dragged) {
+            if (retouchTool == "blemish") {
+                pointToContentNorm(first.position, boxPx, contentSize, readZoom(), readPan())
+                    ?.let { onInpaintStroke(it.first, it.second) }
+            } else if (retouchTool == "none") {
+                val now = System.currentTimeMillis()
+                if (now - lastTapUp < DOUBLE_TAP_MS) {
+                    onDoubleTapToggle(first.position)
+                    lastTapUp = 0L
+                } else {
+                    lastTapUp = now
+                }
+            }
+        } else {
+            lastTapUp = 0L
         }
     }
+}
 
-    "blemish" -> pointerInput(previewSize, contentSize) {
-        detectTapGestures { offset ->
-            val rect = fitContentRect(previewSize, contentSize)
-            if (rect.width <= 0f || rect.height <= 0f) return@detectTapGestures
-            // 点在黑边上时**不落点**：那里没有像素，硬 clamp 会在照片边缘凭空多一个祛斑点。
-            if (offset.x < rect.left || offset.x > rect.right ||
-                offset.y < rect.top || offset.y > rect.bottom
-            ) {
-                return@detectTapGestures
-            }
-            onInpaintStroke(
-                ((offset.x - rect.left) / rect.width).coerceIn(0f, 1f),
-                ((offset.y - rect.top) / rect.height).coerceIn(0f, 1f)
-            )
-        }
-    }
+/**
+ * 平移钳位：图片中心相对预览区中心的偏移不许让图片**脱出**预览框（每轴最多露出
+ * `(显示尺寸 − 框尺寸) / 2`；显示尺寸 ≤ 框时偏移恒为 0 ⇒ 未放大时平移自然无效）。
+ *
+ * `internal` 供 JVM 单测钉住（`PreviewZoomTest`）。
+ */
+internal fun clampPreviewPan(pan: Offset, boxW: Float, boxH: Float, dispW: Float, dispH: Float): Offset {
+    val mx = maxOf(0f, (dispW - boxW) / 2f)
+    val my = maxOf(0f, (dispH - boxH) / 2f)
+    return Offset(pan.x.coerceIn(-mx, mx), pan.y.coerceIn(-my, my))
+}
 
-    else -> pointerInput(Unit) {
-        detectTapGestures(
-            onPress = {
-                onPressChanged(true)
-                awaitRelease()
-                onPressChanged(false)
-            }
-        )
-    }
+/**
+ * 预览框内的指针坐标 → 照片内容的 [0..1] 归一化坐标（缩放 / 平移感知）。
+ * 点落在照片显示矩形之外（放大后图片比框小时四角露底）返回 `null` —— 那里没有照片像素。
+ *
+ * - 祛瑕（默认）：null = **不落点**（与旧版「点黑边不落点」同一口径——硬 clamp 会在
+ *   照片边缘凭空多一个点）；
+ * - 画笔（[clampToContent] = true）：null 不会出现，越界一律 clamp —— 手指划出画面
+ *   **不能断笔**（旧版 `detectDragGestures` 的既有语义，涂到大边缘继续有效）。
+ *
+ * `internal` 供 JVM 单测钉住（`PreviewZoomTest`）。
+ */
+internal fun pointToContentNorm(
+    pos: Offset,
+    boxPx: IntSize,
+    contentSize: IntSize,
+    zoom: Float,
+    pan: Offset,
+    clampToContent: Boolean = false
+): Pair<Float, Float>? {
+    val fit = fitContentRect(boxPx, contentSize)
+    if (fit.width <= 0f || fit.height <= 0f) return null
+    val dispW = fit.width * zoom
+    val dispH = fit.height * zoom
+    val left = boxPx.width / 2f - dispW / 2f + pan.x
+    val top = boxPx.height / 2f - dispH / 2f + pan.y
+    val nx = (pos.x - left) / dispW
+    val ny = (pos.y - top) / dispH
+    if (clampToContent) return nx.coerceIn(0f, 1f) to ny.coerceIn(0f, 1f)
+    if (nx < 0f || nx > 1f || ny < 0f || ny > 1f) return null
+    return nx to ny
+}
+
+/**
+ * 双击切换缩放档时的平移换算：**点住的照片内容在切换前后不动**。
+ * 由「点击点在旧显示矩形里的内容坐标」反推新显示矩形的原点，再换算回 pan。
+ *
+ * `internal` 供 JVM 单测钉住（`PreviewZoomTest`）。
+ */
+internal fun panAnchorAtPoint(
+    tap: Offset,
+    boxW: Float,
+    boxH: Float,
+    fitW: Float,
+    fitH: Float,
+    oldZoom: Float,
+    oldPan: Offset,
+    newZoom: Float
+): Offset {
+    val dispW = fitW * oldZoom
+    val dispH = fitH * oldZoom
+    val left = boxW / 2f - dispW / 2f + oldPan.x
+    val top = boxH / 2f - dispH / 2f + oldPan.y
+    val cx = if (dispW > 0f) (tap.x - left) / dispW else 0.5f
+    val cy = if (dispH > 0f) (tap.y - top) / dispH else 0.5f
+    val ndW = fitW * newZoom
+    val ndH = fitH * newZoom
+    val nLeft = tap.x - cx * ndW
+    val nTop = tap.y - cy * ndH
+    return Offset(nLeft - (boxW / 2f - ndW / 2f), nTop - (boxH / 2f - ndH / 2f))
 }
 
 // ———————————————————————————————————————————————————————————————

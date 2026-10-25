@@ -102,24 +102,33 @@ object Histogram {
      * 口径 = （调整后平均灰阶 − 调整前平均灰阶）/ 128。分母取 128 而不是满量程 255，
      * 是为了让 ±1 级调整在指示条上占约一半长度 —— 满量程归一会让所有微调都看不出来。
      *
-     * 空图 / 两边完全一致返回 0。
+     * ⚠️ 两条直方图**各自**求均值（分子分母同口径）：此前把 `total` 写成两图计数之和，
+     * 指示幅度被稀释了一半（同分布时仍为 0，只有数值不符 KDoc 语义）。
+     *
+     * 空图 / 任一侧全空返回 0。
      */
     fun meanShift(before: IntArray, after: IntArray): Float {
         if (before.size != after.size || before.isEmpty()) return 0f
         var sumB = 0L
         var sumA = 0L
-        var total = 0L
+        var nB = 0L
+        var nA = 0L
         for (i in before.indices) {
             val nb = before[i]
             val na = after[i]
-            val n = (nb + na).toLong()
-            if (n == 0L) continue
-            sumB += i.toLong() * nb
-            sumA += i.toLong() * na
-            total += n
+            if (nb > 0) {
+                sumB += i.toLong() * nb
+                nB += nb
+            }
+            if (na > 0) {
+                sumA += i.toLong() * na
+                nA += na
+            }
         }
-        if (total == 0L) return 0f
-        return ((sumA - sumB).toDouble() / total / 128.0).toFloat()
+        if (nA == 0L || nB == 0L) return 0f
+        val meanA = sumA.toDouble() / nA
+        val meanB = sumB.toDouble() / nB
+        return ((meanA - meanB) / 128.0).toFloat()
     }
 
     /**
@@ -134,11 +143,13 @@ object Histogram {
         if (total <= 0) return 128
         val clip = (total * clipRatio.coerceIn(0f, 0.49f)).toLong()
         var acc = clip
-        var accHigh = total - clip
         for (i in bins.indices) {
             acc += bins[i]
-            if (acc >= (clip + total) / 2) {
-                // 低位端先越过目标即返回（clip 掉的高位样本不影响中位数口径）。
+            // 中位数位置推导：裁掉两端各 clip 后剩 total-2·clip 个样本，其中位数落在
+            // 整体累计的第 clip + (total-2·clip)/2 = **total/2** 个 —— 即 acc（= clip + 前缀和）
+            // 越过 clip + total/2。此前写成 (clip + total)/2，比正确位置低 clip/2 个样本
+            // （读数系统性偏暗约 2.5% 分位），三通道一致的图上不易察觉。
+            if (acc >= clip + total / 2) {
                 return i
             }
         }

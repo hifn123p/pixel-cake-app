@@ -52,7 +52,12 @@ object Exporter {
             if (!written) throw IllegalStateException("bitmap.compress failed for $name")
             values.clear()
             values.put(MediaStore.Images.Media.IS_PENDING, 0)
-            cr.update(uri, values, null, null)
+            // update 返回 0（行未更新）时若照样返回 uri，这条 IS_PENDING=1 的记录就永久
+            // 隐藏 —— 恰好复刻本函数注释里要堵的那个症状。抛出去走下方 catch 的
+            // delete 分支：宁可报「导出失败」，也不留一条看不见也删不掉的记录。
+            if (cr.update(uri, values, null, null) == 0) {
+                throw IllegalStateException("IS_PENDING clear failed for $name")
+            }
             uri
         } catch (t: Throwable) {
             // ⚠️ 必须 Throwable 而不是 Exception：33MP 的 compress 是 OOM 高发点，

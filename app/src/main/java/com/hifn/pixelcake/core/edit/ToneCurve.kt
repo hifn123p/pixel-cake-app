@@ -63,6 +63,6 @@ object ToneCurve {
         Anchor.White -> WHITE_X
     }
 
-    /** 锚点枚举（与 UI 的 `AnchorType` 解耦：核心层不依赖 UI 包）。 */
+    /** 锚点枚举（核心层不依赖 UI 包；编辑器的曲线交互在 `ui/editor/ParamPanel` 的 CurveTab 里）。 */
     enum class Anchor { Black, Mid, White }
 }

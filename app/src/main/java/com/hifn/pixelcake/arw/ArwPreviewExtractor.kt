@@ -15,14 +15,27 @@ object ArwPreviewExtractor {
      * 而这里会按长度 `ByteArray(len)` 再 `copyOf(read)` ⇒ 一个把0x0202 写成几十 MB 的畸形文件
      * 就能让分配翻倍直接 OOM。另外 `len` 用 Int：超过 2GB 时 `.toInt()` 变负数 ⇒
      * `ByteArray(负)` 抛 NegativeArraySizeException。
+     *
+     * [ArwContainer] 挑选候选时也按它过滤（超限候选宁可放过，也别让整条提取链路拒绝）。
      */
-    private const val MAX_PREVIEW_BYTES = 32L * 1024 * 1024
+    const val MAX_PREVIEW_BYTES = 32L * 1024 * 1024
 
     /**
      * @return 内嵌预览 JPEG 的字节；找不到或读取失败返回 null。
      */
     fun extract(source: ArwByteSource): ByteArray? {
-        val range = ArwContainer.previewJpegRange(source) ?: run {
+        // 容器扫描在这里收拢异常（而不是让它穿出去）：ContentArwSource 的 read 会因
+        // provider 撒谎（size 与实际流不符 / cannot seek）抛 IOException，穿出去会被
+        // Decoder 泛化成一句「decode error」，与「文件坏了」混在日志里分不清。
+        val range = try {
+            ArwContainer.previewJpegRange(source)
+        } catch (e: Exception) {
+            DebugLog.e(
+                DebugLog.TAG_DECODE, "arw: preview scan failed",
+                mapOf("err" to (e.message ?: e.javaClass.simpleName))
+            )
+            null
+        } ?: run {
             DebugLog.w(DebugLog.TAG_DECODE, "arw: no preview jpeg range found")
             return null
         }

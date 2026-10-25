@@ -315,6 +315,12 @@ fun linear16ToSrgb(v: Float): Float = when {
 
 ### 6.2 UI 分类重排：**现状 5 个一级分类，内容重排**
 
+> ⚠️ **2026-10-25 追加（UI v2.1 / `UI_DESIGN.md` §4.0.10）**：本节写的「5 → 7」是**批次 1~4 时期的历史**，
+> 当前实际是 **6 个**一级分类：`人像 明暗 颜色 曲线 细节 预设` ——
+> 「调色」拆成「明暗 / 颜色」、「效果」并入「细节」、「预设」吸收 LUT。
+> **上限仍是 7**（判据见本节与 §4.3：每项 ≥40dp，`312/7 = 44.6dp` 够、`312/8 = 39dp` 不够），
+> 当前 6 项还留 1 个名额。下面各条凡涉及「7 个」的**论证仍然有效**，只是**当前取值是 6**。
+
 现状 5 个一级分类（人像/调色/曲线/LUT/预设）。参数翻数倍后，一级必须重排，
 否则「调色」一个分类里要装 20+ 个滑块 —— 那正是 `ParamPanel` KDoc 明确批判过的
 「仪表盘式界面：把复杂度原样丢给用户排序」。
@@ -347,6 +353,9 @@ fun linear16ToSrgb(v: Float): Float = when {
 - **LUT 从一级降为「颜色」的二级**：它和 HSL、分级一样都是「给画面着色」，
   单独占一个一级分类是概念层级错位（`ParamPanel` 的 KDoc 已经写了这条判据：
   「判据是内容量而不是概念上够不够独立」）。降级**不**增加一级个数。
+  ⚠️ **2026-10-25 更正**：LUT 现在挂在**「预设 → 滤镜」**（不再在「颜色」下）——
+  UI v2.1 把「预设」重定义为「风格 / 滤镜」，LUT 与胶片风预设同属「整体观感」这一组。
+  「降为二级」这个**结论不变**，只是宿主分类换了。
 - **「细节」是最后一个有资格进一级的**：到第 7 个为止，「内容量够撑起一个分类」与
   「工具条放得下」两个条件**同时**成立。下一个候选必须先解决「工具条可滚」才有资格进来。
 - **暗角 / 颗粒合成一个一级分类而不是两个**：它们共享的是**实现前提**（都需要坐标），
@@ -465,7 +474,7 @@ HSL 若真机实测掉帧，退路是：**预览路径跳过 HSL，只在导出�
 | `core/edit/ColorMath.kt` | 新增 `buildToneLut`（256 项四区偏移）/ `buildGradingLuts`（3×256）/ `buildHueBandLut`（360 项通道归属）/ `hueToRgbUnit` / `shoulderScale` 与四个区权重函数；管线顺序写进类 KDoc |
 | `core/edit/PixelProgram.kt` | 重写 `finish()`：每阶段「参数中性 ⇒ 整段跳过」；线性域**公共比例软压肩**（修 M1）；HSL 的 HSV 往返内联为零分配局部量 |
 | `core/edit/EditEngine.kt` | `SLOW_RENDER_MS = 150` 的慢预览 WARN + 每次导出打 `px/ms`（性能基线第一次有读数来源） |
-| `ui/editor/EditorToolbar.kt` | 一级分类 `Lut` → `Color`（个数仍是 5；⚠️ 批次 3 起为 **6**，见 §11.1） |
+| `ui/editor/EditorToolbar.kt` | 一级分类 `Lut` → `Color`（个数仍是 5；⚠️ 批次 3 起为 **6**，2026-10-25 UI v2.1 起**构成**也变了：调色拆「明暗/颜色」、效果并入细节、预设吸收 LUT ⇒ `人像 明暗 颜色 曲线 细节 预设`，见 §6.2 追加说明与 `UI_DESIGN.md` §4.0.10） |
 | `ui/editor/ParamPanel.kt` | 二级分组 enum + `PanelSelection` + `ParamSubBar`；调色 / 颜色 / 曲线三组内容；`GlassChipRow` 用上色块槽 |
 | `ui/editor/EditorScreen.kt` | 持有 `PanelSelection`（跨 `Crossfade` 存活）；二级 chip 行钉在滚动之外 |
 | `ui/components/GlassChipRow.kt` | 新增可选 `swatch` 色块槽（画在 label 内，不走 `leadingIcon`） |

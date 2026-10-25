@@ -71,7 +71,9 @@ fun ExportSheet(
     status: EditorStatus,
     onExport: () -> Unit,
     onCancelExport: () -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    /** 实际生效的 JPEG 质量（来自设置页 `AppSettings.jpegQuality`），用于文案如实展示。 */
+    jpegQuality: Int = 92
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
@@ -111,7 +113,9 @@ fun ExportSheet(
                 if (exportFormat == ExportFormat.PNG) {
                     "PNG 无损、体积大，适合还要继续后期的照片。"
                 } else {
-                    "JPEG 质量 92，体积小，适合直接发出去。"
+                    // 质量数从设置来（用户可选 高95/标准92/小80）：写死 92 会在用户改过
+                    // 设置后变成一句与实际导出不符的文案。
+                    "JPEG 质量 $jpegQuality，体积小，适合直接发出去。"
                 },
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant

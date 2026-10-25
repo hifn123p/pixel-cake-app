@@ -32,6 +32,9 @@ object ArwContainer {
     fun previewJpegRange(source: ArwByteSource): LongRange? {
         if (source.size < 8) return null
         val header = source.read(0, 8)
+        // provider 可能短读（size 与实际流不符）：header 不足 8 字节时下面 readU16/readU32
+        // 会直接越界，这里必须显式挡住（同一理由见 readSubIfdOffsets 的短读防护）。
+        if (header.size < 8) return null
         val littleEndian = when {
             header[0] == 'I'.code.toByte() && header[1] == 'I'.code.toByte() -> true
             header[0] == 'M'.code.toByte() && header[1] == 'M'.code.toByte() -> false
@@ -82,7 +85,14 @@ object ArwContainer {
             }
         }
 
-        val best = candidates.maxByOrNull { it.last - it.first } ?: return null
+        // 只在「体积落在提取器可接受区间内」的候选里挑最大的。
+        // 不过滤的话：最大的候选超过 [ArwPreviewExtractor.MAX_PREVIEW_BYTES]（更高像素机身的
+        // 合法大预览）时，提取器会整体拒绝 ⇒ 明明还有 1616px/160px 合规候选，
+        // 用户看到的却是「这张 ARW 无法解码」。
+        val best = candidates
+            .filter { (it.last - it.first + 1) in 3..ArwPreviewExtractor.MAX_PREVIEW_BYTES }
+            .maxByOrNull { it.last - it.first }
+            ?: return null
         DebugLog.i(
             DebugLog.TAG_DECODE, "arw preview candidates",
             mapOf(
@@ -185,7 +195,9 @@ object ArwContainer {
                     // ⚠️ 必须给 SubIFD 数量封顶：cnt 是 U32，上界只来自文件大小 ⇒ 65MB 文件里
                     // 一个畸形 tag 就能让 cnt 达到 1600 万，然后每个都会被 findPreviewInIfd
                     // 解析一次（合「每次 open+skip」彻底卡死 IO 线程）。真实 ARW 的 SubIFD 只有个位数。
-                    val buf = source.read(value, (cnt * 4).toInt())
+                    val need = (cnt * 4).toInt()
+                    val buf = source.read(value, need)
+                    if (buf.size < need) break // provider 短读：继续读只会越界
                     for (j in 0 until cnt) {
                         result.add(readU32(buf, (j * 4).toInt(), le).toLong())
                     }

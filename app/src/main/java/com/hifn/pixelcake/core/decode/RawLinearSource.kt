@@ -32,8 +32,16 @@ class RawLinearSource private constructor(
 
     private val handleRef = AtomicLong(handle)
 
+    /**
+     * 读写与释放的互斥锁。AtomicLong 只消灭了 double-free；「先快照 h、再进 JNI」与
+     * 另一线程的 `close()`（getAndSet 后立刻释放 native 会话）之间仍有一个窗口 ——
+     * close 恰好插进这两步时，`readLinearRows` 拿到的是悬垂指针（use-after-free）。
+     * 本类对外是 `Closeable`、调用方又不止一个协程，安全性不能靠「调用方恰好串行」维持。
+     */
+    private val ioLock = Any()
+
     /** 取 [y0, y0+rows) 段目标行写入 [out]（每像素 3 个 16-bit 分量）。返回实际行数，负数失败。 */
-    fun readRows(y0: Int, rows: Int, out: ShortArray): Int {
+    fun readRows(y0: Int, rows: Int, out: ShortArray): Int = synchronized(ioLock) {
         val h = handleRef.get()
         if (h == 0L) return -1
         // ⚠️ 必须在这里校验 out 的长度：native 侧是 `GetShortArrayElements` + 裸指针写，
@@ -76,8 +84,10 @@ class RawLinearSource private constructor(
         return LinearImage(width, height, data)
     }
 
-    override fun close() {
+    override fun close() = synchronized(ioLock) {
         // getAndSet 原子取走：只有一个人拿得到句柄，另一个线程看到 0 直接返回。
+        // 整段包在 ioLock 里 ⇒ 与 readRows 的 JNI 调用互斥，「close 后仍有一次在途读」
+        // 这个 use-after-free 窗口从结构上关死。
         val h = handleRef.getAndSet(0L)
         if (h != 0L) RawNative.closeLinear(h)
     }
@@ -102,15 +112,29 @@ class RawLinearSource private constructor(
                 DebugLog.e(DebugLog.TAG_DECODE, "raw openLinear failed", mapOf("path" to path))
                 return null
             }
-            val dims = RawNative.linearDims(handle)
-            // ⚠️ 还要挡住 native 返回 {0,0,0,0}：不校验的话 `LinearImage` 的 require 会抛，
-            // 异常一路冒到 `Decoder.decodeToProxy` 的 catch，临时文件就再也无人回收了。
-            if (dims == null || dims.size < 4 || dims[0] <= 0 || dims[1] <= 0) {
+            // openLinear 成功后的两次 JNI 查询（NewIntArray/NewFloatArray 在堆耗尽时抛
+            // OutOfMemoryError）必须也有兜底：此时 handle 已建（全分辨率下 native 侧
+            // 约 196MB），不 closeLinear 就是「在最缺内存的时刻泄漏一大块 native 内存」。
+            val dims: IntArray?
+            val wb: FloatArray?
+            try {
+                dims = RawNative.linearDims(handle)
+                // ⚠️ 还要挡住 native 返回 {0,0,0,0}：不校验的话 `LinearImage` 的 require 会抛，
+                // 异常一路冒到 `Decoder.decodeToProxy` 的 catch，临时文件就再也无人回收了。
+                if (dims == null || dims.size < 4 || dims[0] <= 0 || dims[1] <= 0) {
+                    RawNative.closeLinear(handle)
+                    DebugLog.e(DebugLog.TAG_DECODE, "raw linearDims invalid", mapOf("path" to path))
+                    return null
+                }
+                wb = RawNative.linearMeta(handle)
+            } catch (t: Throwable) {
                 RawNative.closeLinear(handle)
-                DebugLog.e(DebugLog.TAG_DECODE, "raw linearDims invalid", mapOf("path" to path))
+                DebugLog.e(
+                    DebugLog.TAG_DECODE, "raw dims/meta threw",
+                    mapOf("err" to (t.message ?: t.javaClass.simpleName))
+                )
                 return null
             }
-            val wb = RawNative.linearMeta(handle)
             val wbSafe = if (wb == null || wb.size < 4) floatArrayOf(1f, 1f, 1f, 1f) else wb
             DebugLog.i(
                 DebugLog.TAG_DECODE, "raw linear opened",

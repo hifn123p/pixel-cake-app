@@ -7,6 +7,7 @@ import android.net.Uri
 import com.hifn.pixelcake.arw.ArwFullDecoder
 import com.hifn.pixelcake.arw.ArwPreviewDecoder
 import com.hifn.pixelcake.diag.DebugLog
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlin.math.max
@@ -46,6 +47,10 @@ object Decoder {
                 val mime = cr.getType(uri).orEmpty().lowercase()
                 val isArw = mime.contains("arw") || uri.toString().endsWith(".arw", ignoreCase = true)
                 if (isArw) decodeArw(context, uri, longEdge) else decodeBitmap(context, uri, longEdge, mime)
+            } catch (c: CancellationException) {
+                // 协程取消（用户退出编辑页等）必须原样上抛：吞掉它会把「取消」伪装成
+                // 「无法解码该文件」报给用户（与 CameraBatch / 导出协程同一纪律）。
+                throw c
             } catch (t: Throwable) {
                 DebugLog.e(
                     DebugLog.TAG_DECODE, "decode error",
@@ -67,6 +72,8 @@ object Decoder {
                 val mime = cr.getType(uri).orEmpty().lowercase()
                 val isArw = mime.contains("arw") || uri.toString().endsWith(".arw", ignoreCase = true)
                 if (isArw) null else decodeBitmap(context, uri, longEdge, mime)
+            } catch (c: CancellationException) {
+                throw c
             } catch (t: Throwable) {
                 DebugLog.e(
                     DebugLog.TAG_DECODE, "decodeFullRes error",
@@ -146,10 +153,16 @@ object Decoder {
         return null
     }
 
-    private fun computeSample(ow: Int, oh: Int, longEdge: Int): Int {
-        val ratio = max(ow, oh).toFloat() / longEdge.toFloat()
+    internal fun computeSample(ow: Int, oh: Int, longEdge: Int): Int {
+        if (ow <= 0 || oh <= 0 || longEdge <= 0) return 1
+        val longest = max(ow, oh)
+        val ratio = longest.toFloat() / longEdge.toFloat()
         var s = 1
         while (s * 2 <= ratio) s *= 2
+        // 超预算再对折：AOSP 惯例会停在「对折后就小于目标」的那一档（如 33MP 源 + 2048
+        // 目标 → 3504×2336 ≈ 31MB），比「长边 ≤ longEdge」的代理预算大 3 倍且整会话常驻。
+        // 超过 1.5 倍才再降半档（7008 → 1752、4000 → 2000），小幅超预算保留以免预览过软。
+        if (longest / s > longEdge * 3 / 2) s *= 2
         return s
     }
 }

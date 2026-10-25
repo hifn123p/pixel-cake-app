@@ -20,10 +20,13 @@ description: 像素蛋糕（AI 人像精修）安卓应用的唯一开发计划�
 
 ---
 
-## 0. 当前进度（2026-10-06）
+## 0. 当前进度（2026-10-25）
 
-> **已发布到 `v0.4.6`**（`v0.1.0` → `v0.4.6` tag 齐全，5 个 CI job 含 `Publish GitHub Release`）。
-> 上一版进度停在 2026-09-09，本节已按现状重写。**「设计稿」一栏统一指向 `PHASE_DESIGN_HISTORY.md`**
+> **已发布到 `v0.5.0`**（`v0.1.0` → `v0.5.0` tag 齐全，5 个 CI job 含 `Publish GitHub Release`）。
+> 本轮（v0.4.7 → v0.5.0）做了两件事：**第二轮全量代码审查**（3 个 P1 + 12 个 P2 + 删死代码 3 文件
+> + 新增 3 个测试文件，见 `ENGINEERING_NOTES.md` §8）与 **UI v2.1**（预览缩放手势 +
+> 调色菜单 7→6 重排 + 尺寸回调，见 `UI_DESIGN.md` §4.0.9 / §4.0.10）。
+> 上一版进度停在 2026-10-06（v0.4.6）。**「设计稿」一栏统一指向 `PHASE_DESIGN_HISTORY.md`**
 > —— 原来的 `P1b_DESIGN.md` / `P1p_DESIGN.md` / `P2_DESIGN.md` / `FIX_LIST.md` 已合并进该文档，
 > 原稿在合并后已**从工作树移除**（它们是 HEAD 里有记录的正式提交内容，
 > 可 `git show <合并前的提交>:docs/<原名>` 取回）。
@@ -38,6 +41,8 @@ description: 像素蛋糕（AI 人像精修）安卓应用的唯一开发计划�
 | P2 / P3 | ✅（待真机验收）/ 🔜 | **P2**：A7C2 USB 直连 —— **PoC-1~5 全部落地**：① 免权限 USB 枚举 + Sony VID/接口类识别（`camera/CameraProbe`、`camera/UsbCameraScanner`）；② USB 授权（`camera/UsbPermission`：`FLAG_MUTABLE` PendingIntent + 广播/系统 action 双注册 + 300ms 轮询兜底）；③ PTP 会话握手 + 设备信息 + 存储/对象枚举（`PtpProtocol`/`PtpData`/`PtpTransport`/`CameraPtpReport`）；④ **`GetObject` 256KB 分块流式下载** + **长生命周期会话** `camera/CameraSession`（列图/拉图/批量复用，I/O 串行化于内部 Mutex）；⑤ **批量套预设导出** `camera/CameraBatch`（拉取→复用 P1 管线套 `Presets.ALL`→导出到相册，导完即删、文件边界取消、进度回调）。UI：首页 `CameraPanel` 完成 检测→握手→列图→单张导入编辑器→批量套预设；连接成功后自动产出体检报告（`CameraConnection.inspect(session, steps)` 对**已有会话**体检，不自开会话）。协议层 + 数据集解析 + 批处理纯逻辑均有 JVM 单测。**剩**：真机验收（A7C2 实插）+ PoC-6（边拍边看）后置。设计见 `PHASE_DESIGN_HISTORY.md`（P2 部分）。**P3**：NAS Docker 化 Rust 引擎 —— **未启动**。 |
 | 调色批次 1~5 | ✅ | 参数体系扩展 **81 项**（白平衡 / 影调 / 偏好 / 曲线 / HSL / 彩色分级 / LUT / 细节 / 效果）+ **对象作用域图层**（8 个作用域 = 模型原生 6 类 + 2 个派生）。设计见 `TONING_DESIGN.md`、`OBJECT_TONE_DESIGN.md`。 |
 | UI v2.0 | ✅ | 玻璃工作台外壳 + 五段式编辑器 + Token 体系（间距/圆角/字阶/动效）+ 设置页与关于页 + 静态模糊底图。设计见 `UI_DESIGN.md`。 |
+| **第二轮全量审查** | ✅ | 覆盖 `core/edit`/`core/ml`/`camera`/`decode`/`arw`/`cpp`/`ui`/`MainActivity` 全域逐文件精读。**修 3 个 P1**：① `RawLinearSource` 加 `ioLock` 互斥，关死「快照句柄→JNI」与 `close()` 的 use-after-free 窗口（原生越界写）；② `raw_bridge.cpp` 的 `readLinearRows` 缓冲校验改 **jlong** 比较（`rows*width*3` 截断成 32 位会变负 ⇒ 判小失效）；③ ARW 预览候选**先按 `3..32MB` 过滤再取最大**（超限回退到合规次大候选，不再「整张 ARW 打不开」）。另 12 个 P2：`Histogram.clippedMedian` 阈值 / `meanShift` 分母两个真 bug、代理采样改「超目标 1.5 倍再对折」、`runCatching` 吞 `CancellationException`、`ParamSlider` 的 `onDispose` 兜底等。**删死代码**：`ui/editor/curves/` 整包（3 文件、4 个 P0、包外零引用）。**新增测试** 3 个文件（`ProxySampleSizeTest` / `HistogramTest` / `PreviewZoomTest`）。详见 `ENGINEERING_NOTES.md` §8。 |
+| **UI v2.1** | ✅ | **预览缩放**：双指缩放（≤8×）+ 平移、双击 2.5×↔1×（以点击处为锚）、画笔模式下单指恒为涂抹、未放大时按住看原图；手势从 3 个 `pointerInput` 合并为**单协程状态机**（`awaitEachGesture`），落点换算与平移钳位抽为 3 个 `internal` 纯函数（有单测）。**调色菜单 7→6**（调色拆「明暗/颜色」、效果并入细节、预设吸收 LUT）。**RGB 三通道直方图**接进「明暗」页。**尺寸回调**（§4.0.9）：字阶 28→24 / 18→16 / 15→14 / 13→12 / 12→11，`xl` 20→24、`xxl` 28→32，`controlHeight` 仍 48dp。`CameraPanel` 视觉迁移到 `GlassCard` + token。设计见 `UI_DESIGN.md` §4.0.9 / §4.0.10。 |
 
 > LibRaw master API 注意：已移除 `dcraw_free()`；`dcraw_make_mem_image()` 的返回产物必须用 `LibRaw::dcraw_clear_mem()` 释放，`free_image()` 只释放内部 `imgdata.image`、二者不可混用（见 F02 / D09）；Kotlin `val version` 与 native `getVersion()` JVM 签名冲突，已改名 `librawVersion`（详见 §8 风险表与每日日志 2026-09-09）。
 
@@ -91,6 +96,8 @@ description: 像素蛋糕（AI 人像精修）安卓应用的唯一开发计划�
 | NAS 目录控制 / 单张·批量后台修图 | | | | ✅ |
 | ML 自动皮肤蒙版（P1p-1：LiteRT + MediaPipe 皮肤分割；编辑器「自动蒙版」开关，默认开） | | ✅(P1+) | | |
 | ML 人脸检测 / 关键点（P1p-2：喂液化 `centroid`） | | 后置 | | |
+| **预览缩放与平移**（双指缩放 ≤8×、双击 2.5×↔1×、按住看原图；UI v2.1） | | ✅ | | |
+| **RGB 三通道直方图**（明暗页叠加显示；UI v2.1） | | ✅ | | |
 
 ### 2.2 明确不做
 - P1 阶段不涉及任何后端/网络（**照片在手机上，全程本地**）。

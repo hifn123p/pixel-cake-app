@@ -16,6 +16,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -92,6 +93,18 @@ fun ParamSlider(
     enabled: Boolean = true
 ) {
     var dragging by remember { mutableStateOf(false) }
+    // 拖动途中本组合被销毁（第二根手指点了未 inert 的二级分组 chip / 作用域 chip /
+    // 画布工具 chip ⇒ `when` 分支切换换掉了面板内容）时，M3 Slider **不会**回调
+    // `onValueChangeFinished` ⇒ 上层的 `dragging` 永远收不到 false ⇒ 顶栏/工具条
+    // 一直 `alpha=0` 且 inert（返回、导出、重置全部点不到）。onDispose 兜底复位。
+    DisposableEffect(Unit) {
+        onDispose {
+            if (dragging) {
+                dragging = false
+                onDraggingChange(false)
+            }
+        }
+    }
     val accent = MaterialTheme.colorScheme.primary
     val dark = LocalDarkTheme.current
 

@@ -42,6 +42,19 @@ class ArwPreviewExtractorTest {
         }
     }
 
+    /**
+     * 「自报尺寸」数据源：size 声称很大（如 40MB），实际只物化 IFD 区那几十字节。
+     * 生产里对应「provider 报的 size 与真实流一致、但内容大头在远端」的正常情形；
+     * 扫描阶段只读 IFD 表，不会真去读那 37MB。
+     */
+    private class SparseArwSource(override val size: Long, private val data: ByteArray) : ArwByteSource {
+        override fun read(offset: Long, length: Int): ByteArray {
+            val start = offset.toInt().coerceAtLeast(0)
+            val end = (start + length).coerceAtMost(data.size)
+            return if (end <= start) ByteArray(0) else data.copyOfRange(start, end)
+        }
+    }
+
     @Test
     fun previewInIfd0_isFound() {
         // IFD0: 2 条 (0x0201 -> jpeg@38, 0x0202 -> len 7)，next IFD = 0
@@ -105,5 +118,27 @@ class ArwPreviewExtractorTest {
         // 最大预览是 jpegC（len 11，落在 138..148）
         assertEquals(138L, range.first)
         assertEquals(148L, range.last)
+    }
+
+    /**
+     * 2026-10-25 回归：体积最大的候选超过提取器 32MB 上限时，必须**回退到合规的次大候选**，
+     * 而不是把超限候选交出去、让提取器整体拒绝（修复前用户视角是「这张 ARW 无法解码」，
+     * 明明还有可用的预览）。断言的是**回退后的区间**，修复前这里拿到的是 37MB 那条区间。
+     */
+    @Test
+    fun oversizedLargestCandidate_fallsBackToSmallerValid() {
+        val bigLen = 37L * 1024 * 1024
+        val declaredSize = 40L * 1024 * 1024
+        // 布局：header(8) + ifd0(30B @8，指向 37MB 超大预览) + ifd1(30B @38，指向 7B 预览)
+        // + jpeg(7B @68..74)。声明尺寸 40MB 只用于让超大候选「看似合法」。
+        val ifd0 = u16le(2) + entry(0x0201, 4, 1, 100) + entry(0x0202, 4, 1, bigLen) + u32le(38)
+        val ifd1 = u16le(2) + entry(0x0201, 4, 1, 68) + entry(0x0202, 4, 1, 7) + u32le(0)
+        val data = byteArrayOf(0x49, 0x49) + u16le(42) + u32le(8) + ifd0 + ifd1 + jpeg
+        val src = SparseArwSource(declaredSize, data)
+        val range = ArwContainer.previewJpegRange(src)!!
+        assertEquals(68L, range.first)
+        assertEquals(74L, range.last)
+        // 提取器对回退后的候选应能正常工作（SOI 校验通过）
+        assertNotNull(ArwPreviewExtractor.extract(src))
     }
 }
