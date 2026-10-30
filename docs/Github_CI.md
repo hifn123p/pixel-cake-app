@@ -96,7 +96,8 @@ HistogramTest > meanShift_brighterAfterMeansPositive FAILED (HistogramTest.kt:65
 
 ## 待办
 
-1. `docs/CURVE_HISTOGRAM_DESIGN.md` 仍不存在 —— `Histogram.kt` 的 KDoc 引用了它（悬空引用，未修）
+1. ~~`docs/CURVE_HISTOGRAM_DESIGN.md` 悬空引用~~ **已闭合（2026-10-30）**：`Histogram.kt` 的 KDoc
+   已改指向实际归属（曲线与管线顺序 → `TONING_DESIGN.md`；直方图 UI 入口 → `UI_DESIGN.md` §4.0.10）
 2. `SettingsMigrationTest` 待第一条真实设置迁移落地时同批补
 3. **真机验收（本轮改动直接影响这些）**：
    - **预览缩放**（UI v2.1 新功能）：双指缩放 <= 8x、平移边界、双击 2.5x 的锚点是否对准点击处

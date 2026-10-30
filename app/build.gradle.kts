@@ -16,10 +16,10 @@ android {
         targetSdk = libs.versions.targetSdk.get().toInt()
         // 与 GitHub Release tag 一一对应：打 v0.4.3 时同步抬这里，
         // 否则「关于」页(AboutSheet 显示 v${versionName} (${versionCode}))会与 Release 页对不上。
-        // v0.5.0：第二轮全量审查（3 个 P1 + 12 个 P2 + 删 curves/ 死代码）+ UI v2.1
-        // （预览缩放手势、调色菜单 7→6、RGB 直方图、尺寸回调）。
-        versionCode = 13
-        versionName = "0.5.0"
+        // v0.5.1：真机反馈（一加15）—— 面板 chip 行改单行横滚 + 紧凑内边距、
+        // 预设缩略图按可用宽度反算边长、预览/参数分割比重算（默认 0.45→0.34，上下限 0.18/0.72）。
+        versionCode = 14
+        versionName = "0.5.1"
 
         // 刻意**不声明** testInstrumentationRunner（审计 M8）：本项目没有 androidTest 源集、
         // 也没有 androidx.test 依赖，裸声明是死配置 —— 一旦有人加仪器测试会因缺依赖直接红；

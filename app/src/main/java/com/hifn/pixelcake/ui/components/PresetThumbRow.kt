@@ -8,6 +8,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -77,21 +78,31 @@ fun <T> PresetThumbRow(
     enabled: Boolean = true,
     size: Dp = 64.dp
 ) {
-    FlowRow(
-        modifier = modifier
-            .fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(Spacing.m),
-        verticalArrangement = Arrangement.spacedBy(Spacing.m)
-    ) {
-        items.forEach { item ->
-            PresetThumb(
-                label = label(item),
-                image = thumb(item),
-                selected = item == selected,
-                enabled = enabled,
-                size = size,
-                onClick = { onSelect(item) }
-            )
+    // ## 为什么不能直接用固定边长（2026-10-30 真机反馈）
+    //
+    // 固定 `size` + `FlowRow` 的结果是「每行能塞几个就塞几个」，最后一行必然在右侧留一条空白，
+    // 而且**面板比例一变，格子边长不动** ⇒ 区域变宽变高时格网还是原来那点尺寸，
+    // 用户读到的是「没填满」。这里用 [size] 作为**最小单元**估出列数，再用可用宽度**反算**
+    // 单元边长，于是整行精确铺满、格子随屏幕宽度一起长（预设数量固定，行数只会多不会少，
+    // 所以纵向也不会出现半截留白）。
+    BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
+        val gap = Spacing.m
+        val cols = ((maxWidth + gap) / (size + gap)).toInt().coerceAtLeast(1)
+        val cell = (maxWidth - gap * (cols - 1)) / cols
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(gap),
+            verticalArrangement = Arrangement.spacedBy(gap)
+        ) {
+            items.forEach { item ->
+                PresetThumb(
+                    label = label(item),
+                    image = thumb(item),
+                    selected = item == selected,
+                    enabled = enabled,
+                    size = cell,
+                    onClick = { onSelect(item) }
+                )
+            }
         }
     }
 }

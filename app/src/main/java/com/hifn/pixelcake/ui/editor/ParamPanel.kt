@@ -211,7 +211,12 @@ fun ParamSubBar(
             selected = selection.lightTab,
             label = { it.label },
             onSelect = { onSelectionChange(selection.copy(lightTab = it)) },
-            modifier = bar
+            modifier = bar,
+            // ⚠️ 2026-10-30：与作用域行同一口径 —— 这一行也钉在滚动之外，
+            // 按宽度换行时 3~5 个分组会排成 2 排（约 100dp），把内容区压到装不下直方图。
+            // 单行 + 紧凑后高度恒为一行；5 个双字 chip 在 6.7 寸屏上基本能一眼看完。
+            singleRow = true,
+            compact = true
         )
 
         EditorCategory.Color -> GlassChipRow(
@@ -219,7 +224,12 @@ fun ParamSubBar(
             selected = selection.colorTab,
             label = { it.label },
             onSelect = { onSelectionChange(selection.copy(colorTab = it)) },
-            modifier = bar
+            modifier = bar,
+            // ⚠️ 2026-10-30：与作用域行同一口径 —— 这一行也钉在滚动之外，
+            // 按宽度换行时 3~5 个分组会排成 2 排（约 100dp），把内容区压到装不下直方图。
+            // 单行 + 紧凑后高度恒为一行；5 个双字 chip 在 6.7 寸屏上基本能一眼看完。
+            singleRow = true,
+            compact = true
         )
 
         EditorCategory.Curve -> GlassChipRow(
@@ -227,7 +237,12 @@ fun ParamSubBar(
             selected = selection.curveTab,
             label = { it.label },
             onSelect = { onSelectionChange(selection.copy(curveTab = it)) },
-            modifier = bar
+            modifier = bar,
+            // ⚠️ 2026-10-30：与作用域行同一口径 —— 这一行也钉在滚动之外，
+            // 按宽度换行时 3~5 个分组会排成 2 排（约 100dp），把内容区压到装不下直方图。
+            // 单行 + 紧凑后高度恒为一行；5 个双字 chip 在 6.7 寸屏上基本能一眼看完。
+            singleRow = true,
+            compact = true
         )
 
         EditorCategory.Detail -> GlassChipRow(
@@ -235,7 +250,12 @@ fun ParamSubBar(
             selected = selection.detailTab,
             label = { it.label },
             onSelect = { onSelectionChange(selection.copy(detailTab = it)) },
-            modifier = bar
+            modifier = bar,
+            // ⚠️ 2026-10-30：与作用域行同一口径 —— 这一行也钉在滚动之外，
+            // 按宽度换行时 3~5 个分组会排成 2 排（约 100dp），把内容区压到装不下直方图。
+            // 单行 + 紧凑后高度恒为一行；5 个双字 chip 在 6.7 寸屏上基本能一眼看完。
+            singleRow = true,
+            compact = true
         )
 
         EditorCategory.Preset -> GlassChipRow(
@@ -243,7 +263,12 @@ fun ParamSubBar(
             selected = selection.presetTab,
             label = { it.label },
             onSelect = { onSelectionChange(selection.copy(presetTab = it)) },
-            modifier = bar
+            modifier = bar,
+            // ⚠️ 2026-10-30：与作用域行同一口径 —— 这一行也钉在滚动之外，
+            // 按宽度换行时 3~5 个分组会排成 2 排（约 100dp），把内容区压到装不下直方图。
+            // 单行 + 紧凑后高度恒为一行；5 个双字 chip 在 6.7 寸屏上基本能一眼看完。
+            singleRow = true,
+            compact = true
         )
 
         EditorCategory.Portrait -> Unit
@@ -446,7 +471,12 @@ fun ParamScopeBar(
                 if (sc != null && adjusted(sc)) "$base •" else base
             },
             onSelect = onSelect,
-            itemEnabled = { sc -> sc == null || available }
+            itemEnabled = { sc -> sc == null || available },
+            // ⚠️ 2026-10-30：必须单行 + 紧凑。9 个作用域按宽度换行会排成 3 排（约 190dp），
+            // 而这一行钉在滚动之外 ⇒ 直接把参数内容压到只剩一屏装不下。
+            // 单行后高度恒定一行，末尾几项靠横滑（低频决策，横滑比「先缩小预览」便宜）。
+            singleRow = true,
+            compact = true
         )
         if (!available) {
             Text(

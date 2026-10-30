@@ -2,7 +2,7 @@
 title: 像素蛋糕 App — 开发计划（唯一有效文档 v3.0）
 status: active
 created: 2026-09-05
-updated: 2026-10-06
+updated: 2026-10-30
 project: D:\AI_Project
 replaces: [PLAN.md, FEASIBILITY_REPORT.md, P1_MVP_DESIGN.md, PLAN_REVIEW.md]
 description: 像素蛋糕（AI 人像精修）安卓应用的唯一开发计划：项目介绍、功能矩阵、核心原理、技术路线、代码架构（复用清单含具体路径 / 新开发模块）、设备要求、交付调试与风险。阶段设计稿（P1b / P1+ / P2）与审查台账已合并至 docs/PHASE_DESIGN_HISTORY.md，原稿在合并后已从工作树移除（可从合并前的提交取回）。文档索引见 §9。
@@ -357,7 +357,7 @@ com.hifn.pixelcake
 |---|---|---|
 | [`DEV_PLAN.md`](DEV_PLAN.md) | **本文**：唯一有效计划。项目介绍 / 功能矩阵 / 核心原理 / 技术路线 / 代码架构 / 设备要求 / 风险 | 想了解「要做什么、做到哪了」 |
 | [`ENGINEERING_NOTES.md`](ENGINEERING_NOTES.md) | **工程笔记**：仓库与协作约定（本地零环境 ⇒ CI 是唯一编译器）、Compose 布局陷阱、渲染/并发纪律、构建与发版 | **动代码之前必读** |
-| [`UI_DESIGN.md`](UI_DESIGN.md) | UI 规范：竞品基线 / 五支柱 / Token / 五段式编辑器 / 动效 / 无障碍 / **每轮真机反馈修正表 §4.0.1~§4.0.8** | 改界面时；尺寸冲突以序号最大的 §4.0.x 为准 |
+| [`UI_DESIGN.md`](UI_DESIGN.md) | UI 规范：竞品基线 / 五支柱 / Token / 五段式编辑器 / 动效 / 无障碍 / **每轮真机反馈修正表 §4.0.1~§4.0.10** | 改界面时；尺寸冲突以序号最大的 §4.0.x 为准 |
 | [`TONING_DESIGN.md`](TONING_DESIGN.md) | 调色参数体系：参数全表 / 管线顺序 / 分批实施 / 批次 1~4 落地记录 | 改 tonal 参数或管线顺序时 |
 | [`OBJECT_TONE_DESIGN.md`](OBJECT_TONE_DESIGN.md) | 对象作用域调色（批次 5）：作用域全表 / 数据模型 / 单趟逐层 lerp / 哪些参数不能进层 / 验收方式 | 改对象图层或蒙版作用域时 |
 | [`PHASE_DESIGN_HISTORY.md`](PHASE_DESIGN_HISTORY.md) | **阶段设计存档**：P1b / P1+ / P2 三阶段设计 + 审查修复台账。**保留了 `F01~F24` / `R01~R10` / `D01~D10` 编号，代码 KDoc 直接引用它们** | 想知道「当年为什么这么设计」或追一个编号的来历 |
@@ -367,9 +367,13 @@ com.hifn.pixelcake
 
 ## 10. 当前版本与待验收
 
-- **当前版本**：`v0.4.6`（`versionCode = 11`）。**发版四者必须同时改**：`build.gradle.kts` 的
+- **当前版本**：`v0.5.0`（`versionCode = 13`）。**发版四者必须同时改**：`build.gradle.kts` 的
   `versionCode`/`versionName` → git tag → `AboutSheet` 显示 → CI 报告记录。
+  ⚠️ 任何「记忆里的版本号 / 尺寸」用前先 `git grep` 复核（`ENGINEERING_NOTES.md` §5.5）。
 - **待真机验收（至今未闭环）**：A2 涂抹落点 / A1 导出内存日志 / 自动蒙版（P1p-1c）/ 人脸锚点（P1p-2c）/
   A7C2 直连（P2）/ `TONE_ZONE_GAIN=0.35` 是否过猛 / 批次 3 预览↔导出一致性 /
-  批次 4 锐化必须晚于磨皮 / 批次 5 的 6 条（`OBJECT_TONE_DESIGN.md` §12.2）。
+  批次 4 锐化必须晚于磨皮 / 批次 5 的 6 条（`OBJECT_TONE_DESIGN.md` §12.2）；
+  **v0.5.0 新增**：预览缩放（≤8x 上限 / 平移边界 / 双击 2.5x 锚点是否落在点击处）/
+  调色菜单 7→6 有无漏项 / LUT 是否已被「预设 → 滤镜」完整接管 / RGB 直方图是否挂在「明暗」页 /
+  字号回调（28→24、18→16）在小屏上会不会挤 / ARW 超大预览候选回退（超 32MB 时回退次大候选）是否真的能打开。
 - **未启动**：P3（NAS Docker 化 Rust 引擎）。
