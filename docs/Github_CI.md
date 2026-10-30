@@ -1,89 +1,98 @@
 # GitHub Actions CI 结果报告
 
 > 由 push 触发的工作流运行结果整理。本文件每次 CI 后**覆盖重写**（前一次报告已清空）。
-> 生成时间：2026-10-25（本地）
-> 关联提交：`deca6d4`（versionName `0.5.0` / versionCode `13` —— **本轮已发版**）
-> 本轮主题：**第二轮全量审查**（3 个 P1 + 12 个 P2 + 删 `ui/editor/curves/` 死代码 + 3 个新测试）
-> 与 **UI v2.1**（预览缩放手势、调色菜单 7->6、RGB 直方图、尺寸回调）
+> 生成时间：2026-10-30（本地）
+> 关联提交：`681da13`（versionName `0.5.1` / versionCode `14` —— **本轮已发版**）
+> 本轮主题：**真机反馈（一加15）—— 参数面板腾出高度**
+> （chip 行改单行横滚 + 紧凑内边距 / 预设缩略图按宽度反算边长 / 预览·参数分割比重算）
 
-## 结论：v0.5.0 已发布 —— 4 个 run（3 次修复 + 1 次发布）
+## 结论：v0.5.1 已发布 —— **2 个 run，一次通过，零红轮**
 
 | 阶段 | 运行 | ref / 提交 | 结论 |
 |---|---|---|---|
-| (1) main 推「审查修复 + 抬版本」 | run **40189067999** | `3f237dc` | FAILURE（`EditorScreen.kt:58` import 了不存在的顶层 extension `getDistance`） |
-| (2) main 推修复 | run **40189438733** | `462989e` | FAILURE（`Lint` **绿**、`Build` 红 => 编译已过，挂在 `testDebugUnitTest`：`HistogramTest` 两处数组越界） |
-| (3) main 推修复 | run **40189823880** | `deca6d4` | **4 job 全绿**（tag 的前置闸门） |
-| (4) tag 触发发布 | run **40190769073** | `v0.5.0` | **5 job 全绿**（含 `Publish GitHub Release`） |
+| (1) main 推「UI 修正 + 抬版本」 | run **41079595382** | `681da13` | **4 job 全绿**（`Publish` 非 tag 跳过） |
+| (2) tag 触发发布 | run **41081158258** | `v0.5.1` | **5 job 全绿**（含 `Publish GitHub Release`） |
 
-> **两步走的闸门设计生效**：只有「main 已绿」的 commit `deca6d4` 才被打了 tag，
-> tag 落在同一个 commit 上（`git rev-list -n 1 v0.5.0` 已复核）。
+> 这是发版流程的**理想形态**：修复与抬版本同批推送 -> main 一次绿 -> 打 tag -> 发布。
+> 没有「首轮红」的原因之一是：本轮改动全部落在**已有文件的既有函数内**
+> （无新增文件、无新增类型、无新依赖），且推送前做了 import / 具名实参 / 参数顺序的静态核对。
 
 ## Release
 
-- 链接：<https://github.com/hifn123p/pixel-cake-app/releases/tag/v0.5.0>
-- 附件：`pixelcake-v0.5.0-release.apk` **29.05 MB**（签名 APK）
-- `versionCode` `12` -> `13`；`versionName` `0.4.7` -> `0.5.0`
+- 链接：<https://github.com/hifn123p/pixel-cake-app/releases/tag/v0.5.1>
+- 附件：`pixelcake-v0.5.1-release.apk` **29.06 MB**（30,472,601 字节，签名 APK）
+- `versionCode` `13` -> `14`；`versionName` `0.5.0` -> `0.5.1`
+- 发布时间：2026-10-30T15:33:24Z
 
-## 任务（Job）总览 — run `40190769073`（tag run，最终绿）
+## 任务（Job）总览 — run `41081158258`（tag run，最终绿）
 
 | Job | 结论 | 说明 |
 |---|---|---|
 | Check signing secrets | success | 探测到 `KEYSTORE_BASE64` |
-| Build Debug APK | success | `assembleDebug` + `testDebugUnitTest` 全过（含 3 个新测试文件） |
+| Build Debug APK | success | `assembleDebug` + `testDebugUnitTest` 全过 |
 | Lint (Android Lint) | success | `lintDebug` 通过 |
 | Signed Release | success | 解 PKCS12 keystore -> `assembleRelease`（R8）-> 签名 APK + mapping |
 | Publish GitHub Release | success | `v*` tag 触发，上传 APK 并创建 Release（`contents: write`） |
 
-## 本轮两轮红的报错 / 根因 / 修复
+> main run `41079595382` 与 tag run 的差别只有最后一项：非 tag 时 `Publish` 按设计 **skip**。
 
-### run 40189067999 —— 一个多余的 import
+## 本轮改了什么（为什么改）
 
-```text
-e: EditorScreen.kt:58:37 Unresolved reference 'getDistance'
-```
+真机反馈原话：「直方图和调节按钮被压到手机以外的区域，必须先缩小预览才能用」。
 
-| 根因 | 修复 |
+### 1. 面板里的 chip 行：换行 -> 单行 + 横向滚动
+
+`GlassChipRow` 新增两个参数：
+
+| 参数 | 作用 |
 |---|---|
-| `Offset.getDistance()` 是**成员函数**（Compose 1.0 起就是），从来不需要 import；而 `androidx.compose.ui.geometry.getDistance` 这个**顶层 extension 并不存在** | 删掉该import；调用点 `(c.position - first.position).getDistance()` 本身完全正确 |
+| `singleRow` | `Row + horizontalScroll`，高度恒定一行（默认仍是 `FlowRow` 换行） |
+| `compact` | label 内边距从 `Spacing.m` 收到 `Spacing.s`，同宽多放 1~2 个 chip |
 
-### run 40189438733 —— 测试自己越界（不是断言不通过）
+`ParamPanel` 里 **作用域行 + 5 个一级分类的二级行**全部启用。固定开销从约 **290dp** 降到约 **130dp**。
 
-```text
-HistogramTest > meanShift_identicalIsZero FAILED (HistogramTest.kt:74)
-HistogramTest > meanShift_brighterAfterMeansPositive FAILED (HistogramTest.kt:65)
-```
+> ⚠️ 实现上把 chip 的生成逻辑抽成**单个** `@Composable` lambda，两条容器分支只换容器、不换内容。
+> 两处各写一遍 `forEach` 迟早会漂移（一边记得传 `itemEnabled`、另一边忘了）。
 
-| 根因 | 修复 |
-|---|---|
-| 两处都写了 `IntArray(4)` 却往索引 `10` / `9` / `200` 写值 => `IndexOutOfBoundsException`。**生产代码一行未改**（`Histogram.meanShift` 本来就对） | 数组开满 `Histogram.BINS`，并留注释说明为什么不能写 `IntArray(4)` |
+### 2. 预设缩略图：按可用宽度反算边长
 
-> ⚠️ **本轮最重要的一条读日志判据**（已写进 `ENGINEERING_NOTES.md` §7.5）：
-> **CI 日志里「测试 FAILED」但**没有** `expected:/but was:` 行
-> => 大概率不是断言不通过，而是**测试自己抛了异常**。
-> 本地无编译器时极易误判成「被测代码算错了」而去改**生产代码**。
-> 正确读法：先确认有没有 `expected/but was`；没有就去看 `at <类>.<方法>(行号)` 指向哪一行 ——
-> 那是**抛异常的那一行**，不是「断言失败的那一行」。
+`PresetThumbRow` 改用 `BoxWithConstraints`：以 `size` 为**最小单元**估列数，再用可用宽度反算
+`cell` 边长。原先「固定边长 + FlowRow」会让最后一行右侧留白，且面板变宽时格子不跟着长。
+
+### 3. 预览/参数分割比重算
+
+| 常量 | 旧值 | 新值 |
+|---|---|---|
+| `SPLIT_MIN` | 0.22 | **0.18** |
+| `SPLIT_MAX` | 0.78 | **0.72** |
+| `SPLIT_DEFAULT` | 0.45 | **0.34** |
+
+`0.34 = 3:2 横构图照片按宽度贴合所需高度 / 屏幕可用高度`（287 / 835 ≈ 0.34）。
+0.45 多出来的部分是**预览区里的空气**，不是照片。
+
+> ⚠️ 这三个常量是一组：只调默认值而不压固定行 = 把空气挪到参数区；
+> 只压固定行而不调默认值 = 横构图用户仍白付 130px。
 
 ## 发版一致性核对（§5.2「四者必须同时改」）
 
 | 项 | 值 | 状态 |
 |---|---|---|
-| `app/build.gradle.kts` | `versionCode = 13` / `versionName = 0.5.0` | 已改 |
-| git tag | `v0.5.0` -> `deca6d4`（= 已验证的 main commit） | 已打并推送 |
-| `AboutSheet` 显示 | `appVersionLabel()` 从 `PackageManager` 读 PackageInfo 后拼版本标签 | **自动跟随**，无需改 |
+| `app/build.gradle.kts` | `versionCode = 14` / `versionName = 0.5.1` | 已改 |
+| git tag | `v0.5.1` -> `681da13`（= 已验证的 main commit） | 已打并推送 |
+| `AboutSheet` 显示 | 从 `PackageManager` 读 PackageInfo 后拼版本标签 | **自动跟随**，无需改 |
 | `docs/Github_CI.md` | 本文件 | 已覆盖重写 |
-| `README.md` | 版本徽章 + 版本历史 + 路线图 + 特性表 | 已改 |
 
 ## 本轮网络现实（§5.3 的补充）
 
-- `ssh.github.com:443` 仍不可用（reset / timeout），`github.com:22` refused
-- `https://api.github.com` 通（200），`https://github.com` 的 connect **被抽样阻断**：
-  同一 IP `20.205.243.166` 用 python 直连能握手成功，而 git 的 connect 超时 21s
-  => **纯间歇性**，不是配置问题。
-- ⇒ **push 必须做重试**：本轮推 tag 连续失败 6 次，第 7 次成功。
-  `git push` 重复无害（tag 幂等），所以「失败就重试」是安全策略。
-- 推 tag 建议用 `git -c http.curloptResolve=github.com:443:<ip>` 强制 IPv4
-  （本机 git 2.53 支持；仅作用于单条命令，不改仓库/全局配置）。
+- `ssh.github.com:443` 仍不可用；`https://github.com` 的 connect **仍被抽样阻断**。
+- 环境有本地代理 `127.0.0.1:7583`（`HTTP(S)_PROXY`），git 走 CONNECT 隧道。
+- 本轮实测：
+  - main push（`140.82.112.3`）**一次成功**；
+  - tag push 连续两次失败 —— `140.82.112.3` 报 `schannel: server closed abruptly (missing close_notify)`、
+    `20.205.243.166` 报 `CONNECT tunnel failed, response 502`；
+  - 换 `140.82.121.3` **成功**。
+- ⇒ 结论不变：**push 失败就换 IP 重试**，`git push` 幂等，重试安全。
+  `git -c http.curloptResolve=github.com:443:<ip>` 只作用于单条命令，不改仓库/全局配置。
 
 ## 历史回归表
 
@@ -92,16 +101,14 @@ HistogramTest > meanShift_brighterAfterMeansPositive FAILED (HistogramTest.kt:65
 | v0.4.5 发版轮 | 4 | 绿 | 引入新文件时首轮红 |
 | v0.4.6 发版轮 | 4 | 绿 | 首轮红（`imageEpoch` 局部变量前向引用） |
 | v0.4.7 发版轮 | 6 | 绿 | 两个编译错逐层暴露（main -> 测试侧） |
-| **v0.5.0 发版轮** | **4** | 绿 | 一个 import 错 + 一个测试越界；新增 3 个测试文件 |
+| v0.5.0 发版轮 | 4 | 绿 | 一个 import 错 + 一个测试越界；新增 3 个测试文件 |
+| **v0.5.1 发版轮** | **2** | 绿 | **一次通过（零红轮）**；改动全落在已有文件内 |
 
-## 待办
+## 待真机验收（本轮改动直接影响这些）
 
-1. ~~`docs/CURVE_HISTOGRAM_DESIGN.md` 悬空引用~~ **已闭合（2026-10-30）**：`Histogram.kt` 的 KDoc
-   已改指向实际归属（曲线与管线顺序 → `TONING_DESIGN.md`；直方图 UI 入口 → `UI_DESIGN.md` §4.0.10）
-2. `SettingsMigrationTest` 待第一条真实设置迁移落地时同批补
-3. **真机验收（本轮改动直接影响这些）**：
-   - **预览缩放**（UI v2.1 新功能）：双指缩放 <= 8x、平移边界、双击 2.5x 的锚点是否对准点击处
-   - **调色菜单 7 -> 6**：分类重排后「明暗/颜色」两页的参数有没有漏项；LUT 是否已被「预设 -> 滤镜」接管
-   - **RGB 直方图**：是否挂在「明暗」页；与实际参数是否对得上
-   - **尺寸回调**：字阶 28->24/18->16 等在小屏上会不会挤
-   - **ARW 预览候选过滤**：超限 ARW 现在回退到合规次大候选，需验证常见机型仍取到全尺寸预览
+1. **chip 行横滑**：作用域 9 项、二级分组 3~5 项是否都能滑到末尾；半露的 chip 是否足够提示可滑。
+2. **紧凑内边距**：双字 chip 是否仍好点（间距变窄后误触有没有增加）。
+3. **预设缩略图**：格子是否随屏宽变大、最后一行是否铺满（不再右侧留白）。
+4. **默认分割比 0.34**：横构图照片是否仍「够大」；竖构图是否会显得偏小（可拖分隔条自救）。
+5. **参数区容量**：直方图 + 4 个滑块是否无需缩小预览即可见（本轮核心目标）。
+6. 回归：`PresetThumbRow` 在极窄宽度下 `cols` 是否恒 >= 1（不会出现 0 列除零）。
