@@ -1,12 +1,45 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- PixelCake 自适应图标 · 前景层：光圈 6 叶 + 开口六边形（全部内容在安全区 r33 内）。
+     路径与 docs/app_icon.svg 同源：24 网格 × scale(3) + translate(18,18)。
+     描边用规范渐变 #FFC97A → #F09A28（userSpace 22,22 → 86,86），与 SVG 资产一致（§9.3-F）。
+     ⚠️ strokeWidth 是普通 float 属性（5.4 = viewport 单位）；只有 strokeColor 走 aapt 渐变。 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <path android:fillColor="#FFFFFF" android:pathData="M22,62h64v16h-64z" />
-    <path android:fillColor="#EDE9FE" android:pathData="M28,44h52v16h-52z" />
-    <path android:fillColor="#FFFFFF" android:pathData="M34,28h40v14h-40z" />
-    <path android:fillColor="#A78BFA" android:pathData="M52,14h4v12h-4z" />
-    <path android:fillColor="#F59E0B" android:pathData="M54,4l3.2,7.2L54,13.4L50.8,11.2z" />
+    <path
+        android:fillColor="#29FFB454"
+        android:pathData="M66,54L60,64.4L48,64.4L42,54L48,43.6L60,43.6Z" />
+    <path
+        android:pathData="M24,54a30,30 0 1,0 60,0a30,30 0 1,0 -60,0"
+        android:strokeWidth="5.4"
+        android:strokeLineCap="round">
+        <aapt:attr name="android:strokeColor">
+            <gradient
+                android:type="linear"
+                android:startX="22"
+                android:startY="22"
+                android:endX="86"
+                android:endY="86"
+                android:startColor="#FFC97A"
+                android:endColor="#F09A28" />
+        </aapt:attr>
+    </path>
+    <path
+        android:pathData="M60.93,42L78.15,71.82M47.07,42L81.51,42M40.14,54L57.36,24.18M47.07,66L29.85,36.18M60.93,66L26.49,66M67.86,54L50.64,83.82"
+        android:strokeWidth="5.4"
+        android:strokeLineCap="round">
+        <aapt:attr name="android:strokeColor">
+            <gradient
+                android:type="linear"
+                android:startX="22"
+                android:startY="22"
+                android:endX="86"
+                android:endY="86"
+                android:startColor="#FFC97A"
+                android:endColor="#F09A28" />
+        </aapt:attr>
+    </path>
 </vector>

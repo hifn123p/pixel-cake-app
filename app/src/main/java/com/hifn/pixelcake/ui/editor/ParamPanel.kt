@@ -1,8 +1,6 @@
 package com.hifn.pixelcake.ui.editor
 
 import android.graphics.Bitmap
-import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -20,10 +18,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.unit.dp
 import com.hifn.pixelcake.core.edit.ColorGrading
 import com.hifn.pixelcake.core.edit.ColorMath
 import com.hifn.pixelcake.core.edit.EditParams
@@ -38,7 +33,6 @@ import com.hifn.pixelcake.core.edit.retouch.ColorTransfer
 import com.hifn.pixelcake.ui.components.GlassChipRow
 import com.hifn.pixelcake.ui.components.ParamSlider
 import com.hifn.pixelcake.ui.components.PresetThumbRow
-import com.hifn.pixelcake.ui.theme.Radius
 import com.hifn.pixelcake.ui.theme.Spacing
 import kotlin.math.abs
 
@@ -325,10 +319,6 @@ fun ParamPanel(
     activeLayer: ObjectLayer?,
     // 预设 id → 缩略图（由上层按**原图**渲染一次，见 `MainActivity.buildPresetThumbs`）。缺失即占位。
     presetThumbs: Map<String, Bitmap> = emptyMap(),
-    // 当前渲染图的 RGB 直方图（三条**已按峰值归一**的曲线，见 `Histogram.normalize`）。
-    // 由 `EditorScreen` 随每次渲染完成在后台重算；只在「明暗」页顶部展示 —— 它是「先看分布
-    // 再动手」的底，null（首帧/失败）时该区域不占位。
-    histogram: Triple<FloatArray, FloatArray, FloatArray>? = null,
     onSelectionChange: (PanelSelection) -> Unit,
     onParamChange: (EditParams) -> Unit,
     onParamCommit: () -> Unit,
@@ -395,7 +385,7 @@ fun ParamPanel(
                 )
 
                 EditorCategory.Light -> LightParams(
-                    params, selection.lightTab, histogram, onParamChange, onParamCommit, onDraggingChange
+                    params, selection.lightTab, onParamChange, onParamCommit, onDraggingChange
                 )
 
                 EditorCategory.Color -> ColorParams(
@@ -720,22 +710,19 @@ private fun PortraitParams(
 private fun LightParams(
     params: EditParams,
     tab: LightTab,
-    histogram: Triple<FloatArray, FloatArray, FloatArray>?,
     onParamChange: (EditParams) -> Unit,
     onCommit: () -> Unit,
     onDraggingChange: (Boolean) -> Unit
 ) {
     when (tab) {
+        // 组名由 Deck 顶部的分组 chips 承担（One-Surface：控制台不再重复标题）。
         LightTab.WhiteBalance -> {
-            GroupLabel("白平衡")
             EditSlider("色温", params.temperature, -1f, 1f, 0.05f, { p, v -> p.copy(temperature = v) }, params, onParamChange, onCommit, onDraggingChange, format = PERCENT)
             EditSlider("色调", params.tint, -1f, 1f, 0.05f, { p, v -> p.copy(tint = v) }, params, onParamChange, onCommit, onDraggingChange, format = PERCENT)
             Hint("色温正 = 偏暖（增红减蓝）；色调正 = 偏品红。RAW 上这两项改的是线性增益，不会像 JPEG 那样一拉就出色阶断层。")
         }
 
         LightTab.Light -> {
-            HistogramView(histogram)
-            GroupLabel("明暗")
             EditSlider("曝光", params.exposureEv, -2f, 2f, 0.1f, { p, v -> p.copy(exposureEv = v) }, params, onParamChange, onCommit, onDraggingChange, format = EV)
             EditSlider("对比度", params.contrast, -1f, 1f, 0.05f, { p, v -> p.copy(contrast = v) }, params, onParamChange, onCommit, onDraggingChange, format = PERCENT)
             EditSlider("高光", params.highlights, -1f, 1f, 0.05f, { p, v -> p.copy(highlights = v) }, params, onParamChange, onCommit, onDraggingChange, format = PERCENT)
@@ -749,7 +736,6 @@ private fun LightParams(
         }
 
         LightTab.Atmosphere -> {
-            GroupLabel("氛围")
             EditSlider("自然饱和度", params.vibrance, -1f, 1f, 0.05f, { p, v -> p.copy(vibrance = v) }, params, onParamChange, onCommit, onDraggingChange, format = PERCENT)
             EditSlider("饱和度", params.saturation, -1f, 1f, 0.05f, { p, v -> p.copy(saturation = v) }, params, onParamChange, onCommit, onDraggingChange, format = PERCENT)
             EditSlider("去朦胧", params.dehaze, -1f, 1f, 0.05f, { p, v -> p.copy(dehaze = v) }, params, onParamChange, onCommit, onDraggingChange, format = PERCENT)
@@ -758,42 +744,6 @@ private fun LightParams(
     }
 }
 
-/**
- * RGB 三通道直方图（§4.0.10）：三条按峰值归一的曲线各以本通道色低透明度叠加，
- * 叠加处自然混出青/品红/黄 —— 偏色（R 峰与 B 峰错开 40 灰阶）一眼可见。
- * 数据缺失（首帧 / 读取失败）时**不占位**，与「不渲染空容器」同一条口径。
- */
-@Composable
-private fun HistogramView(h: Triple<FloatArray, FloatArray, FloatArray>?, modifier: Modifier = Modifier) {
-    if (h == null) return
-    Canvas(
-        modifier = modifier
-            .fillMaxWidth()
-            // 64dp：组件自身尺寸（非间距），不进 Spacing 标尺；与 48dp 控件高拉开一档层次。
-            .height(64.dp)
-            .clip(Radius.chip)
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
-    ) {
-        val bins = minOf(h.first.size, h.second.size, h.third.size)
-        if (bins < 2) return@Canvas
-        val bw = size.width / bins
-        listOf(
-            h.first to Color(0xFFF26D6D),
-            h.second to Color(0xFF6CD08A),
-            h.third to Color(0xFF6FA8FF)
-        ).forEach { (arr, channelColor) ->
-            val path = Path()
-            path.moveTo(0f, size.height)
-            for (i in 0 until bins) {
-                val v = arr[i].coerceIn(0f, 1f)
-                path.lineTo(i * bw, size.height * (1f - v))
-            }
-            path.lineTo(size.width, size.height)
-            path.close()
-            drawPath(path, channelColor.copy(alpha = 0.42f))
-        }
-    }
-}
 
 /** 「颜色」分类：混色 / 分级（LUT 已移入「预设」，§4.0.10）。 */
 @Composable

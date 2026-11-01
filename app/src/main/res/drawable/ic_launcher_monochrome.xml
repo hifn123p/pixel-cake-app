@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- PixelCake 自适应图标 · 单色层（Android 13 themed icon，系统按壁纸取色）。
+     「纯白版」= 单色系（所有形状同一色相），六边形保留 0.3 α 做同色分层 ——
+     themed icon 允许同色不同 α 表达层次，取色后仍是单色。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillAlpha="0.3"
+        android:pathData="M66,54L60,64.4L48,64.4L42,54L48,43.6L60,43.6Z" />
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="5.4"
+        android:strokeLineCap="round"
+        android:pathData="M24,54a30,30 0 1,0 60,0a30,30 0 1,0 -60,0" />
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="5.4"
+        android:strokeLineCap="round"
+        android:pathData="M60.93,42L78.15,71.82M47.07,42L81.51,42M40.14,54L57.36,24.18M47.07,66L29.85,36.18M60.93,66L26.49,66M67.86,54L50.64,83.82" />
+</vector>

@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -31,49 +32,44 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.hifn.pixelcake.ui.components.CardMaterial
 import com.hifn.pixelcake.ui.components.GlassCard
-import com.hifn.pixelcake.ui.components.ImportSheet
+import com.hifn.pixelcake.ui.editor.AppIcons
+import com.hifn.pixelcake.ui.editor.IconDef
+import com.hifn.pixelcake.ui.editor.PathIcon
 import com.hifn.pixelcake.ui.theme.Glass
+import com.hifn.pixelcake.ui.theme.GlassTint
+import com.hifn.pixelcake.ui.theme.HeroCardBottom
+import com.hifn.pixelcake.ui.theme.HeroCardMid
+import com.hifn.pixelcake.ui.theme.HeroCardTop
+import com.hifn.pixelcake.ui.theme.HeroCardWarm
 import com.hifn.pixelcake.ui.theme.Radius
+import com.hifn.pixelcake.ui.theme.SeedOnDark
 import com.hifn.pixelcake.ui.theme.Spacing
-import com.hifn.pixelcake.ui.theme.glassSurface
 import com.hifn.pixelcake.ui.theme.pressScale
 import com.hifn.pixelcake.ui.theme.rememberGlassTint
 import java.io.File
 
 /**
- * 调色台（首页，`docs/UI_DESIGN.md` §3.2.2）。
+ * 调色台（首页，UI 3.0「Aperture」：成片感入口）。
  *
- * ## 极简：首页只有「一个展示位 + 一个动作」
+ * ## 首页只有「一张成片卡 + 三个入口」
  *
- * 首页**不介绍产品**。说明性文字、规格罗列、设备参数，放在这里都会被读成「产品说明书」——
- * 而首屏应该是**作品**的位置。所以整屏只剩两样东西：
+ * 视觉重心是一张圆角 24dp 的渐变「成片卡」（真机语义：这里会是最新的作品位），
+ * 三个入口（相册 / 文件 ARW / 相机直连）以玻璃胶囊沉在卡底 —— 打开哪条路，一眼可选。
+ * 旧版的光圈环形按钮退役：一个符号撑不起首屏，也读不出「可以点」。
  *
- * 1. **展示位**：一块占满余下高度与**整个内容宽**的玻璃，承载唯一的视觉重心（[StartHero]）；
- * 2. **唯一动作**：展示位本身。点它才问「照片 / 文件 / 连接设备」。
+ * ## 三个入口直达，不再经过导入 Sheet
  *
- * 曾经的「这台设备能做什么」2×2 规格表与「工程信息」折叠区**已删除**（用户口径：
- * 「首页介绍不对，删了吧，极简风格」）。设备能力仍在需要处直接计算 —— 相机 Sheet 要用
- * [ResolutionProfile.fullResLongEdge]，那条链路没动；只是**不再往首屏摆**。
+ * Sheet 那一跳只是「把同一组选项再念一遍」；入口胶囊本身就是选项。
+ * 相机直连仍走 [CameraSheet]（模态：会话必须随面板关闭而释放，理由见其 KDoc）。
  *
- * ## 减少的入口数量：全屏只有**一个**「＋」
+ * ## 「最近编辑」位（预留）
  *
- * 从「三个等价选项 → 用户每次重新做决定」变成「一个动作 → 想清楚再给选项」。
- * ⚠️ 这里踩过一次真机反馈的坑：顶栏曾经**也**挂了一个「＋」，与展示位的「＋」是同一个语义，
- * 于是首屏出现两个加号 —— 用户读到的不是「随时可达」，而是「重复且不知道该点哪个」。
- * **同一个语义只允许有一个落点**，所以顶栏那个已删除，展示位成为唯一入口。
+ * 需要编辑会话持久化（预设库阶段，P4）；在持久化落地之前**不渲染空容器**
+ * —— 宁可不给，不给假的。
  *
- * ## `fillMaxWidth()` 不能省（真机 bug 的根因）
+ * ## 这一页保留两处玻璃（§1.6 允许的浮层用法）
  *
- * [StartHero] 是 `Column` 里带 `weight(1f)` 的**唯一**子项：`weight` 只分配**高度**，
- * 不分配宽度。缺 `fillMaxWidth()` 时 `Box` 的宽度退化为「内容宽度」（即那个「＋」字形的宽度），
- * 于是首屏出现「左边一条竖着的窄玻璃条 + 右边一整片空白」—— 这正是用户报的
- * 「首页大面积空白，加号挤在左侧一长条」。宽度必须由组件**自己**申明，
- * 不能指望父级：父级给的是高度约束，不是宽度。
- *
- * ## 这一页保留了两处玻璃（§1.6 允许的浮层用法）
- *
- * 展示位与「解码失败」提示卡都浮在页面底之上，属于浮层类，因此显式传
- * [CardMaterial.Glass] —— 不依赖 [GlassCard] 的默认值（默认已改为实心容器）。
+ * 状态消息卡与成片卡上的入口胶囊是浮层；页面本体是暖纸底。
  *
  * @param loading 正在解码（33MP ARW 的代理线性解码耗时可见，必须给反馈）
  * @param message 状态消息（解码失败提示），为空则不显示
@@ -91,7 +87,6 @@ fun HomeScreen(
     // 只为了把「导出长边」口径递给相机 Sheet；首屏不再展示任何设备信息。
     val profile = remember { context.probeCapabilities().resolutionProfile() }
 
-    var showImport by remember { mutableStateOf(false) }
     var showCamera by remember { mutableStateOf(false) }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -99,7 +94,6 @@ fun HomeScreen(
             HomeTopBar()
 
             // 状态消息只在「解码失败」这类真需要看见的场景出现，因此不占固定高度。
-            // 它是**瞬时提示**、浮在其他内容之上，故保留玻璃材质。
             if (message.isNotEmpty() && !loading) {
                 GlassCard(
                     material = CardMaterial.Glass,
@@ -115,31 +109,14 @@ fun HomeScreen(
                 }
             }
 
-            StartHero(
+            HeroCard(
                 loading = loading,
-                onStart = { showImport = true },
+                onPickPhoto = onImportPhoto,
+                onPickArw = onImportArw,
+                onConnectCamera = { showCamera = true },
                 modifier = Modifier
                     .weight(1f)
-                    .padding(horizontal = Spacing.page)
-                    .padding(top = Spacing.s, bottom = Spacing.page)
-            )
-        }
-
-        if (showImport) {
-            ImportSheet(
-                onPickPhoto = {
-                    showImport = false
-                    onImportPhoto()
-                },
-                onPickArw = {
-                    showImport = false
-                    onImportArw()
-                },
-                onConnectCamera = {
-                    showImport = false
-                    showCamera = true
-                },
-                onDismiss = { showImport = false }
+                    .padding(horizontal = Spacing.page, vertical = Spacing.m)
             )
         }
 
@@ -158,18 +135,7 @@ fun HomeScreen(
 // ———————————————————————————————————————————————————————————————
 
 /**
- * 首页顶栏：**只有标题**。
- *
- * ## 为什么这里没有「＋」（真机反馈修正）
- *
- * 顶栏曾经也挂一个 [GlassCircleButton]「＋」，理由是「主操作在任何滚动位置都一点即达」。
- * 但首屏**根本不可滚动**，那个「随时可达」是伪需求；而它与展示位的「＋」是**同一个语义**，
- * 结果首屏出现两个加号，用户先要判断「这两个是不是一回事」——多一次犹豫就是纯损失。
- *
- * 所以顶栏退化成纯标题：**标题栏只负责说明「这是哪一页」，动作归内容区**。
- * 唯一入口 [StartHero] 就长在视觉重心上，不需要第二个。
- *
- * `statusBarsPadding()` 不可省（`enableEdgeToEdge()` 后内容从 y=0 起画）。
+ * 首页顶栏：只有标题。`statusBarsPadding()` 不可省（`enableEdgeToEdge()` 后内容从 y=0 起画）。
  */
 @Composable
 private fun HomeTopBar() {
@@ -186,101 +152,159 @@ private fun HomeTopBar() {
 }
 
 // ———————————————————————————————————————————————————————————————
-// 展示位（全屏唯一视觉重心）
+// 成片卡（首页唯一视觉重心）
 // ———————————————————————————————————————————————————————————————
 
 /**
- * 展示位：一块占满余下高度、**且占满整个内容宽度**的玻璃，中心是唯一入口。
+ * 成片卡：占满余下高度与整个内容宽的圆角 24dp 大卡。
  *
- * ## ⚠️ `fillMaxWidth()` 是这个组件的生存条件
+ * ## 渐变即「未导入的作品位」
  *
- * 调用方把它放进 `Column` 并只给了 `weight(1f)` —— `weight` 分配的是**高度**。
- * 少了 `fillMaxWidth()`，`Box` 宽度退化为内容宽度（≈ 一个「＋」字的宽度），
- * 首屏就会变成「左侧一条窄玻璃条 + 右侧一整片空白」。宽度必须组件自己申明。
+ * 卡面用暖调多段渐变（金色时刻）抽象占位 —— 它暗示「这里将是一张照片」，
+ * 而不是一块空白的灰。真机导入历史落地后，这里会换成最近一次编辑的成片缩略。
  *
- * ## 为什么保留一层几乎看不见的光晕
+ * ## 三个入口胶囊
  *
- * 极简不等于「一块死板的灰」。强调色 α 0.18 的径向渐变只负责让大色块**有呼吸**，
- * 它不是装饰，也不是品牌色展示 —— 调高就会与「照片是唯一彩色主体」冲突（编辑页尤其致命）。
+ * 相册 / 文件 ARW / 相机直连，玻璃胶囊（浮在渐变之上，§1.6 允许的浮层用法）。
+ * 禁用态（解码中）整卡不可点；胶囊点击各自直达，无中间 Sheet。
  *
- * 光晕取 `colorScheme.primary` 而不是 [com.hifn.pixelcake.ui.theme.Seed]：深色主题下
- * primary 是降饱和版本，直接写 `Seed` 会让首屏浮起一块过饱和的紫。
+ * ## 光圈徽标
  *
- * ## 文案口径（真机反馈修正）
- *
- * 曾经只有符号、没有文案，理由是「『开始一张新的作品』这类句子是产品在解释自己」。
- * 但纯符号 + 大面积留白被读成**页面没加载出来**（用户原话：「首页大面积空白」）。
- * 现在只补**一行动作标签 + 一行极短的范围说明**（「相册 / 文件 / 相机直连」）——
- * 它回答的是「点了会发生什么」，不是「这是什么产品」，与「不写说明书」并不冲突。
- * 依旧不写任何一句话以上的叙述。
- *
- * 「＋」放在 72dp 玻璃圆里，是为了让它从一个**孤立的字符**变成一个**可点的实体**：
- * 裸字符在空态里读起来像装饰，圆形实体才读起来像按钮。
+ * 右上角 40dp 线性光圈（品牌唯一图形；按压动效属 P1 收尾项，此处静态）。
  */
 @Composable
-private fun StartHero(
+private fun HeroCard(
     loading: Boolean,
-    onStart: () -> Unit,
+    onPickPhoto: () -> Unit,
+    onPickArw: () -> Unit,
+    onConnectCamera: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val tint = rememberGlassTint()
-    val interaction = remember { MutableInteractionSource() }
-
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .pressScale(interaction)
-            .clickable(
-                interactionSource = interaction,
-                indication = null,
-                enabled = !loading,
-                onClick = onStart
-            )
             .clip(Radius.shell)
-            .background(tint.surface, Radius.shell)
             .background(
-                Brush.radialGradient(
-                    colors = listOf(
-                        MaterialTheme.colorScheme.primary.copy(alpha = 0.18f),
-                        Color.Transparent
-                    ),
-                    radius = 560f
+                Brush.verticalGradient(
+                    0f to HeroCardTop,
+                    0.34f to HeroCardMid,
+                    0.62f to HeroCardWarm,
+                    1f to HeroCardBottom
                 )
             )
-            .border(Glass.borderWidth, tint.border, Radius.shell),
-        contentAlignment = Alignment.Center
+            .border(Glass.borderWidth, tint.border, Radius.shell)
     ) {
-        if (loading) {
-            CircularProgressIndicator(modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp)
-        } else {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Box(
-                    modifier = Modifier
-                        .size(72.dp)
-                        .glassSurface(tint, Radius.pill, Glass.borderWidth),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        "＋",
-                        style = MaterialTheme.typography.displaySmall,
-                        // 用材质自带的正文色，而不是猜一个 colorScheme 槽位 ——
-                        // 玻璃的推荐前景色由 GlassTint 定义（见 GlassTint.content）。
-                        color = tint.content
+        // 中央琥珀辉光：让大色块「有呼吸」，调高会与「照片是唯一彩色主体」冲突
+        // （色值走品牌琥珀 token，不再硬编码 —— §9.3-E 已入库）
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.radialGradient(
+                        colors = listOf(
+                            SeedOnDark.copy(alpha = 0.22f),
+                            Color.Transparent
+                        ),
+                        center = androidx.compose.ui.geometry.Offset(0.62f, 0.55f),
+                        radius = 620f
                     )
-                }
-                Spacer(Modifier.height(Spacing.l))
-                Text(
-                    "导入照片",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = tint.content
                 )
-                Spacer(Modifier.height(Spacing.xs))
-                Text(
-                    "相册 / 文件 / 相机直连",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = tint.content.copy(alpha = 0.72f)
+        )
+
+        // 光圈徽标（右上角，品牌锚点）
+        PathIcon(
+            def = AppIcons.Aperture,
+            tint = Color.White.copy(alpha = 0.8f),
+            size = 40.dp,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(16.dp)
+        )
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(Spacing.l),
+            verticalArrangement = Arrangement.Bottom
+        ) {
+            Text(
+                "开始一次修图",
+                style = MaterialTheme.typography.titleMedium,
+                color = Color.White
+            )
+            Text(
+                "全程本机处理 · 预览 2048 / 导出全分辨率 · RAW 16-bit",
+                style = MaterialTheme.typography.labelSmall,
+                color = Color.White.copy(alpha = 0.85f),
+                modifier = Modifier.padding(top = Spacing.xs)
+            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = Spacing.l),
+                horizontalArrangement = Arrangement.spacedBy(Spacing.s)
+            ) {
+                HeroAction("相册", AppIcons.Image, enabled = !loading, tint = tint, onClick = onPickPhoto, modifier = Modifier.weight(1f))
+                HeroAction("文件 ARW", AppIcons.Folder, enabled = !loading, tint = tint, onClick = onPickArw, modifier = Modifier.weight(1f))
+                HeroAction("相机直连", AppIcons.Camera, enabled = !loading, tint = tint, onClick = onConnectCamera, modifier = Modifier.weight(1f))
+            }
+        }
+
+        // 解码中：进度环盖在卡中央（不可点态由各入口的 enabled 表达）
+        if (loading) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color(0x66000000)),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(32.dp),
+                    strokeWidth = 3.dp,
+                    color = Color.White
                 )
             }
         }
+    }
+}
+
+/** 成片卡上的玻璃入口胶囊（图标 + 11sp 文字；§6.1 红线：图标伴随，允许 11sp）。 */
+@Composable
+private fun HeroAction(
+    label: String,
+    // ⚠️ 类型必须是 [IconDef]（`AppIcons` 是个 `object`，**不能**当参数类型）：
+    // 写成 `def: AppIcons` 会编译失败（object 类型不是类型表达式）。
+    // 调用点传的是 `AppIcons.Image` 这类 `IconDef` 实例，`PathIcon(def = def)` 随之对上。
+    def: IconDef,
+    enabled: Boolean,
+    // 玻璃 tint 由 HeroCard 统一解析后传入（§9.3-E：不再硬编码玻璃底 / 描边色）
+    tint: GlassTint,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val interaction = remember { MutableInteractionSource() }
+    Column(
+        modifier = modifier
+            .pressScale(interaction)
+            .clip(Radius.card)
+            .background(tint.surface)
+            .border(1.dp, tint.border, Radius.card)
+            .clickable(
+                interactionSource = interaction,
+                indication = null,
+                enabled = enabled,
+                onClick = onClick
+            )
+            .padding(vertical = 12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        PathIcon(
+            def = def,
+            tint = Color.White,
+            size = 19.dp,
+            modifier = Modifier.padding(bottom = Spacing.xs)
+        )
+        Text(label, style = MaterialTheme.typography.labelSmall, color = Color.White)
     }
 }

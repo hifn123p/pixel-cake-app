@@ -29,7 +29,9 @@ import com.hifn.pixelcake.core.decode.ExportFormat
 import com.hifn.pixelcake.diag.DebugLog
 import com.hifn.pixelcake.ui.components.GlassCard
 import com.hifn.pixelcake.ui.components.SectionHeader
+import com.hifn.pixelcake.ui.theme.LocalDarkTheme
 import com.hifn.pixelcake.ui.theme.Ok
+import com.hifn.pixelcake.ui.theme.WsOk
 import com.hifn.pixelcake.ui.theme.Radius
 import com.hifn.pixelcake.ui.theme.Spacing
 import kotlinx.coroutines.Dispatchers
@@ -309,7 +311,13 @@ fun SettingsScreen(
                     Text(
                         "已导出",
                         style = MaterialTheme.typography.labelSmall,
-                        color = Ok
+                        // ⚠️ 设置页**跟随系统主题**（不在 `PixelCakeWorkspaceTheme` 里），
+                        // 所以成功色要按**生效主题**选，不能写死一个：
+                        // 旧的 `Ok`(#0F7B4F) 是浅色页语义，深色底上只有 3.54:1（达不到 AA）；
+                        // 工作台那组 `WsOk`(#4CC38A) 是 8.46:1。
+                        // ⚠️ 判据用 [LocalDarkTheme]（生效主题），不是 `isSystemInDarkTheme()` ——
+                        // 后者在「编辑页强制深色」的场景下会取错色板（见 Theme.kt 的说明）。
+                        color = if (LocalDarkTheme.current) WsOk else Ok
                     )
                 }
             }

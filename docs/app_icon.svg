@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 108 108">
+  <!-- PixelCake App Icon ·「穿过光圈的安全灯」· UI 3.0 Aperture 设计语言
+       108 网格 · 内容安全区 r33 · 商店导出为 512 全出血方图（平台自行圆角）
+       自适应图标分层：背景=radial 石墨+琥珀辉光 / 前景=光圈 6 叶+开口六边形 / 单色=前景纯白 -->
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="46%" r="72%">
+      <stop offset="0%" stop-color="#2A2822"/>
+      <stop offset="100%" stop-color="#131311"/>
+    </radialGradient>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#FFB454" stop-opacity=".26"/>
+      <stop offset="100%" stop-color="#FFB454" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="blade" gradientUnits="userSpaceOnUse" x1="22" y1="22" x2="86" y2="86">
+      <stop offset="0%" stop-color="#FFC97A"/>
+      <stop offset="100%" stop-color="#F09A28"/>
+    </linearGradient>
+  </defs>
+  <rect width="108" height="108" fill="url(#bg)"/>
+  <circle cx="54" cy="54" r="40" fill="url(#glow)"/>
+  <path d="M66 54 L60 64.4 L48 64.4 L42 54 L48 43.6 L60 43.6 Z" fill="#FFB454" opacity=".16"/>
+  <g transform="translate(18,18) scale(3)" fill="none" stroke="url(#blade)" stroke-width="1.8" stroke-linecap="round">
+    <circle cx="12" cy="12" r="10"/>
+    <path d="M14.31 8l5.74 9.94M9.69 8h11.48M7.38 12l5.74-9.94M9.69 16l-5.74-9.94M14.31 16H2.83M16.62 12l-5.74 9.94"/>
+  </g>
+</svg>

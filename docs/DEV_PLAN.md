@@ -357,7 +357,9 @@ com.hifn.pixelcake
 |---|---|---|
 | [`DEV_PLAN.md`](DEV_PLAN.md) | **本文**：唯一有效计划。项目介绍 / 功能矩阵 / 核心原理 / 技术路线 / 代码架构 / 设备要求 / 风险 | 想了解「要做什么、做到哪了」 |
 | [`ENGINEERING_NOTES.md`](ENGINEERING_NOTES.md) | **工程笔记**：仓库与协作约定（本地零环境 ⇒ CI 是唯一编译器）、Compose 布局陷阱、渲染/并发纪律、构建与发版 | **动代码之前必读** |
-| [`UI_DESIGN.md`](UI_DESIGN.md) | UI 规范：竞品基线 / 五支柱 / Token / 五段式编辑器 / 动效 / 无障碍 / **每轮真机反馈修正表 §4.0.1~§4.0.10** | 改界面时；尺寸冲突以序号最大的 §4.0.x 为准 |
+| [`UI_DESIGN.md`](UI_DESIGN.md) | UI 规范（**v2.0 旧版**）：竞品基线 / 五支柱 / Token / 五段式编辑器 / 动效 / 无障碍 / **每轮真机反馈修正表 §4.0.1~§4.0.10** | 改界面时；尺寸冲突以序号最大的 §4.0.x 为准 |
+| [`UI3.0.html`](UI3.0.html) | **UI 3.0 规范（当前唯一真值来源）**：One-Surface 骨架（顶栏→直方图条→照片→Deck→Rail）、token 真值（`:root` 与 CSS）、Rail/Deck/顶栏规格、动效与字号红线、launcher 图标规范 | **改 UI 前先看这份**；`UI_DESIGN.md` 的 §4.0.x 已被它覆盖（字阶 28/20/15/13/11、圆角 12/20/28） |
+| [`UI2.0.html`](UI2.0.html) | UI 2.0 规范存档（对照用） | 需要看改版前后的差异时 |
 | [`TONING_DESIGN.md`](TONING_DESIGN.md) | 调色参数体系：参数全表 / 管线顺序 / 分批实施 / 批次 1~4 落地记录 | 改 tonal 参数或管线顺序时 |
 | [`OBJECT_TONE_DESIGN.md`](OBJECT_TONE_DESIGN.md) | 对象作用域调色（批次 5）：作用域全表 / 数据模型 / 单趟逐层 lerp / 哪些参数不能进层 / 验收方式 | 改对象图层或蒙版作用域时 |
 | [`PHASE_DESIGN_HISTORY.md`](PHASE_DESIGN_HISTORY.md) | **阶段设计存档**：P1b / P1+ / P2 三阶段设计 + 审查修复台账。**保留了 `F01~F24` / `R01~R10` / `D01~D10` 编号，代码 KDoc 直接引用它们** | 想知道「当年为什么这么设计」或追一个编号的来历 |

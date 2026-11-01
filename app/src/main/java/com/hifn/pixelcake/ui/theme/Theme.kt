@@ -23,18 +23,18 @@ import androidx.core.view.WindowCompat
 private val LightColors = lightColorScheme(
     primary = Seed,
     onPrimary = Color.White,
-    primaryContainer = Color(0xFFE9E3FF),
-    onPrimaryContainer = Color(0xFF1B0F4B),
-    secondary = Color(0xFF5F5A66),
+    primaryContainer = Color(0xFFF6E7CB),
+    onPrimaryContainer = Color(0xFF3A2A05),
+    secondary = Color(0xFF6B675C),
     onSecondary = Color.White,
     background = NeutralSurface,
     onBackground = Ink,
     surface = ContainerLight,
     onSurface = Ink,
     surfaceVariant = ContainerLightLow,
-    onSurfaceVariant = Color(0xFF49454F),
-    outline = Color(0xFFCAC4D0),
-    outlineVariant = Color(0xFFE5E0E9)
+    onSurfaceVariant = Color(0xFF4A4740),
+    outline = Color(0xFFC7C3B8),
+    outlineVariant = Color(0xFFE4E2D9)
 )
 
 /**
@@ -45,19 +45,19 @@ private val LightColors = lightColorScheme(
  */
 private val DarkColors = darkColorScheme(
     primary = SeedOnDark,
-    onPrimary = Color(0xFF2B1A63),
-    primaryContainer = Color(0xFF41307F),
-    onPrimaryContainer = Color(0xFFE9E3FF),
-    secondary = Color(0xFFCBC2D4),
-    onSecondary = Color(0xFF322D3A),
+    onPrimary = Color(0xFF3A2A05),
+    primaryContainer = Color(0xFF4A3A14),
+    onPrimaryContainer = Color(0xFFFFD9A8),
+    secondary = Color(0xFFC9C5BA),
+    onSecondary = Color(0xFF332F28),
     background = NeutralSurfaceDark,
     onBackground = OnDarkSurface,
     surface = ContainerDark,
     onSurface = OnDarkSurface,
     surfaceVariant = ContainerDarkHigh,
-    onSurfaceVariant = Color(0xFFCAC4D0),
-    outline = Color(0xFF938F99),
-    outlineVariant = Color(0xFF49454F)
+    onSurfaceVariant = Color(0xFFA5A29A),
+    outline = Color(0xFF77746B),
+    outlineVariant = Color(0xFF3B3933)
 )
 
 @Composable
@@ -122,19 +122,19 @@ private fun SystemBarIcons(lightBars: Boolean) {
  */
 private val WorkspaceColors = darkColorScheme(
     primary = SeedOnDark,
-    onPrimary = Color(0xFF2B1A63),
-    primaryContainer = Color(0xFF41307F),
-    onPrimaryContainer = Color(0xFFE9E3FF),
-    secondary = Color(0xFFCBC2D4),
-    onSecondary = Color(0xFF322D3A),
+    onPrimary = Color(0xFF3A2A05),
+    primaryContainer = Color(0xFF4A3A14),
+    onPrimaryContainer = Color(0xFFFFD9A8),
+    secondary = Color(0xFFC9C5BA),
+    onSecondary = Color(0xFF332F28),
     background = WorkspaceBg,
     onBackground = OnDarkSurface,
     surface = ContainerDark,
     onSurface = OnDarkSurface,
     surfaceVariant = ContainerDarkHigh,
-    onSurfaceVariant = Color(0xFFCAC4D0),
-    outline = Color(0xFF605C66),
-    outlineVariant = Color(0xFF33313A)
+    onSurfaceVariant = Color(0xFFA5A29A),
+    outline = Color(0xFF6B6963),
+    outlineVariant = Color(0xFF34322E)
 )
 
 /**

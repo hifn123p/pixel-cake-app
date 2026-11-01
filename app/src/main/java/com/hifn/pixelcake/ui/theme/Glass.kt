@@ -265,9 +265,11 @@ fun Modifier.containerSurface(
  *
  * ## 抽成共享 modifier 的直接原因
  *
- * `AppShell.GlassTabBar` 与 `GlassSegmentedBar` 此前各写了一遍同样的指示块
+ * `AppShell.GlassTabBar` 与编辑器工具条此前各写了一遍同样的指示块
  * （审计 L3 记的就是这两套近似实现），改一处必漏另一处 —— 收敛到这里之后，
  * 两者只差外部修饰符。
+ * ⚠️ 2026-10-25（UI 3.0）：`GlassSegmentedBar` 已整包删除，编辑器工具条改为
+ * `Rail.kt` 的 `EditorRail`（悬浮胶囊，不使用指示块），故现在**只剩 TabBar 一处**消费本 modifier。
  *
  * ⚠️ 浅色主题下**不能用白**（白底白块 = 不可见）⇒ 退回强调色淡染，只保留顶部亮线；
  * 深色判定必须走 [LocalDarkTheme]，不能按系统 `uiMode` 猜。

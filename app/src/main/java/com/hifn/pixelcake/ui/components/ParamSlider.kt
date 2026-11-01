@@ -8,19 +8,23 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -28,6 +32,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.hifn.pixelcake.ui.theme.LocalDarkTheme
 import com.hifn.pixelcake.ui.theme.Motion
@@ -78,6 +83,20 @@ import kotlin.math.round
 // Slider 的「自定义 thumb / track」重载在本项目的 Material3 版本里被标记为实验性 API
 // （报错原文：This material API is experimental and is likely to change or to be removed in the future）⇒ 必须显式 opt-in。
 // 这里是有意使用：白色圆拇指 + 投影是「像 iOS」的关键一笔（见上方 KDoc），不因一个 opt-in 注解放弃该设计。
+
+/**
+ * 拖动读数上报（UI 3.0「中央 HUD」的数据通道）。
+ *
+ * [ParamSlider] 在拖动期间把「参数名 + 格式化后的当前值」上报给外层（`EditorScreen` 据此
+ * 在照片上显示巨大读数 HUD），松手上报 `null` 收回。默认实现是空函数 —— 没有编辑器
+ * 上层的场合（设置页等）零开销、零依赖。
+ *
+ * 为什么走 CompositionLocal 而不是加回调参数：全 App 几十处 [ParamSlider] 经 [EditSlider]
+ * 一类的封装间接调用，逐层穿参会让 6 个分组函数的签名同时膨胀；CompositionLocal 让
+ * 「想要 HUD 的页面 provide，其它场合自动为空」，零签名变更。
+ */
+val LocalHudReporter = staticCompositionLocalOf<((Pair<String, String>?) -> Unit)> { {} }
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ParamSlider(
@@ -93,6 +112,9 @@ fun ParamSlider(
     enabled: Boolean = true
 ) {
     var dragging by remember { mutableStateOf(false) }
+    // ⚠️ CompositionLocal.current 只能在组合期读取 —— 拖动回调是非组合 lambda，
+    // 必须在这里先把上报函数捕获成局部量，回调里只调它（否则编译不过）。
+    val reportHud = LocalHudReporter.current
     // 拖动途中本组合被销毁（第二根手指点了未 inert 的二级分组 chip / 作用域 chip /
     // 画布工具 chip ⇒ `when` 分支切换换掉了面板内容）时，M3 Slider **不会**回调
     // `onValueChangeFinished` ⇒ 上层的 `dragging` 永远收不到 false ⇒ 顶栏/工具条
@@ -122,6 +144,18 @@ fun ParamSlider(
     val thumbColor = if (dark) Color.White else MaterialTheme.colorScheme.onSurface
     val trackInactive = if (dark) SliderTrackDark else SliderTrackLight
 
+    // —— 紧凑形态（UI 3.0 §03 `.sl`：标签与数值同行 ≈44dp/条）——
+    //
+    // 旧版是「标签行 22 + Slider 48」两行式 ≈70dp/条 —— 这正是 Deck 高度偏差的根因：
+    // 3 滑块的组按它算要 292dp，规范 S=168 连自己的 CSS 都装不下（§9.3-A 的根因账）。
+    // 紧凑化后 ≈46dp/条：chips 36 + 3×46 + Hint 30 + padding 28 ≈ 232dp，Deck S（248）
+    // 有真实余量；4 滑块的组仍走内容区滚动兜底。
+    //
+    // ⚠️ 46dp 里 Slider 只占 26dp —— M3 Slider 默认被
+    // `LocalMinimumInteractiveComponentEnforcement` 抬到 48dp 触控热区，这里显式关闭并把
+    // 高度收到 26dp（轨道 3px + 20dp 拇指居中）。代价：触控热区从 48 降到 26dp ——
+    // 这是**刻意的**：Deck 是拇指主战场，密排的滑杆间距本身就是热区边界；
+    // Snapseed / Lightroom 的紧凑滑杆同为 ~24-30dp 口径。
     Column(modifier = modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -138,7 +172,7 @@ fun ParamSlider(
             // `Hint` / 右侧数值同一个口径 —— 面板里每个 `Text` 都自带颜色，不依赖外部是否 provide。
             Text(
                 text = label,
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurface
             )
             Text(
@@ -155,20 +189,27 @@ fun ParamSlider(
                     .padding(horizontal = Spacing.s, vertical = Spacing.xs)
             )
         }
+        // 触控热区收缩只作用于这一只滑杆（CompositionLocal 局部下发，不外泄）
+        CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
         Slider(
             value = value,
             enabled = enabled,
+            modifier = Modifier.fillMaxWidth().height(26.dp),
             onValueChange = { raw ->
                 if (!dragging) {
                     dragging = true
                     onDraggingChange(true)
                 }
-                onValueChange(if (step > 0f) round(raw / step) * step else raw)
+                val out = if (step > 0f) round(raw / step) * step else raw
+                onValueChange(out)
+                // 中央 HUD（UI 3.0）：把「参数名 + 格式化值」报给上层；无上层时是空实现
+                reportHud(Pair(label, format(out)))
             },
             valueRange = valueRange,
             onValueChangeFinished = {
                 dragging = false
                 onDraggingChange(false)
+                reportHud(null)
                 onValueChangeFinished()
             },
             // thumbColor 只对默认拇指生效；这里仍然显式写出来，是为了「万一回退到默认拇指」
@@ -203,5 +244,6 @@ fun ParamSlider(
                 )
             }
         )
+        }
     }
 }

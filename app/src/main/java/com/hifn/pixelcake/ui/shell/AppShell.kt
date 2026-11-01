@@ -110,24 +110,23 @@ fun AppShell(
  * 强调色一律取 `colorScheme.primary`，不直接写 `Seed` —— 深色主题下 primary 是
  * 降饱和版本，直接写 `Seed` 会既刺眼又对比度不足。
  *
- * 指示块材质走共享的 [segmentIndicator]（UI-6）：原先这里与 `GlassSegmentedBar`
+ * 指示块材质走共享的 [segmentIndicator]（UI-6）：原先这里与编辑器工具条
  * 各写了一遍强调色平色块，是审计 L3 记的两套近似实现；收敛后「选中态长什么样」
  * 全 App 只有一处定义。
  *
- * ⚠️ **本控件与 `GlassSegmentedBar` 是两份代码**（不是共用）：这里是 TabBar 版，
- * 多一个 `navigationBarsPadding`、指示块多内缩 `Spacing.xs`；差异未合并，
- * 所以**改本文件的分段项时请同步检查 `GlassSegmentedBar`，反之亦然** ——
- * 两处曾同时漏掉 `indication = null`（见下节）。
+ * ⚠️ **2026-10-25（UI 3.0）**：`GlassSegmentedBar` 已随 UI 3.0 改版**整包删除**
+ * （编辑器工具条改为悬浮胶囊 `Rail.kt` 的 `EditorRail`），所以
+ * 「本控件与 `GlassSegmentedBar` 是两份代码、改一处要同步另一处」这条警告**已作废** ——
+ * 现在分段控件只剩本文件这一处。下面两条按压反馈的结论仍然有效。
  *
  * ## 按压反馈：**不画涟漪**（`indication = null`）
  *
- * `selectable` 只写 `(selected, onClick)` 会落到「取 `LocalIndication`」的那个重载
- * （机制与三现象的完整对应关系写在 `GlassSegmentedBar` 的 KDoc「按压反馈」一节），
+ * `selectable` 只写 `(selected, onClick)` 会落到「取 `LocalIndication`」的那个重载，
  * 于是在胶囊玻璃条里画出一块 M3 涟漪：**灰底 + 矩形边界（两端直角）+ 相邻两格矩形共边
  * （读成两按钮中间一条分割线）**。一条根因、三个现象。
  *
- * `interactionSource` 一并传 `null` 是有意的：本项**不做**按下缩放（理由见
- * `GlassSegmentedBar` 的同一节），没有消费者就不必分配 `MutableInteractionSource`。
+ * `interactionSource` 一并传 `null` 是有意的：本项**不做**按下缩放，没有消费者
+ * 就不必分配 `MutableInteractionSource`。
  */
 @Composable
 private fun GlassTabBar(

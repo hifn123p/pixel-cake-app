@@ -1,0 +1,1665 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PixelCake · UI「Aperture 光圈」概念稿</title>
+<style>
+/* ============================================================
+   页面基础
+============================================================ */
+* { margin:0; padding:0; box-sizing:border-box; }
+:root{
+  /* —— 暖石墨中性阶（全暗房世界）—— */
+  --canvas:#121211; --surface:#191917; --deck:#20201E; --raised:#2A2A27;
+  --line:rgba(240,238,233,.09); --line-strong:rgba(240,238,233,.18);
+  /* —— 文字（暖白）—— */
+  --ink:#F0EEE9; --ink-2:#A5A29A; --ink-3:#6B6963;
+  /* —— 琥珀（暗房安全灯）—— */
+  --amber:#FFB454; --amber-deep:#F09A28; --amber-soft:rgba(255,180,84,.14); --amber-line:rgba(255,180,84,.45);
+  /* —— 语义 —— */
+  --ok:#4CC38A; --warn:#E8B34B; --err:#E5645C; --info:#6FB3FF;
+  /* —— 自适应亮档（纸）—— */
+  --p-deck:#F4F1EA; --p-ink:#26241F; --p-ink2:#7A766C; --p-line:rgba(0,0,0,.08);
+  --p-amber:#B8791A; --p-amber-soft:rgba(184,121,26,.14);
+}
+html{ scroll-behavior:smooth; }
+body{
+  background:#0C0C0B; color:var(--ink);
+  font-family:-apple-system,"Segoe UI","Microsoft YaHei","PingFang SC",sans-serif;
+  -webkit-font-smoothing:antialiased; line-height:1.6;
+}
+.mono{ font-family:ui-monospace,"Cascadia Mono",Consolas,monospace; font-variant-numeric:tabular-nums; }
+.wrap{ max-width:1280px; margin:0 auto; padding:0 32px 120px; }
+section{ margin-top:92px; }
+.sec-head{ display:flex; align-items:baseline; gap:14px; margin-bottom:8px; }
+.sec-no{ font-size:13px; color:var(--amber); letter-spacing:.14em; font-weight:700; }
+.sec-head h2{ font-size:24px; font-weight:600; }
+.sec-sub{ color:var(--ink-2); font-size:14px; max-width:880px; margin-bottom:28px; }
+.rule{ height:1px; background:linear-gradient(90deg,var(--line-strong),transparent 70%); margin-top:16px; }
+.note{ font-size:12px; color:var(--ink-3); }
+
+/* 可行性标注 */
+.tag{ display:inline-block; font-size:10.5px; padding:1px 9px; border-radius:99px; vertical-align:1px; margin-left:6px; white-space:nowrap;}
+.tag.ok{ background:rgba(76,195,138,.14); color:var(--ok); }
+.tag.mid{ background:var(--amber-soft); color:var(--amber); }
+.tag.new{ background:rgba(229,100,92,.14); color:var(--err); }
+
+/* ============================================================
+   Hero
+============================================================ */
+.hero{ padding:96px 0 8px; }
+.hero .kicker{ color:var(--amber); font-size:13px; letter-spacing:.3em; font-weight:700; }
+.hero h1{ font-size:54px; font-weight:700; margin:12px 0 4px; letter-spacing:-.01em; }
+.hero h1 em{ font-style:normal; color:var(--amber); }
+.hero .lede{ color:var(--ink-2); font-size:16px; max-width:800px; }
+.concepts{ display:flex; gap:16px; margin-top:36px; flex-wrap:wrap; }
+.c-card{ flex:1 1 270px; background:var(--surface); border:1px solid var(--line); border-radius:20px; padding:22px 24px; }
+.c-card b{ display:block; font-size:15px; margin-bottom:8px; }
+.c-card b i{ font-style:normal; color:var(--amber); margin-right:8px; font-family:ui-monospace,Consolas,monospace; font-size:13px; }
+.c-card span{ color:var(--ink-2); font-size:13px; display:block; margin-bottom:10px; }
+
+/* ============================================================
+   表格
+============================================================ */
+table{ width:100%; border-collapse:collapse; font-size:13.5px; }
+th{ text-align:left; color:var(--ink-3); font-weight:500; font-size:12px; letter-spacing:.06em;
+    padding:10px 14px; border-bottom:1px solid var(--line-strong); }
+td{ padding:12px 14px; border-bottom:1px solid var(--line); color:var(--ink-2); vertical-align:top; }
+td b{ color:var(--ink); font-weight:600; }
+tr:hover td{ background:rgba(255,255,255,.02); }
+
+/* ============================================================
+   设计语言
+============================================================ */
+.sw-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(148px,1fr)); gap:12px; }
+.sw-grid.sub{ grid-template-columns:repeat(auto-fill,minmax(108px,1fr)); }
+.sw{ border-radius:16px; overflow:hidden; border:1px solid var(--line); }
+.sw .chip{ height:62px; }
+.sw .meta{ padding:9px 12px; background:var(--surface); }
+.sw .meta b{ display:block; font-size:12.5px; font-weight:600; }
+.sw .meta span{ font-size:11px; color:var(--ink-3); font-family:ui-monospace,Consolas,monospace; }
+.type-row{ display:flex; align-items:baseline; gap:22px; padding:14px 4px; border-bottom:1px solid var(--line); }
+.type-row .spec{ width:200px; flex:none; font-size:11px; color:var(--ink-3); font-family:ui-monospace,Consolas,monospace; }
+.geo{ display:flex; gap:30px; flex-wrap:wrap; align-items:flex-end; }
+.sp-bar{ height:10px; border-radius:5px; background:linear-gradient(90deg,var(--amber),var(--amber-deep)); }
+.sp-item{ text-align:center; }
+.sp-item .lab{ font-size:10.5px; color:var(--ink-3); margin-top:6px; font-family:ui-monospace,Consolas,monospace; }
+.rd{ width:70px; height:70px; background:var(--raised); border:1px solid var(--line-strong);
+     display:flex; align-items:center; justify-content:center; font-size:10.5px; color:var(--ink-2); }
+
+/* ============================================================
+   组件样机
+============================================================ */
+.comp-row{ display:flex; gap:24px; flex-wrap:wrap; align-items:stretch; }
+.comp{ background:var(--surface); border:1px solid var(--line); border-radius:20px; padding:26px 28px; flex:1 1 350px; min-width:310px; }
+.comp h4{ font-size:12px; color:var(--ink-3); font-weight:600; letter-spacing:.08em; margin-bottom:18px; }
+
+/* 工具栏 rail */
+.rail{ display:flex; gap:2px; background:var(--deck); border:1px solid var(--line-strong);
+  border-radius:99px; padding:7px 8px; box-shadow:0 14px 40px rgba(0,0,0,.5); max-width:352px; }
+.rk{ flex:1; display:flex; flex-direction:column; align-items:center; gap:3px; padding:7px 0 6px;
+  border-radius:99px; color:var(--ink-3); font-size:11px; }
+.rk.on{ color:var(--amber); background:var(--amber-soft); }
+.ic{ width:21px; height:21px; stroke:currentColor; fill:none; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
+
+/* 控制台 deck */
+.deck{ background:var(--deck); border:1px solid var(--line-strong); border-radius:22px;
+  padding:14px 18px 16px; box-shadow:0 18px 50px rgba(0,0,0,.5); }
+.deck-top{ display:flex; align-items:center; gap:8px; margin-bottom:12px; }
+.grp{ display:flex; gap:6px; flex:1; overflow:hidden; }
+.g{ padding:5px 13px; border-radius:99px; font-size:12px; color:var(--ink-2); white-space:nowrap; }
+.g.on{ background:var(--amber-soft); color:var(--amber); }
+.scopebtn{ font-size:11px; color:var(--ink-2); border:1px solid var(--line-strong);
+  border-radius:99px; padding:5px 11px; white-space:nowrap; }
+.scopebtn.on{ color:var(--amber); border-color:var(--amber-line); background:var(--amber-soft); }
+
+/* 滑块（零点居中） */
+.sl{ margin-bottom:16px; }
+.sl-top{ display:flex; justify-content:space-between; align-items:baseline; margin-bottom:7px; }
+.sl-name{ font-size:13px; color:var(--ink); }
+.sl-val{ font-size:13px; color:var(--ink); }
+.sl-track{ position:relative; height:24px; }
+.sl-track::before{ content:""; position:absolute; left:0; right:0; top:10.5px; height:3px; border-radius:2px; background:rgba(240,238,233,.13); }
+.sl-zero{ position:absolute; top:7px; width:1.5px; height:10px; background:rgba(240,238,233,.26); }
+.sl-fill{ position:absolute; top:10.5px; height:3px; border-radius:2px; background:var(--amber); }
+.sl-thumb{ position:absolute; top:2px; width:18px; height:18px; border-radius:99px; background:#fff;
+  box-shadow:0 2px 8px rgba(0,0,0,.55); }
+
+/* 巨大读数 HUD */
+.bighud{ text-align:center; }
+.bighud .pn{ font-size:13px; color:var(--ink-2); letter-spacing:.1em; }
+.bighud .pv{ font-size:46px; font-weight:300; color:var(--ink); line-height:1.15; letter-spacing:.01em; }
+.bighud .pv em{ font-style:normal; font-size:17px; color:var(--amber); margin-left:6px; }
+.bighud .bar{ width:190px; height:3px; background:rgba(240,238,233,.14); border-radius:2px; margin:12px auto 0; position:relative; }
+.bighud .bar i{ position:absolute; left:0; top:0; bottom:0; width:64%; background:var(--amber); border-radius:2px; }
+.bighud .bar b{ position:absolute; left:64%; top:-5.5px; width:14px; height:14px; border-radius:99px; background:#fff; transform:translateX(-7px); box-shadow:0 2px 8px rgba(0,0,0,.5); }
+
+/* 强度环 */
+.dialwrap{ display:flex; align-items:center; gap:22px; }
+.dial{ position:relative; width:96px; height:96px; }
+.dial .dv{ position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+.dial .dv b{ font-size:19px; font-weight:600; }
+.dial .dv span{ font-size:10px; color:var(--ink-3); letter-spacing:.1em; }
+
+/* 历史ribbon */
+.ribbon{ display:flex; gap:8px; overflow:hidden; }
+.rb{ padding:7px 14px; border-radius:99px; font-size:12px; color:var(--ink-2); background:var(--raised); white-space:nowrap; }
+.rb.on{ background:var(--amber-soft); color:var(--amber); border:1px solid var(--amber-line); }
+
+/* ============================================================
+   手机样机
+============================================================ */
+.gallery{ display:flex; flex-wrap:wrap; gap:44px 36px; }
+.shot{ width:395px; }
+.shot .cap{ margin-top:16px; padding:0 6px; }
+.shot .cap b{ font-size:14px; }
+.shot .cap b i{ font-style:normal; color:var(--amber); font-family:ui-monospace,Consolas,monospace; margin-right:8px; font-size:12px; }
+.shot .cap p{ font-size:12.5px; color:var(--ink-2); margin-top:3px; }
+.phone{ position:relative; width:375px; height:812px; border-radius:54px; border:10px solid #16161A;
+  background:var(--canvas); overflow:hidden; box-shadow:0 30px 80px rgba(0,0,0,.55), 0 0 0 1px rgba(255,255,255,.05); }
+.scr{ position:absolute; inset:0; }
+.sb{ display:flex; justify-content:space-between; align-items:center; padding:16px 26px 0; font-size:12.5px; font-weight:600; color:#fff; position:relative; z-index:5; }
+.hi{ position:absolute; bottom:7px; left:50%; transform:translateX(-50%); width:120px; height:4px; border-radius:2px; background:rgba(255,255,255,.32); z-index:9; }
+
+/* 照片占位 */
+.ph{ position:absolute; inset:0; }
+.ph::after{ content:""; position:absolute; inset:0;
+  background:radial-gradient(120% 100% at 50% 45%, rgba(0,0,0,0) 55%, rgba(0,0,0,.4) 100%); }
+.ph-portrait{ background:
+  radial-gradient(120% 85% at 72% 16%, rgba(246,205,158,.95) 0%, rgba(246,205,158,0) 42%),
+  radial-gradient(85% 62% at 30% 26%, rgba(199,128,95,.85) 0%, rgba(199,128,95,0) 55%),
+  radial-gradient(150% 110% at 50% 92%, rgba(24,16,26,.9) 0%, rgba(24,16,26,0) 62%),
+  linear-gradient(158deg,#6B4A41 0%,#8F5F4B 32%,#B07A58 58%,#3A2A2C 100%); }
+.ph-golden{ background:
+  radial-gradient(60% 34% at 62% 62%, rgba(255,214,150,.95) 0%, rgba(255,190,120,0) 70%),
+  linear-gradient(180deg,#241833 0%,#5C3450 34%,#B96A4C 62%,#E9A25C 84%,#F2C078 100%); }
+.ph-snow{ background:
+  radial-gradient(80% 50% at 50% 20%, rgba(255,255,255,.95) 0%, rgba(240,246,250,0) 60%),
+  linear-gradient(180deg,#CFE2EC 0%,#E9F1F4 42%,#DCE7EA 68%,#B9C9CF 100%); }
+.hue0{ filter:none; } .hue1{ filter:hue-rotate(-28deg) saturate(.92); } .hue2{ filter:hue-rotate(24deg) brightness(.92); }
+.hue3{ filter:hue-rotate(150deg) saturate(.72); } .hue5{ filter:grayscale(1) contrast(1.08); } .hue6{ filter:hue-rotate(-55deg) brightness(1.1) saturate(.8); }
+
+/* 顶栏（一表面版：极简 + 直方图条） */
+.tb{ position:absolute; top:52px; left:10px; right:10px; z-index:6; display:flex; align-items:center; gap:2px;
+  background:rgba(25,25,23,.82); backdrop-filter:blur(20px) saturate(1.4); -webkit-backdrop-filter:blur(20px) saturate(1.4);
+  border:1px solid rgba(240,238,233,.14); border-radius:20px; padding:6px 8px; box-shadow:0 12px 36px rgba(0,0,0,.4); }
+.tb .title{ font-size:13.5px; font-weight:600; margin:0 4px; }
+.tbi{ width:34px; height:34px; border-radius:12px; display:flex; align-items:center; justify-content:center; color:var(--ink-2); }
+.tbi .ic{ width:19px; height:19px; }
+.tbi.dis{ opacity:.35; }
+.tbi.on{ color:var(--amber); background:var(--amber-soft); }
+.esp{ flex:1; }
+.expill{ height:34px; padding:0 15px; border-radius:99px; display:flex; align-items:center;
+  background:var(--amber-soft); border:1px solid var(--amber-line); color:var(--amber); font-size:13px; font-weight:600; }
+.histstrip{ position:absolute; top:100px; left:10px; right:10px; z-index:6; height:34px;
+  background:rgba(25,25,23,.82); backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px);
+  border:1px solid rgba(240,238,233,.14); border-radius:14px; display:flex; align-items:center; padding:0 14px; }
+
+/* 底部：deck + rail */
+.edeck{ position:absolute; left:10px; right:10px; bottom:84px; z-index:6; }
+.erail{ position:absolute; left:10px; right:10px; bottom:16px; z-index:6; }
+/* 手势态：deck 变暗 */
+.ghosted{ opacity:.32; }
+
+/* 巨大 HUD 在照片上 */
+.onphoto-hud{ position:absolute; left:0; right:0; bottom:270px; z-index:5; text-align:center; }
+
+/* 点哪修哪 */
+.dim{ position:absolute; inset:0; background:rgba(10,10,10,.45); z-index:3; }
+.person-blob{ position:absolute; left:52px; top:120px; width:250px; height:520px; z-index:4; }
+.picktip{ position:absolute; top:110px; left:50%; transform:translateX(-50%); z-index:7;
+  background:rgba(25,25,23,.88); border:1px solid rgba(240,238,233,.16); border-radius:99px;
+  padding:8px 18px; font-size:12px; color:var(--ink); white-space:nowrap; }
+.facechip{ position:absolute; z-index:7; background:rgba(25,25,23,.88); backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px);
+  border:1px solid var(--amber-line); color:var(--amber); border-radius:99px; padding:5px 13px; font-size:11.5px; }
+
+/* 分割对比 */
+.split-handle{ position:absolute; top:120px; bottom:300px; left:42%; width:2px; z-index:5; background:var(--amber); }
+.split-grip{ position:absolute; top:46%; left:42%; transform:translate(-50%,-50%); z-index:6;
+  width:36px; height:36px; border-radius:99px; background:var(--amber); color:#231605;
+  display:flex; align-items:center; justify-content:center; box-shadow:0 6px 20px rgba(0,0,0,.5); }
+.split-lab{ position:absolute; top:132px; z-index:6; font-size:10.5px; letter-spacing:.14em; color:rgba(255,255,255,.85);
+  background:rgba(0,0,0,.35); padding:3px 10px; border-radius:99px; }
+
+/* 首页 */
+.home{ position:absolute; inset:0; }
+.hm-top{ display:flex; align-items:center; justify-content:space-between; padding:60px 24px 0; }
+.hm-top .wm{ font-size:15px; font-weight:700; letter-spacing:.06em; color:var(--ink); }
+.ap-ring{ position:absolute; top:190px; left:50%; transform:translateX(-50%); width:148px; height:148px; border-radius:99px;
+  border:2px solid var(--amber-line); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px;
+  background:radial-gradient(closest-side, rgba(255,180,84,.12), rgba(255,180,84,0) 78%); }
+.ap-ring .c{ width:64px; height:64px; border-radius:99px; background:var(--amber-soft); border:1px solid var(--amber-line);
+  display:flex; align-items:center; justify-content:center; color:var(--amber); }
+.ap-ring .t{ font-size:12.5px; color:var(--ink); }
+.ap-ring .s{ font-size:10.5px; color:var(--ink-3); }
+.recent{ position:absolute; left:24px; right:24px; top:420px; }
+.recent .rt{ display:flex; justify-content:space-between; font-size:12px; color:var(--ink-3); margin-bottom:12px; }
+.rthumbs{ display:flex; gap:12px; }
+.rth{ width:104px; height:104px; border-radius:16px; overflow:hidden; position:relative; border:1px solid var(--line); }
+.rth .pn{ position:absolute; left:7px; bottom:7px; font-size:9.5px; color:#fff; background:rgba(0,0,0,.4); padding:2px 8px; border-radius:99px; }
+.htabs{ position:absolute; left:90px; right:90px; bottom:24px; display:flex; gap:2px;
+  background:var(--deck); border:1px solid var(--line-strong); border-radius:99px; padding:7px; }
+.htab{ flex:1; display:flex; flex-direction:column; align-items:center; gap:3px; padding:7px 0 6px; border-radius:99px; font-size:11px; color:var(--ink-3); }
+.htab.on{ color:var(--amber); background:var(--amber-soft); }
+
+/* 预设 deck-L */
+.pgrid2{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.pcard2{ position:relative; border-radius:14px; overflow:hidden; aspect-ratio:1/.8; border:1px solid var(--line); }
+.pcard2.sel{ border:2px solid var(--amber); }
+.pcard2 .pn{ position:absolute; left:7px; bottom:7px; font-size:10.5px; color:#fff; background:rgba(0,0,0,.5); padding:2px 9px; border-radius:99px; }
+.pcard2 .ck{ position:absolute; top:6px; right:6px; width:18px; height:18px; border-radius:99px; background:var(--amber); color:#231605; display:flex; align-items:center; justify-content:center; }
+.pcard2 .ck .ic{ width:11px; height:11px; stroke-width:2.8; }
+
+/* 曲线 deck 内嵌 */
+.curvebox{ background:rgba(0,0,0,.25); border:1px solid var(--line); border-radius:14px; padding:8px; margin-bottom:10px; }
+.anchors{ display:flex; gap:8px; }
+.anch{ flex:1; background:var(--raised); border-radius:12px; padding:7px 0; text-align:center; }
+.anch .k{ font-size:10px; color:var(--ink-3); display:block; }
+.anch .v{ font-size:14px; color:var(--ink); font-weight:600; }
+
+/* 自适应亮档 */
+.phone.litchrome .tb, .phone.litchrome .histstrip{ background:rgba(244,241,234,.88); border-color:rgba(0,0,0,.1); }
+.phone.litchrome .tb .title, .phone.litchrome .tbi{ color:var(--p-ink); }
+.phone.litchrome .tbi.dis{ opacity:.35; }
+.phone.litchrome .expill{ background:var(--p-amber-soft); border-color:rgba(184,121,26,.4); color:var(--p-amber); }
+.phone.litchrome .deck{ background:var(--p-deck); border-color:rgba(0,0,0,.1); }
+.phone.litchrome .deck .sl-name, .phone.litchrome .deck .sl-val{ color:var(--p-ink); }
+.phone.litchrome .g{ color:var(--p-ink2); } .phone.litchrome .g.on{ background:var(--p-amber-soft); color:var(--p-amber); }
+.phone.litchrome .scopebtn{ color:var(--p-ink2); border-color:rgba(0,0,0,.14); }
+.phone.litchrome .rail{ background:var(--p-deck); border-color:rgba(0,0,0,.1); }
+.phone.litchrome .rk{ color:#9A958A; } .phone.litchrome .rk.on{ color:var(--p-amber); background:var(--p-amber-soft); }
+.phone.litchrome .sl-track::before{ background:rgba(0,0,0,.14); }
+.phone.litchrome .sl-zero{ background:rgba(0,0,0,.28); }
+.phone.litchrome .hintln{ color:#8D897E; }
+.hintln{ font-size:11px; color:var(--ink-3); margin-top:10px; line-height:1.5; }
+
+/* 导出回执 */
+.receipt{ position:absolute; left:22px; right:22px; bottom:120px; z-index:7;
+  background:rgba(25,25,23,.92); backdrop-filter:blur(24px); -webkit-backdrop-filter:blur(24px);
+  border:1px solid rgba(240,238,233,.15); border-radius:24px; padding:22px 24px; box-shadow:0 24px 70px rgba(0,0,0,.55); }
+.receipt .okc{ width:52px; height:52px; border-radius:99px; background:rgba(76,195,138,.15); border:1px solid rgba(76,195,138,.4);
+  display:flex; align-items:center; justify-content:center; color:var(--ok); margin-bottom:12px; }
+.receipt h3{ font-size:19px; font-weight:700; margin-bottom:2px; }
+.receipt .sub{ font-size:11.5px; color:var(--ink-3); margin-bottom:12px; }
+.rrow{ display:flex; justify-content:space-between; padding:8px 0; border-top:1px solid var(--line); font-size:12.5px; }
+.rrow .k{ color:var(--ink-3); } .rrow .v{ color:var(--ink); }
+.rbtns{ display:flex; gap:10px; margin-top:14px; }
+.rbtn{ flex:1; height:42px; border-radius:99px; display:flex; align-items:center; justify-content:center; font-size:13px; }
+.rbtn.pri{ background:var(--amber); color:#231605; font-weight:700; }
+.rbtn.sec{ border:1px solid var(--line-strong); color:var(--ink); }
+
+/* ============================================================
+   其它
+============================================================ */
+.g-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:14px; }
+.g-card{ background:var(--surface); border:1px solid var(--line); border-radius:18px; padding:18px 20px; }
+.g-card b{ display:block; font-size:13.5px; margin-bottom:8px; color:var(--ink); }
+.g-card p{ font-size:12.5px; color:var(--ink-2); }
+.g-card p em{ font-style:normal; color:var(--amber); }
+.phase{ display:flex; gap:14px; align-items:flex-start; padding:15px 0; border-bottom:1px solid var(--line); }
+.phase .no{ width:34px; height:34px; flex:none; border-radius:12px; background:var(--amber-soft); color:var(--amber);
+  display:flex; align-items:center; justify-content:center; font-family:ui-monospace,Consolas,monospace; font-size:13px; font-weight:700; }
+.phase .bd b{ font-size:14px; }
+.phase .bd p{ font-size:12.5px; color:var(--ink-2); margin-top:2px; }
+/* ============================================================
+   v2 增补：首页成片卡 / 相机会话 / 设置 / 模型中心 / 动效演示
+============================================================ */
+/* —— 首页 hero 成片卡 —— */
+.hero-card{ position:absolute; left:20px; right:20px; top:70px; height:344px; border-radius:24px; overflow:hidden;
+  box-shadow:0 26px 60px rgba(0,0,0,.5); border:1px solid var(--line-strong); }
+.hc-inner{ position:absolute; inset:0; z-index:2; padding:24px; display:flex; flex-direction:column; }
+.hc-glyph{ position:absolute; top:16px; right:16px; width:42px; height:42px; z-index:3; opacity:.9; }
+.hc-title{ font-size:24px; font-weight:700; color:#fff; text-shadow:0 2px 14px rgba(0,0,0,.4); }
+.hc-sub{ font-size:11.5px; color:rgba(255,255,255,.85); margin-top:5px; text-shadow:0 1px 8px rgba(0,0,0,.4); }
+.hc-actions{ display:flex; gap:10px; margin-top:14px; }
+.hc-act{ flex:1; display:flex; flex-direction:column; align-items:center; gap:4px; padding:11px 0 10px; border-radius:14px;
+  background:rgba(16,14,17,.45); backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
+  border:1px solid rgba(255,255,255,.24); color:#fff; font-size:11px; }
+.hc-act .ic{ width:19px; height:19px; }
+
+/* —— 相机会话 —— */
+.campill{ display:inline-flex; align-items:center; gap:6px; background:rgba(76,195,138,.13);
+  border:1px solid rgba(76,195,138,.4); color:var(--ok); border-radius:99px; padding:5px 12px; font-size:11px; }
+.campill .dot{ width:6px; height:6px; border-radius:99px; background:var(--ok); }
+.ccard{ background:var(--deck); border:1px solid var(--line-strong); border-radius:18px; padding:13px 15px; margin-bottom:10px; }
+.cmeta{ display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-top:10px; }
+.cm{ text-align:center; background:var(--raised); border-radius:11px; padding:7px 0; }
+.cm .k{ font-size:10px; color:var(--ink-3); display:block; }
+.cm .v{ font-size:13px; font-weight:600; color:var(--ink); }
+.badge{ display:inline-flex; align-items:center; gap:5px; font-size:10.5px; padding:3px 9px; border-radius:99px; }
+.badge.proc{ background:var(--amber-soft); color:var(--amber); }
+.badge.done{ background:rgba(76,195,138,.13); color:var(--ok); }
+.badge.skip{ background:var(--raised); color:var(--ink-3); }
+.shimmer{ position:relative; overflow:hidden; }
+.shimmer::after{ content:""; position:absolute; inset:0; transform:translateX(-100%);
+  background:linear-gradient(90deg, transparent, rgba(255,255,255,.15), transparent);
+  animation:shimmer 1.4s infinite; }
+@keyframes shimmer{ to{ transform:translateX(100%); } }
+.tl{ position:relative; padding-left:24px; }
+.tl::before{ content:""; position:absolute; left:7px; top:8px; bottom:8px; width:2px; background:var(--line-strong); }
+.tl-item{ position:relative; padding:7px 0; display:flex; align-items:center; gap:10px; }
+.tl-item::before{ content:""; position:absolute; left:-22px; top:14px; width:10px; height:10px; border-radius:99px; background:var(--ink-3); }
+.tl-item.on::before{ background:var(--amber); box-shadow:0 0 0 4px var(--amber-soft); }
+.tl-item.ok::before{ background:var(--ok); }
+.tl-th{ width:38px; height:38px; border-radius:9px; overflow:hidden; position:relative; flex:none; }
+.sessgrid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.scard{ position:relative; border-radius:14px; overflow:hidden; aspect-ratio:1/.8; border:1px solid var(--line); }
+.scard.sel{ border:2px solid var(--amber); }
+.scard .badge{ position:absolute; left:6px; bottom:6px; }
+.scard .ck{ position:absolute; top:6px; right:6px; width:20px; height:20px; border-radius:99px; border:1.5px solid rgba(255,255,255,.65); }
+.scard.sel .ck{ background:var(--amber); border-color:var(--amber); color:#231605; display:flex; align-items:center; justify-content:center; }
+.scard .ck .ic{ width:11px; height:11px; stroke-width:3; }
+.batchbar{ position:absolute; left:10px; right:10px; bottom:16px; z-index:8; display:flex; gap:8px;
+  background:rgba(25,25,23,.92); backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px);
+  border:1px solid var(--line-strong); border-radius:18px; padding:10px; }
+.bb{ flex:1; height:38px; border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:12.5px; }
+.bb.pri{ background:var(--amber); color:#231605; font-weight:700; }
+.bb.sec{ background:var(--raised); color:var(--ink); border:1px solid var(--line-strong); }
+
+/* —— 设置 —— */
+.srow{ display:flex; align-items:center; gap:12px; background:var(--deck); border:1px solid var(--line);
+  border-radius:14px; padding:11px 14px; margin-bottom:8px; }
+.srow .si{ width:30px; height:30px; border-radius:9px; background:var(--raised); display:flex; align-items:center; justify-content:center; color:var(--amber); flex:none; }
+.srow .si .ic{ width:16px; height:16px; }
+.srow .st{ flex:1; min-width:0; }
+.srow .st b{ display:block; font-size:13px; font-weight:600; }
+.srow .st span{ font-size:10.5px; color:var(--ink-3); }
+.srow .sv{ font-size:12px; color:var(--ink-2); white-space:nowrap; }
+.srow .arr{ color:var(--ink-3); font-size:12px; }
+.sgroup .gt{ font-size:10.5px; color:var(--ink-3); letter-spacing:.12em; margin:14px 6px 8px; }
+.toggle{ width:42px; height:25px; border-radius:99px; background:var(--amber); position:relative; flex:none; }
+.toggle::after{ content:""; position:absolute; top:2.5px; right:2.5px; width:20px; height:20px; border-radius:99px; background:#fff; }
+.toggle.off{ background:var(--raised); }
+.toggle.off::after{ right:auto; left:2.5px; }
+
+/* —— 模型中心 —— */
+.mcard{ background:var(--deck); border:1px solid var(--line-strong); border-radius:18px; padding:13px 15px; margin-bottom:10px; }
+.mcard.plan{ border-style:dashed; background:transparent; }
+.mhead{ display:flex; align-items:center; gap:11px; }
+.micon{ width:38px; height:38px; border-radius:12px; background:var(--amber-soft); color:var(--amber);
+  display:flex; align-items:center; justify-content:center; flex:none; }
+.mhead .mt{ flex:1; min-width:0; }
+.mhead .mt b{ display:block; font-size:13.5px; }
+.mhead .mt span{ font-size:10.5px; color:var(--ink-3); }
+.mrow{ display:flex; justify-content:space-between; font-size:11.5px; padding:6px 0 0; border-top:1px solid var(--line); margin-top:8px; }
+.mrow:first-of-type{ border-top:none; }
+.mrow .k{ color:var(--ink-3); }
+.mrow .v{ color:var(--ink-2); text-align:right; }
+
+/* —— 横屏（≥600dp 宽即启用，同一批组件重排，照片拿走全部宽度）—— */
+.phone.land{ width:768px; height:356px; border-radius:42px; border:8px solid #16161A; }
+.phone.land .hi{ width:96px; }
+.land-body{ position:absolute; inset:0; display:flex; z-index:4; }
+.land-preview{ position:relative; flex:1; min-width:0; margin:10px 0 10px 10px; border-radius:18px; overflow:hidden; }
+.land-side{ width:252px; flex:none; margin:10px; display:flex; flex-direction:column; gap:8px; overflow:hidden; }
+.land-side .rth{ width:72px; height:72px; }
+.shot.wide{ width:800px; }
+
+/* —— 动效演示 —— */
+.demo-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:16px; }
+.demo{ background:var(--surface); border:1px solid var(--line); border-radius:18px; padding:16px; }
+.demo .stage{ position:relative; height:176px; border-radius:14px; overflow:hidden; margin-bottom:12px; }
+.demo .cap2 b{ font-size:13px; }
+.demo .cap2 p{ font-size:11.5px; color:var(--ink-3); margin-top:3px; line-height:1.55; }
+@keyframes hud-in{ 0%{ opacity:0; transform:translateY(14px) scale(.94); } 16%{ opacity:1; transform:none; } 72%{ opacity:1; transform:none; } 100%{ opacity:0; transform:translateY(-6px); } }
+.demo-hud{ animation:hud-in 3.6s infinite; }
+@keyframes draw{ 0%{ stroke-dashoffset:700; } 45%{ stroke-dashoffset:0; } 92%{ stroke-dashoffset:0; } 100%{ stroke-dashoffset:700; } }
+@keyframes fillpulse{ 0%,8%{ fill-opacity:0; } 40%,90%{ fill-opacity:.14; } 100%{ fill-opacity:0; } }
+.demo-mask path{ stroke-dasharray:700; stroke-dashoffset:700; animation:draw 4.6s infinite ease-in-out, fillpulse 4.6s infinite ease-in-out; }
+@keyframes slidein{ 0%{ opacity:0; transform:translateX(70px) scale(.9); } 16%{ opacity:1; transform:none; } 78%{ opacity:1; transform:none; } 100%{ opacity:0; transform:translateX(-16px) scale(.96); } }
+.demo-cap .newshot{ animation:slidein 4.2s infinite cubic-bezier(.2,.8,.2,1); }
+@keyframes deckmorph{ 0%,26%{ height:104px; } 46%,76%{ height:196px; } 96%,100%{ height:104px; } }
+.demo-deck .morph{ animation:deckmorph 5.4s infinite cubic-bezier(.45,1.4,.35,1); }
+@keyframes ringfill{ 0%{ stroke-dasharray:0 251; } 52%,88%{ stroke-dasharray:163 251; } 100%{ stroke-dasharray:0 251; } }
+.demo-ring .f{ animation:ringfill 4.4s infinite; }
+@keyframes material{ 0%,40%{ background:#20201E; } 58%,90%{ background:#F4F1EA; } 100%{ background:#20201E; } }
+@keyframes material-ink{ 0%,40%{ color:#F0EEE9; } 58%,90%{ color:#26241F; } 100%{ color:#F0EEE9; } }
+.demo-mat .mstage{ animation:material 6.4s infinite; }
+.demo-mat .mstage .sl-name, .demo-mat .mstage .sl-val{ animation:material-ink 6.4s infinite; }
+.demo-mat .mstage .hintln{ animation:material-ink 6.4s infinite; }
+@keyframes bladespin{ 0%{ transform:rotate(0deg); } 55%,100%{ transform:rotate(60deg); } }
+.demo-ap .blades{ transform-box:view-box; transform-origin:center; animation:bladespin 2.8s infinite cubic-bezier(.6,0,.25,1); }
+
+footer{ margin-top:96px; padding-top:28px; border-top:1px solid var(--line); color:var(--ink-3); font-size:12px;
+  display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px; }
+</style>
+</head>
+<body>
+
+<!-- ================= SVG 图标库 ================= -->
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="a-back" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></symbol>
+  <symbol id="a-undo" viewBox="0 0 24 24"><path d="M8 6l-4 4 4 4"/><path d="M4 10h9.5a5.5 5.5 0 1 1 0 11H10"/></symbol>
+  <symbol id="a-redo" viewBox="0 0 24 24"><path d="M16 6l4 4-4 4"/><path d="M20 10h-9.5a5.5 5.5 0 1 0 0 11H14"/></symbol>
+  <symbol id="a-reset" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.4-5.7"/><path d="M20 3.5V8h-4.5"/></symbol>
+  <symbol id="a-eye" viewBox="0 0 24 24"><path d="M2.5 12S6 5.8 12 5.8 21.5 12 21.5 12 18 18.2 12 18.2 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="2.8"/></symbol>
+  <symbol id="a-split" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="3"/><path d="M12 4.5v15"/><path d="M7.5 12h2M14.5 12h2" stroke-dasharray="1 2.4"/></symbol>
+  <symbol id="a-wand" viewBox="0 0 24 24"><path d="M4 20L14.5 9.5"/><path d="M17 3l.9 2.1L20 6l-2.1.9L17 9l-.9-2.1L14 6l2.1-.9Z"/></symbol>
+  <symbol id="a-export" viewBox="0 0 24 24"><path d="M6.5 11v8h11v-8"/><path d="M12 14V4"/><path d="M8.5 7.5L12 4l3.5 3.5"/></symbol>
+  <symbol id="a-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.6"/><path d="M4.5 20c1.6-3.6 4.2-5.2 7.5-5.2s5.9 1.6 7.5 5.2"/></symbol>
+  <symbol id="a-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16Z" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="a-drop" viewBox="0 0 24 24"><path d="M12 3.5s6 6.6 6 10.6a6 6 0 1 1-12 0C6 10.1 12 3.5 12 3.5Z"/></symbol>
+  <symbol id="a-curve" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="17" height="17" rx="4"/><path d="M6.5 17.5c5.5 0 6.5-11 11-11"/></symbol>
+  <symbol id="a-spark" viewBox="0 0 24 24"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9Z"/></symbol>
+  <symbol id="a-grid" viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="2"/><rect x="13" y="4" width="7" height="7" rx="2"/><rect x="4" y="13" width="7" height="7" rx="2"/><rect x="13" y="13" width="7" height="7" rx="2"/></symbol>
+  <symbol id="a-history" viewBox="0 0 24 24"><path d="M3.5 12a8.5 8.5 0 1 0 2.5-6"/><path d="M3.5 3.5V8H8"/><path d="M12 8v4.5l3 1.8"/></symbol>
+  <symbol id="a-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+  <symbol id="a-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="a-image" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="3"/><circle cx="9" cy="10" r="1.6"/><path d="M4.5 17l4.5-4.5 3 3 3.5-3.5 4 4"/></symbol>
+  <symbol id="a-sliders" viewBox="0 0 24 24"><path d="M4 7h9M19 7h1"/><circle cx="16" cy="7" r="2.2"/><path d="M4 17h3M13 17h7"/><circle cx="10" cy="17" r="2.2"/></symbol>
+  <symbol id="a-down" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+  <symbol id="a-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="a-share" viewBox="0 0 24 24"><circle cx="6" cy="12" r="2.6"/><circle cx="17.5" cy="5.5" r="2.6"/><circle cx="17.5" cy="18.5" r="2.6"/><path d="M8.3 10.8l6.9-4M8.3 13.2l6.9 4"/></symbol>
+  <symbol id="a-aperture" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M14.31 8l5.74 9.94M9.69 8h11.48M7.38 12l5.74-9.94M9.69 16l-5.74-9.94M14.31 16H2.83M16.62 12l-5.74 9.94"/></symbol>
+  <symbol id="a-chip" viewBox="0 0 24 24"><rect x="6.5" y="6.5" width="11" height="11" rx="2.5"/><path d="M9.5 2.5v4M14.5 2.5v4M9.5 17.5v4M14.5 17.5v4M2.5 9.5h4M2.5 14.5h4M17.5 9.5h4M17.5 14.5h4"/></symbol>
+  <symbol id="a-battery" viewBox="0 0 24 24"><rect x="2.5" y="8" width="16.5" height="8.5" rx="2.5"/><path d="M22 10.5v3.5"/><path d="M6 11v2.5M9.5 11v2.5"/></symbol>
+  <symbol id="a-brush" viewBox="0 0 24 24"><path d="M4 20l1-4L16.5 4.5a2.12 2.12 0 0 1 3 3L8 19l-4 1Z"/></symbol>
+  <defs>
+    <radialGradient id="icBg" cx="50%" cy="46%" r="72%">
+      <stop offset="0%" stop-color="#2A2822"/>
+      <stop offset="100%" stop-color="#131311"/>
+    </radialGradient>
+    <radialGradient id="icGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#FFB454" stop-opacity=".26"/>
+      <stop offset="100%" stop-color="#FFB454" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="icBlade" gradientUnits="userSpaceOnUse" x1="22" y1="22" x2="86" y2="86">
+      <stop offset="0%" stop-color="#FFC97A"/>
+      <stop offset="100%" stop-color="#F09A28"/>
+    </linearGradient>
+  </defs>
+</svg>
+
+<div class="wrap">
+
+<!-- ================= HERO ================= -->
+<div class="hero">
+  <div class="kicker">PIXELCAKE · CONCEPT Ⅱ · 2026-10</div>
+  <h1>「<em>Aperture</em> 光圈」—— 一个表面的修图台</h1>
+  <p class="lede">
+    这一版不再有「面板」这个概念。照片永远是唯一的主角，所有控制压缩成底部两条固定的带子：
+    <b style="color:var(--ink)">工具栏（选工具）+ 控制台（这个工具的旋钮）</b>。
+    调参有两种通道——直接在照片上拖（快、凭感觉），或在控制台拖滑块（慢、要精确）——两者改的是同一个参数。
+    作用域不再靠文字 chip 猜，而是<b style="color:var(--ink)">点哪修哪</b>：点一下照片里的人，蒙版就圈住他。
+  </p>
+  <div class="concepts">
+    <div class="c-card"><b><i>01</i>一个表面 One-Surface</b>
+      <span>从进入到导出，编辑器只有一屏。工具切换 = 底部两条带子的内容变形，布局永不重排。</span>
+      <span class="tag ok">数据层已支持</span></div>
+    <div class="c-card"><b><i>02</i>点哪修哪 Tap-to-Scope</b>
+      <span>点照片里的人 → 命中 6 类分割蒙版 → 作用域自动选中，蒙版轮廓以琥珀描边可视化。</span>
+      <span class="tag mid">蒙版已有 · 交互新接线</span></div>
+    <div class="c-card"><b><i>03</i>双通道调节 Dual-Input</b>
+      <span>照片上横拖 = 调参（Snapseed 式），上下滑 = 换参数；控制台滑块永远同步。手指不离照片完成 80% 的调整。</span>
+      <span class="tag mid">手势机已有 · 需扩展</span></div>
+    <div class="c-card"><b><i>04</i>强度即语言 Amount</b>
+      <span>任何预设套上后只暴露一个「强度」环——参数栈整体向中性插值。风格的深浅由一个旋钮决定。</span>
+      <span class="tag mid">引擎小改：参数栈 lerp</span></div>
+    <div class="c-card"><b><i>05</i>系留出片 Tether</b>
+      <span>USB 连上相机即拍摄台：拍摄 → 手机自动拉取 → 套默认修图参数 → 出片，会话内历史一键批量套用 / 导出。</span>
+      <span class="tag ok">下载与批处理链路已有</span></div>
+  </div>
+</div>
+
+<!-- ================= 01 对标 ================= -->
+<section>
+  <div class="sec-head"><span class="sec-no">01</span><h2>这一版从哪里偷什么</h2></div>
+  <p class="sec-sub">比上一版挖得更深：不止取「视觉」，更取<b style="color:var(--ink)">交互模型</b>——每一条都标注工程可行性。</p>
+  <table>
+    <tr><th style="width:150px">来源</th><th style="width:330px">提取的交互/优点</th><th>落点</th></tr>
+    <tr><td><b>Snapseed</b></td><td>参数绑定在照片上：横拖调值、上下滑换参数——照片本身就是滑块；栈式历史</td><td>双通道调节（§3 概念 03）· 巨大读数 HUD（§4）· 历史丝带</td></tr>
+    <tr><td><b>iOS 照片 App</b></td><td>极致的一表面：工具条 + 单滑块区，全 App 零面板、零层级跳转</td><td>One-Surface 架构（控制台固定高，永不滚动、永不遮屏）</td></tr>
+    <tr><td><b>Darkroom</b></td><td>工具横向 carousel 一屏到底；版本（Versions）作为一等公民</td><td>控制台内容即 carousel（chip 组切换）· 历史丝带</td></tr>
+    <tr><td><b>Google 相机 / Magic Editor</b></td><td>点选画面中的对象来限定编辑范围——空间选择取代文字选择</td><td><b>点哪修哪</b>：分割蒙版命中测试 + 蒙版轮廓可视化</td></tr>
+    <tr><td><b>Lightroom</b></td><td>精确读数、直方图常驻、预设强度（Amount）</td><td>控制台等宽数值 · 顶部直方图条 · <b>强度环</b>（引擎 lerp 小改）</td></tr>
+    <tr><td><b>醒图 / 美图</b></td><td>一键增强降低门槛；效果卡片大而可扫</td><td>顶栏「自动」预留位 · 预设卡 + 强度环</td></tr>
+    <tr><td><b>Sony Creators / LR 系留</b></td><td>连上相机即拍摄台：机身参数常驻、新片即到即显、会话内批量出片</td><td>§04 J/K/L 系留三屏（仪表盘 / 到达流 / 会话批量）+ 默认修图参数</td></tr>
+  </table>
+  <div class="rule"></div>
+</section>
+
+<!-- ================= 02 设计语言 ================= -->
+<section>
+  <div class="sec-head"><span class="sec-no">02</span><h2>设计语言 · 暗房与安全灯</h2></div>
+  <p class="sec-sub">隐喻只有一个：<b style="color:var(--ink)">暗房</b>。世界是暖石墨，唯一的光是琥珀色的安全灯——它只照亮「你正在动的东西」。强调色不再是装饰，而是注意力的路由器。</p>
+
+  <h4 style="font-size:14px; margin:24px 0 12px;">2.1 色彩</h4>
+  <div class="sw-grid">
+    <div class="sw"><div class="chip" style="background:#121211"></div><div class="meta"><b>Canvas 画布</b><span>#121211</span></div></div>
+    <div class="sw"><div class="chip" style="background:#191917"></div><div class="meta"><b>Surface</b><span>#191917</span></div></div>
+    <div class="sw"><div class="chip" style="background:#20201E"></div><div class="meta"><b>Deck 控制台</b><span>#20201E</span></div></div>
+    <div class="sw"><div class="chip" style="background:#2A2A27"></div><div class="meta"><b>Raised</b><span>#2A2A27</span></div></div>
+    <div class="sw"><div class="chip" style="background:linear-gradient(135deg,#FFB454,#F09A28)"></div><div class="meta"><b>Amber 安全灯</b><span>#FFB454 / #F09A28</span></div></div>
+    <div class="sw"><div class="chip" style="background:rgba(255,180,84,.14)"></div><div class="meta"><b>Amber 选中底</b><span>@14%</span></div></div>
+  </div>
+  <div class="sw-grid sub" style="margin-top:12px;">
+    <div class="sw"><div class="chip" style="background:#F0EEE9"></div><div class="meta"><b>Ink</b><span>#F0EEE9</span></div></div>
+    <div class="sw"><div class="chip" style="background:#A5A29A"></div><div class="meta"><b>Ink-2</b><span>#A5A29A</span></div></div>
+    <div class="sw"><div class="chip" style="background:#6B6963"></div><div class="meta"><b>Ink-3</b><span>#6B6963</span></div></div>
+    <div class="sw"><div class="chip" style="background:#F4F1EA"></div><div class="meta"><b>纸（亮档 Deck）</b><span>#F4F1EA</span></div></div>
+    <div class="sw"><div class="chip" style="background:#B8791A"></div><div class="meta"><b>琥珀·纸档</b><span>#B8791A</span></div></div>
+    <div class="sw"><div class="chip" style="background:#4CC38A"></div><div class="meta"><b>成功</b><span>#4CC38A</span></div></div>
+  </div>
+  <p class="note" style="margin-top:12px;">
+    中性阶整体偏暖（黄相 +2），与肤色、木、胶片同一温度。<b style="color:var(--ink-2)">琥珀只允许出现在四处</b>：选中态、拖动中的填充与拇指、蒙版轮廓、主 CTA——出现在别处即违规。
+  </p>
+  <p class="note" style="margin-top:8px;">
+    <b style="color:var(--ink-2)">首页成片卡的紫黑→琥珀金四色渐变</b>（§04-A，实现侧 token `HeroCardTop…Bottom`）
+    是<b style="color:var(--ink-2)">「照片占位」语义</b>——讲「底片 → 出片」的叙事，属于内容占位而非品牌色板；
+    品牌面仍只有石墨与琥珀（与 §2.5 图标「不做大面积彩渐变」不冲突：那条约束的是图标本体）。
+  </p>
+
+  <h4 style="font-size:14px; margin:32px 0 6px;">2.2 自适应材质（本版独有）<span class="tag mid">直方图均值已算好</span></h4>
+  <p style="font-size:13px; color:var(--ink-2); max-width:860px;">
+    控制台与顶栏的明暗<b style="color:var(--ink)">跟随照片</b>：渲染管线已经在算直方图，取其均值——
+    均值 &lt; 0.35 → 暖石墨控制台；均值 &gt; 0.65 → 纸色控制台（琥珀同步切深档 #B8791A 保对比度）。
+    效果是「界面永远衬得出生体照片」，雪景不会白成一片、夜景不会黑成一团。切换只动表面色与文字色，布局零变化。
+  </p>
+
+  <h4 style="font-size:14px; margin:32px 0 6px;">2.3 字阶与「仪表读数」</h4>
+  <div>
+    <div class="type-row"><div class="spec">display · 28/36 · Bold</div><div style="font-size:28px; font-weight:700;">已导出</div></div>
+    <div class="type-row"><div class="spec">title · 20/28 · Semibold</div><div style="font-size:20px; font-weight:600;">明暗</div></div>
+    <div class="type-row"><div class="spec">body · 15/22 · Regular</div><div style="font-size:15px;">拖动照片横调数值，上下滑切换参数。</div></div>
+    <div class="type-row"><div class="spec">label · 13/18 · Medium</div><div style="font-size:13px; font-weight:500;">磨皮强度 <span class="mono" style="color:var(--ink-2)">40%</span></div></div>
+    <div class="type-row"><div class="spec">caption · 11/16 · Regular</div><div style="font-size:11px; color:var(--ink-2);">点一下要调整的对象</div></div>
+    <div class="type-row" style="border-bottom:none;"><div class="spec">HUD 读数 · 46/300 · Mono</div>
+      <div style="font-size:46px; font-weight:300; line-height:1.1;" class="mono">+0.70<em style="font-style:normal; font-size:17px; color:var(--amber); margin-left:6px;">EV</em></div></div>
+  </div>
+  <p class="note" style="margin-top:8px;">数值一律等宽 + tabular-nums。HUD 读数是全 App 最大的字——它出现时，用户全部注意力就该在它身上。</p>
+
+  <h4 style="font-size:14px; margin:32px 0 14px;">2.4 几何</h4>
+  <div class="geo">
+    <div class="sp-item"><div class="sp-bar" style="width:4px"></div><div class="lab">4</div></div>
+    <div class="sp-item"><div class="sp-bar" style="width:8px"></div><div class="lab">8</div></div>
+    <div class="sp-item"><div class="sp-bar" style="width:12px"></div><div class="lab">12</div></div>
+    <div class="sp-item"><div class="sp-bar" style="width:16px"></div><div class="lab">16</div></div>
+    <div class="sp-item"><div class="sp-bar" style="width:24px"></div><div class="lab">24</div></div>
+    <div class="sp-item"><div class="sp-bar" style="width:32px"></div><div class="lab">32</div></div>
+    <div class="sp-item"><div class="sp-bar" style="width:48px"></div><div class="lab">48</div></div>
+    <div style="width:1px; height:56px; background:var(--line);"></div>
+    <div class="rd" style="border-radius:12px;">chip 12</div>
+    <div class="rd" style="border-radius:20px;">deck 20</div>
+    <div class="rd" style="border-radius:28px;">sheet 28</div>
+    <div class="rd" style="border-radius:99px;">pill / rail</div>
+  </div>
+
+  <h4 style="font-size:14px; margin:34px 0 14px;">2.5 App 图标 ·「穿过光圈的安全灯」</h4>
+  <div class="comp-row">
+    <div class="comp" style="flex:0 1 400px;">
+      <h4>主图标 · 108 网格 · 内容安全区 r33</h4>
+      <div style="display:flex; gap:20px; align-items:flex-end; flex-wrap:wrap;">
+        <svg viewBox="0 0 108 108" width="176" height="176" style="border-radius:24px; box-shadow:0 16px 44px rgba(0,0,0,.5);" role="img" aria-label="PixelCake 图标">
+          <rect width="108" height="108" rx="24" fill="url(#icBg)"/>
+          <circle cx="54" cy="54" r="40" fill="url(#icGlow)"/>
+          <path d="M66 54 L60 64.4 L48 64.4 L42 54 L48 43.6 L60 43.6 Z" fill="#FFB454" opacity=".16"/>
+          <g transform="translate(18,18) scale(3)" fill="none" stroke="url(#icBlade)" stroke-width="1.8" stroke-linecap="round">
+            <circle cx="12" cy="12" r="10"/>
+            <path d="M14.31 8l5.74 9.94M9.69 8h11.48M7.38 12l5.74-9.94M9.69 16l-5.74-9.94M14.31 16H2.83M16.62 12l-5.74 9.94"/>
+          </g>
+        </svg>
+        <div>
+          <div style="display:flex; gap:10px; align-items:flex-end; margin-bottom:10px;">
+            <svg viewBox="0 0 108 108" width="96" height="96" style="border-radius:24px;"><rect width="108" height="108" rx="24" fill="url(#icBg)"/><circle cx="54" cy="54" r="40" fill="url(#icGlow)"/><path d="M66 54 L60 64.4 L48 64.4 L42 54 L48 43.6 L60 43.6 Z" fill="#FFB454" opacity=".16"/><g transform="translate(18,18) scale(3)" fill="none" stroke="url(#icBlade)" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M14.31 8l5.74 9.94M9.69 8h11.48M7.38 12l5.74-9.94M9.69 16l-5.74-9.94M14.31 16H2.83M16.62 12l-5.74 9.94"/></g></svg>
+            <svg viewBox="0 0 108 108" width="64" height="64" style="border-radius:16px;"><rect width="108" height="108" rx="24" fill="url(#icBg)"/><circle cx="54" cy="54" r="40" fill="url(#icGlow)"/><path d="M66 54 L60 64.4 L48 64.4 L42 54 L48 43.6 L60 43.6 Z" fill="#FFB454" opacity=".16"/><g transform="translate(18,18) scale(3)" fill="none" stroke="url(#icBlade)" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M14.31 8l5.74 9.94M9.69 8h11.48M7.38 12l5.74-9.94M9.69 16l-5.74-9.94M14.31 16H2.83M16.62 12l-5.74 9.94"/></g></svg>
+            <svg viewBox="0 0 108 108" width="48" height="48" style="border-radius:12px;"><rect width="108" height="108" rx="24" fill="url(#icBg)"/><circle cx="54" cy="54" r="40" fill="url(#icGlow)"/><path d="M66 54 L60 64.4 L48 64.4 L42 54 L48 43.6 L60 43.6 Z" fill="#FFB454" opacity=".16"/><g transform="translate(18,18) scale(3)" fill="none" stroke="url(#icBlade)" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M14.31 8l5.74 9.94M9.69 8h11.48M7.38 12l5.74-9.94M9.69 16l-5.74-9.94M14.31 16H2.83M16.62 12l-5.74 9.94"/></g></svg>
+          </div>
+          <p class="note">48dp 起六叶可辨（描边 5.4/108 ≈ 2.4dp@48）。</p>
+          <div style="display:flex; gap:14px; align-items:center; background:#0C0C0B; border:1px solid var(--line); border-radius:16px; padding:12px 16px; margin-top:12px; width:fit-content;">
+            <svg viewBox="0 0 108 108" width="44" height="44" style="border-radius:11px;"><rect width="108" height="108" rx="24" fill="url(#icBg)"/><circle cx="54" cy="54" r="40" fill="url(#icGlow)"/><path d="M66 54 L60 64.4 L48 64.4 L42 54 L48 43.6 L60 43.6 Z" fill="#FFB454" opacity=".16"/><g transform="translate(18,18) scale(3)" fill="none" stroke="url(#icBlade)" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M14.31 8l5.74 9.94M9.69 8h11.48M7.38 12l5.74-9.94M9.69 16l-5.74-9.94M14.31 16H2.83M16.62 12l-5.74 9.94"/></g></svg>
+            <div style="width:44px; height:44px; border-radius:11px; background:#232320; display:flex; align-items:center; justify-content:center; color:#55534C;"><svg class="ic" style="width:20px;height:20px"><use href="#a-camera"/></svg></div>
+            <div style="width:44px; height:44px; border-radius:11px; background:#232320; display:flex; align-items:center; justify-content:center; color:#55534C;"><svg class="ic" style="width:20px;height:20px"><use href="#a-image"/></svg></div>
+            <div style="width:44px; height:44px; border-radius:11px; background:#232320; display:flex; align-items:center; justify-content:center; color:#55534C;"><svg class="ic" style="width:20px;height:20px"><use href="#a-folder"/></svg></div>
+          </div>
+          <p class="note" style="margin-top:10px;">桌面上它是一盏小灯：深色底 + 琥珀辉光在灰暗图标群中第一眼可见，而不靠高饱和呐喊。</p>
+        </div>
+      </div>
+      <p class="note" style="margin-top:16px;">概念 = 品牌徽标（光圈）× 暗房世界（石墨）× 安全灯（琥珀）。中心开口的六边形透出 16% 微光——「光正在进来」。六重旋转对称 ⇒ 圆形 / 方圆 / 圆角方遮罩下构图零变化。<b style="color:var(--ink-2)">刻意不做</b>：蛋糕图形（32px 不可读）、文字、大面积彩渐变（与壁纸打架）。</p>
+    </div>
+    <div class="comp" style="flex:1 1 320px;">
+      <h4>自适应图标分层（Android 8+）与遮罩</h4>
+      <div style="display:flex; gap:16px; flex-wrap:wrap; margin-bottom:14px;">
+        <div style="text-align:center;">
+          <svg viewBox="0 0 108 108" width="84" height="84" style="border-radius:20px;"><rect width="108" height="108" rx="24" fill="url(#icBg)"/><circle cx="54" cy="54" r="40" fill="url(#icGlow)"/></svg>
+          <div class="note" style="margin-top:6px;">背景层</div>
+        </div>
+        <div style="text-align:center;">
+          <svg viewBox="0 0 108 108" width="84" height="84" style="border-radius:20px; background:#191917; border:1px solid var(--line);"><path d="M66 54 L60 64.4 L48 64.4 L42 54 L48 43.6 L60 43.6 Z" fill="#FFB454" opacity=".16"/><g transform="translate(18,18) scale(3)" fill="none" stroke="url(#icBlade)" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M14.31 8l5.74 9.94M9.69 8h11.48M7.38 12l5.74-9.94M9.69 16l-5.74-9.94M14.31 16H2.83M16.62 12l-5.74 9.94"/></g></svg>
+          <div class="note" style="margin-top:6px;">前景层（安全区 r33）</div>
+        </div>
+        <div style="text-align:center;">
+          <svg viewBox="0 0 108 108" width="84" height="84" style="border-radius:20px; background:#191917; border:1px solid var(--line);"><g transform="translate(18,18) scale(3)" fill="none" stroke="#FFFFFF" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M14.31 8l5.74 9.94M9.69 8h11.48M7.38 12l5.74-9.94M9.69 16l-5.74-9.94M14.31 16H2.83M16.62 12l-5.74 9.94"/></g></svg>
+          <div class="note" style="margin-top:6px;">单色层（主题图标）</div>
+        </div>
+      </div>
+      <table>
+        <tr><th style="width:88px">层</th><th>规格</th></tr>
+        <tr><td><b>背景</b></td><td>径向石墨 #2A2822 → #131311，中央琥珀辉光 26% · 全出血 108</td></tr>
+        <tr><td><b>前景</b></td><td>光圈 6 叶：描边渐变 #FFC97A → #F09A28、5.4dp 圆帽；开口六边形 #FFB454 @16% · 全部 r ≤ 33</td></tr>
+        <tr><td><b>单色</b></td><td>前景纯白版（Android 13 themed icon 按壁纸取色），无背景</td></tr>
+      </table>
+      <div style="display:flex; gap:12px; margin-top:14px; align-items:flex-end;">
+        <div style="text-align:center;"><svg viewBox="0 0 108 108" width="72" height="72"><circle cx="54" cy="54" r="54" fill="url(#icBg)"/><circle cx="54" cy="54" r="40" fill="url(#icGlow)"/><path d="M66 54 L60 64.4 L48 64.4 L42 54 L48 43.6 L60 43.6 Z" fill="#FFB454" opacity=".16"/><g transform="translate(18,18) scale(3)" fill="none" stroke="url(#icBlade)" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M14.31 8l5.74 9.94M9.69 8h11.48M7.38 12l5.74-9.94M9.69 16l-5.74-9.94M14.31 16H2.83M16.62 12l-5.74 9.94"/></g></svg><div class="note">圆形</div></div>
+        <div style="text-align:center;"><svg viewBox="0 0 108 108" width="72" height="72"><rect width="108" height="108" rx="34" fill="url(#icBg)"/><circle cx="54" cy="54" r="40" fill="url(#icGlow)"/><path d="M66 54 L60 64.4 L48 64.4 L42 54 L48 43.6 L60 43.6 Z" fill="#FFB454" opacity=".16"/><g transform="translate(18,18) scale(3)" fill="none" stroke="url(#icBlade)" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M14.31 8l5.74 9.94M9.69 8h11.48M7.38 12l5.74-9.94M9.69 16l-5.74-9.94M14.31 16H2.83M16.62 12l-5.74 9.94"/></g></svg><div class="note">方圆</div></div>
+        <div style="text-align:center;"><svg viewBox="0 0 108 108" width="72" height="72"><rect width="108" height="108" rx="22" fill="url(#icBg)"/><circle cx="54" cy="54" r="40" fill="url(#icGlow)"/><path d="M66 54 L60 64.4 L48 64.4 L42 54 L48 43.6 L60 43.6 Z" fill="#FFB454" opacity=".16"/><g transform="translate(18,18) scale(3)" fill="none" stroke="url(#icBlade)" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M14.31 8l5.74 9.94M9.69 8h11.48M7.38 12l5.74-9.94M9.69 16l-5.74-9.94M14.31 16H2.83M16.62 12l-5.74 9.94"/></g></svg><div class="note">圆角方</div></div>
+        <div style="text-align:center;"><svg viewBox="0 0 108 108" width="72" height="72"><rect width="108" height="108" rx="24" fill="url(#icBg)"/><circle cx="54" cy="54" r="40" fill="url(#icGlow)"/><g transform="translate(18,18) scale(3)" fill="none" stroke="#FFFFFF" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M14.31 8l5.74 9.94M9.69 8h11.48M7.38 12l5.74-9.94M9.69 16l-5.74-9.94M14.31 16H2.83M16.62 12l-5.74 9.94"/></g></svg><div class="note">主题取色态</div></div>
+      </div>
+      <p class="note" style="margin-top:14px;">工程落点：background / foreground / monochrome 三个 vector drawable（PathData 与本 SVG 同源）+ <span class="mono">mipmap-anydpi-v26/ic_launcher.xml</span>，随 UI P1 提交并由 CI 验证；商店 512 全出血方图由 <span class="mono">docs/app_icon.svg</span> 导出（平台自行圆角）。</p>
+    </div>
+  </div>
+  <div class="rule"></div>
+</section>
+
+<!-- ================= 03 组件 ================= -->
+<section>
+  <div class="sec-head"><span class="sec-no">03</span><h2>核心组件</h2></div>
+  <p class="sec-sub">这一版的新组件只有六个，但每一个都重新发明了一个旧概念。</p>
+  <div class="comp-row">
+    <div class="comp">
+      <h4>工具栏 Rail · 永远在拇指下</h4>
+      <div class="rail">
+        <div class="rk"><svg class="ic"><use href="#a-user"/></svg>人像</div>
+        <div class="rk on"><svg class="ic"><use href="#a-sun"/></svg>明暗</div>
+        <div class="rk"><svg class="ic"><use href="#a-drop"/></svg>颜色</div>
+        <div class="rk"><svg class="ic"><use href="#a-curve"/></svg>曲线</div>
+        <div class="rk"><svg class="ic"><use href="#a-spark"/></svg>细节</div>
+        <div class="rk"><svg class="ic"><use href="#a-grid"/></svg>预设</div>
+      </div>
+      <p class="note" style="margin-top:16px;">悬浮胶囊，高 58dp，六工具。与上一版的 dock 语义相同，但它不再是「面板的开关」——它切换的是控制台内容，屏幕上没有任何东西会展开或收起。</p>
+    </div>
+    <div class="comp">
+      <h4>控制台 Deck · 固定高 · 永不滚动</h4>
+      <div class="deck" style="max-width:352px;">
+        <div class="deck-top">
+          <div class="grp"><span class="g on">明暗</span><span class="g">白平衡</span><span class="g">氛围</span></div>
+          <span class="scopebtn">作用域 · 整图</span>
+        </div>
+        <div class="sl">
+          <div class="sl-top"><span class="sl-name">曝光</span><span class="sl-val mono">+0.70 EV</span></div>
+          <div class="sl-track"><div class="sl-zero" style="left:50%"></div><div class="sl-fill" style="left:50%;width:17.5%"></div><div class="sl-thumb" style="left:calc(67.5% - 9px)"></div></div>
+        </div>
+        <div class="sl" style="margin-bottom:2px;">
+          <div class="sl-top"><span class="sl-name">对比度</span><span class="sl-val mono">0%</span></div>
+          <div class="sl-track"><div class="sl-zero" style="left:50%"></div><div class="sl-thumb" style="left:calc(50% - 9px)"></div></div>
+        </div>
+      </div>
+      <p class="note" style="margin-top:16px;">
+        <b style="color:var(--ink)">高度只有两档</b>：S=168dp（chips + 2 滑块 + 提示）、L=330dp（预设网格 / 曲线编辑器）。每组的控件数被硬性约束在「一屏放得下」，超了就拆 chip 组——复杂度被结构吃掉，而不是被滚动条藏起来。右上角是作用域入口。
+      </p>
+    </div>
+    <div class="comp">
+      <h4>巨大读数 HUD · 手势通道的回显</h4>
+      <div class="bighud" style="padding:18px 0 6px;">
+        <div class="pn">曝 光</div>
+        <div class="pv mono">+0.70<em>EV</em></div>
+        <div class="bar"><i></i><b></b></div>
+      </div>
+      <div class="bighud" style="padding:26px 0 6px;">
+        <div class="pn">色 温</div>
+        <div class="pv mono">−15<em>%</em></div>
+        <div class="bar"><i style="width:35%"></i><b style="left:35%"></b></div>
+      </div>
+      <p class="note" style="margin-top:14px;">在照片上横拖时出现，位置固定在照片下三分之一（拇指不挡）。46sp 细体等宽读数 + 细进度线。松手 800ms 后淡出。Snapseed 验证了这种交互，这里补上 Lightroom 的精确读数。</p>
+    </div>
+    <div class="comp">
+      <h4>点哪修哪 · 空间作用域</h4>
+      <div style="position:relative; height:190px; border-radius:16px; overflow:hidden; margin-bottom:14px;">
+        <div class="ph ph-portrait"></div>
+        <div class="dim"></div>
+        <svg style="position:absolute; inset:0;" viewBox="0 0 355 190" preserveAspectRatio="none">
+          <path d="M96 60 C120 30 190 34 208 72 C222 100 214 150 186 176 C150 190 108 178 92 140 C80 108 82 84 96 60 Z"
+                fill="rgba(255,180,84,.10)" stroke="#FFB454" stroke-width="2" stroke-dasharray="6 5"/>
+        </svg>
+        <span class="facechip" style="left:150px; top:44px;">人物 ✓</span>
+        <span class="picktip" style="top:14px;">再点一下其它区域可换作用域</span>
+      </div>
+      <p class="note">拾取模式下轻触照片 → 命中分割蒙版（6 类逐一比对，取该像素概率最高者）→ 蒙版区域琥珀描边 + 悬浮 chip 确认。控制台的作用域按钮同步显示。文字 chips 保留为兜底，但不再是第一入口。<span class="tag mid">FloatGrid 命中测试 = O(1)</span></p>
+    </div>
+    <div class="comp">
+      <h4>强度环 · 风格的单一旋钮</h4>
+      <div class="dialwrap" style="padding:8px 0 4px;">
+        <div class="dial">
+          <svg width="96" height="96" viewBox="0 0 96 96">
+            <circle cx="48" cy="48" r="40" fill="none" stroke="rgba(240,238,233,.12)" stroke-width="7"/>
+            <circle cx="48" cy="48" r="40" fill="none" stroke="#FFB454" stroke-width="7" stroke-linecap="round"
+                    stroke-dasharray="163 251" transform="rotate(-90 48 48)"/>
+          </svg>
+          <div class="dv"><b class="mono">65%</b><span>强度</span></div>
+        </div>
+        <div style="flex:1;">
+          <div class="mono" style="font-size:13px; color:var(--ink); margin-bottom:6px;">胶片 · Portra 400</div>
+          <p class="note">强度 65% = 全部参数向中性回退 35%：曝光 0.30 → 0.195，磨皮 0.4 → 0.26。一个旋钮同时表达「这个风格有多重」，不用进 20 个滑块里逐个减半。<span class="tag mid">参数栈 lerp，纯数学</span></p>
+        </div>
+      </div>
+    </div>
+    <div class="comp">
+      <h4>历史丝带 · 文字版（先落）与缩略图版（后落）</h4>
+      <div class="ribbon" style="margin:6px 0 18px;">
+        <span class="rb">原图</span><span class="rb">曝光 +0.7</span><span class="rb">磨皮 40%</span><span class="rb on">胶片预设 65%</span>
+      </div>
+      <p class="note">顶栏「历史」唤起，横向浮在控制台上方：每步一个 chip，点任意一步回到该状态（撤销/重做的空间化）。文字版数据结构就是现有的 EditSnapshot 栈；缩略图版需要每步留一张 96px 渲染（后续可做）。<span class="tag ok">文字版：栈已支持</span></p>
+      <h4 style="margin-top:22px;">分割对比 · 把「之前」钉在画面上</h4>
+      <div style="position:relative; height:130px; border-radius:14px; overflow:hidden; margin:10px 0 12px;">
+        <div class="ph ph-portrait"></div>
+        <div style="position:absolute; inset:0; left:42%;"><div class="ph hue5" style="position:absolute;"></div></div>
+        <div style="position:absolute; left:42%; top:0; bottom:0; width:2px; background:var(--amber);"></div>
+        <div style="position:absolute; left:42%; top:50%; transform:translate(-50%,-50%); width:30px; height:30px; border-radius:99px; background:var(--amber); color:#231605; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700;">⇔</div>
+        <span style="position:absolute; left:10px; top:10px; font-size:9.5px; background:rgba(0,0,0,.35); color:#fff; padding:2px 8px; border-radius:99px;">修后</span>
+        <span style="position:absolute; right:10px; top:10px; font-size:9.5px; background:rgba(0,0,0,.35); color:#fff; padding:2px 8px; border-radius:99px;">原图</span>
+      </div>
+      <p class="note">长按 = 临时看原图（保留）；拖动分割线 = 逐列对比（新）。两条渲染位图都已存在，纯 UI 裁剪。<span class="tag ok">数据已支持</span></p>
+    </div>
+  </div>
+  <div class="rule"></div>
+</section>
+
+<!-- ================= 04 界面 ================= -->
+<section>
+  <div class="sec-head"><span class="sec-no">04</span><h2>界面 · 14 屏</h2></div>
+  <p class="sec-sub">照片以抽象渐变占位。所有 mock 里的琥珀 = 注意力所在处——数一数每屏只有一处，就是这套语言的纪律。J–N 为 v2 增补：系留出片三屏 + 设置 + 端侧模型中心；J′ / L′ 为横屏双栏（§6.3 规则）。</p>
+  <div class="gallery">
+
+    <!-- A 首页 -->
+    <div class="shot">
+      <div class="phone"><div class="scr">
+        <div class="sb"><span>9:41</span><span>●●●</span></div>
+        <div class="hm-top">
+          <span class="wm">PIXELCAKE</span>
+          <span class="tbi" style="background:var(--raised);"><svg class="ic"><use href="#a-sliders"/></svg></span>
+        </div>
+        <div class="hero-card">
+          <div class="ph ph-golden"></div>
+          <svg class="hc-glyph" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.8)" stroke-width="1.4" stroke-linecap="round">
+            <circle cx="12" cy="12" r="10"/>
+            <path d="M14.31 8l5.74 9.94M9.69 8h11.48M7.38 12l5.74-9.94M9.69 16l-5.74-9.94M14.31 16H2.83M16.62 12l-5.74 9.94"/>
+          </svg>
+          <div class="hc-inner">
+            <div style="margin-top:auto;">
+              <div class="hc-title">开始一次修图</div>
+              <div class="hc-sub">全程本机处理 · 预览 2048 / 导出全分辨率 · RAW 16-bit</div>
+            </div>
+            <div class="hc-actions">
+              <div class="hc-act"><svg class="ic"><use href="#a-image"/></svg>相册</div>
+              <div class="hc-act"><svg class="ic"><use href="#a-folder"/></svg>文件 ARW</div>
+              <div class="hc-act"><svg class="ic"><use href="#a-camera"/></svg>相机直连</div>
+            </div>
+          </div>
+        </div>
+        <div class="recent" style="top:436px;">
+          <div class="rt"><span>最近编辑</span><span>全部 →</span></div>
+          <div class="rthumbs">
+            <div class="rth"><div class="ph ph-golden" style="position:absolute;"></div><span class="pn">胶片 65%</span></div>
+            <div class="rth"><div class="ph hue1 ph-portrait" style="position:absolute;"></div><span class="pn">日系</span></div>
+            <div class="rth"><div class="ph hue5 ph-portrait" style="position:absolute;"></div><span class="pn">黑白</span></div>
+          </div>
+          <p class="hintln">最近编辑随预设库持久化（P4）启用；右上角光圈徽标在按下时叶片旋转一档（§05 动效）。</p>
+        </div>
+        <div class="htabs">
+          <div class="htab on"><svg class="ic"><use href="#a-image"/></svg>作品</div>
+          <div class="htab"><svg class="ic"><use href="#a-sliders"/></svg>设置</div>
+        </div>
+        <div class="hi"></div>
+      </div></div>
+      <div class="cap"><b><i>A</i>首页 · 成片感入口</b><p>视觉重心从「一个符号」换成「一张成片」：大卡即导入，三个入口（相册 / 文件 ARW / 相机直连）以玻璃胶囊沉在卡底——打开哪条路，一眼可选。光圈退为右上角的品牌徽标。</p></div>
+    </div>
+
+    <!-- B 编辑器默认 -->
+    <div class="shot">
+      <div class="phone"><div class="scr">
+        <div class="ph ph-portrait"></div>
+        <div class="sb"><span>9:41</span><span>●●●</span></div>
+        <div class="tb">
+          <div class="tbi"><svg class="ic"><use href="#a-back"/></svg></div>
+          <span class="title">编辑</span><span class="esp"></span>
+          <div class="tbi"><svg class="ic"><use href="#a-history"/></svg></div>
+          <div class="tbi"><svg class="ic"><use href="#a-split"/></svg></div>
+          <div class="tbi"><svg class="ic"><use href="#a-eye"/></svg></div>
+          <div class="tbi"><svg class="ic"><use href="#a-wand"/></svg></div>
+          <div class="expill">导出</div>
+        </div>
+        <div class="histstrip">
+          <svg viewBox="0 0 120 30" width="100%" height="22" preserveAspectRatio="none">
+            <path d="M2 30 L2 26 C12 24 18 19 26 18 C36 16 42 22 52 20 C64 17 70 9 84 10 C96 11 110 19 118 23 L118 30 Z" fill="#FF6B6B" fill-opacity=".42"/>
+            <path d="M2 30 L2 24 C10 22 20 13 32 12 C44 11 50 20 60 18 C72 16 82 6 96 7 C106 8 114 16 118 20 L118 30 Z" fill="#58C98B" fill-opacity=".42"/>
+            <path d="M2 30 L2 27 C14 25 24 22 34 21 C46 20 54 24 64 22 C76 19 86 13 98 14 C108 15 114 20 118 23 L118 30 Z" fill="#6FA8FF" fill-opacity=".42"/>
+          </svg>
+        </div>
+        <div class="edeck">
+          <div class="deck">
+            <div class="deck-top">
+              <div class="grp"><span class="g on">明暗</span><span class="g">白平衡</span><span class="g">氛围</span></div>
+              <span class="scopebtn">作用域 · 整图</span>
+            </div>
+            <div class="sl">
+              <div class="sl-top"><span class="sl-name">曝光</span><span class="sl-val mono">+0.70 EV</span></div>
+              <div class="sl-track"><div class="sl-zero" style="left:50%"></div><div class="sl-fill" style="left:50%;width:17.5%"></div><div class="sl-thumb" style="left:calc(67.5% - 9px)"></div></div>
+            </div>
+            <div class="sl" style="margin-bottom:0;">
+              <div class="sl-top"><span class="sl-name">对比度</span><span class="sl-val mono">0%</span></div>
+              <div class="sl-track"><div class="sl-zero" style="left:50%"></div><div class="sl-thumb" style="left:calc(50% - 9px)"></div></div>
+            </div>
+          </div>
+        </div>
+        <div class="erail"><div class="rail">
+          <div class="rk"><svg class="ic"><use href="#a-user"/></svg>人像</div>
+          <div class="rk on"><svg class="ic"><use href="#a-sun"/></svg>明暗</div>
+          <div class="rk"><svg class="ic"><use href="#a-drop"/></svg>颜色</div>
+          <div class="rk"><svg class="ic"><use href="#a-curve"/></svg>曲线</div>
+          <div class="rk"><svg class="ic"><use href="#a-spark"/></svg>细节</div>
+          <div class="rk"><svg class="ic"><use href="#a-grid"/></svg>预设</div>
+        </div></div>
+        <div class="hi"></div>
+      </div></div>
+      <div class="cap"><b><i>B</i>编辑器 · 默认态</b><p>自上而下：顶栏（历史/分割对比/长按对比/自动/导出）→ 直方图条（点击收起）→ 照片 → 控制台 → 工具栏。固定两条带子，没有第三层。</p></div>
+    </div>
+
+    <!-- C 手势调节 -->
+    <div class="shot">
+      <div class="phone"><div class="scr">
+        <div class="ph ph-portrait"></div>
+        <div class="sb"><span>9:41</span><span>●●●</span></div>
+        <div class="tb ghosted">
+          <div class="tbi"><svg class="ic"><use href="#a-back"/></svg></div>
+          <span class="title">编辑</span><span class="esp"></span>
+          <div class="expill">导出</div>
+        </div>
+        <div class="onphoto-hud">
+          <div class="bighud">
+            <div class="pn">曝 光</div>
+            <div class="pv mono">+0.70<em>EV</em></div>
+            <div class="bar"><i></i><b></b></div>
+          </div>
+        </div>
+        <div class="edeck ghosted">
+          <div class="deck">
+            <div class="deck-top"><div class="grp"><span class="g on">明暗</span><span class="g">白平衡</span></div><span class="scopebtn">整图</span></div>
+            <div class="sl"><div class="sl-top"><span class="sl-name">曝光</span><span class="sl-val mono">+0.70 EV</span></div>
+              <div class="sl-track"><div class="sl-zero" style="left:50%"></div><div class="sl-fill" style="left:50%;width:17.5%"></div><div class="sl-thumb" style="left:calc(67.5% - 9px)"></div></div></div>
+          </div>
+        </div>
+        <div class="erail ghosted"><div class="rail">
+          <div class="rk"><svg class="ic"><use href="#a-user"/></svg>人像</div>
+          <div class="rk on"><svg class="ic"><use href="#a-sun"/></svg>明暗</div>
+          <div class="rk"><svg class="ic"><use href="#a-drop"/></svg>颜色</div>
+          <div class="rk"><svg class="ic"><use href="#a-curve"/></svg>曲线</div>
+          <div class="rk"><svg class="ic"><use href="#a-spark"/></svg>细节</div>
+          <div class="rk"><svg class="ic"><use href="#a-grid"/></svg>预设</div>
+        </div></div>
+        <div class="hi"></div>
+      </div></div>
+      <div class="cap"><b><i>C</i>手势调节 · 照片即滑块</b><p>手指按住照片横拖 → 全部 chrome 退到 32% 透明度，巨大读数浮现。上滑换参数、下滑切组。控制台滑块与读数实时同步——两条通道，一个事实。</p></div>
+    </div>
+
+    <!-- D 点哪修哪 -->
+    <div class="shot">
+      <div class="phone"><div class="scr">
+        <div class="ph ph-portrait"></div>
+        <div class="dim"></div>
+        <div class="sb"><span>9:41</span><span>●●●</span></div>
+        <div class="picktip">点一下要调整的对象 · 再点一次其它区域可换</div>
+        <svg style="position:absolute; inset:0; z-index:4;" viewBox="0 0 375 812" preserveAspectRatio="none">
+          <path d="M120 180 C160 120 260 130 288 210 C310 280 296 420 250 540 C210 640 150 660 118 560 C92 480 96 260 120 180 Z"
+                fill="rgba(255,180,84,.10)" stroke="#FFB454" stroke-width="2.2" stroke-dasharray="8 6"/>
+        </svg>
+        <span class="facechip" style="left:178px; top:170px;">人物 ✓</span>
+        <div class="edeck">
+          <div class="deck">
+            <div class="deck-top">
+              <div class="grp"><span class="g on">明暗</span><span class="g">白平衡</span></div>
+              <span class="scopebtn on">作用域 · 人物 ✕</span>
+            </div>
+            <p class="hintln" style="margin-top:2px;">现在调的参数只作用于琥珀轮廓内的区域；「整图」一键还原。</p>
+            <div class="sl" style="margin-bottom:0;">
+              <div class="sl-top"><span class="sl-name">曝光</span><span class="sl-val mono">+0.30 EV</span></div>
+              <div class="sl-track"><div class="sl-zero" style="left:50%"></div><div class="sl-fill" style="left:50%;width:7.5%"></div><div class="sl-thumb" style="left:calc(57.5% - 9px)"></div></div>
+            </div>
+          </div>
+        </div>
+        <div class="erail"><div class="rail">
+          <div class="rk"><svg class="ic"><use href="#a-user"/></svg>人像</div>
+          <div class="rk on"><svg class="ic"><use href="#a-sun"/></svg>明暗</div>
+          <div class="rk"><svg class="ic"><use href="#a-drop"/></svg>颜色</div>
+          <div class="rk"><svg class="ic"><use href="#a-curve"/></svg>曲线</div>
+          <div class="rk"><svg class="ic"><use href="#a-spark"/></svg>细节</div>
+          <div class="rk"><svg class="ic"><use href="#a-grid"/></svg>预设</div>
+        </div></div>
+        <div class="hi"></div>
+      </div></div>
+      <div class="cap"><b><i>D</i>点哪修哪 · 拾取模式</b><p>作用域行的空间化替代：点人 → 人物层；点皮肤 → 皮肤层；点背景 → 背景层。蒙版轮廓可视化让「AI 到底认出了什么」从黑箱变成可见的事实。</p></div>
+    </div>
+
+    <!-- E 曲线 -->
+    <div class="shot">
+      <div class="phone"><div class="scr">
+        <div class="ph ph-portrait"></div>
+        <div class="sb"><span>9:41</span><span>●●●</span></div>
+        <div class="tb"><div class="tbi"><svg class="ic"><use href="#a-back"/></svg></div><span class="title">编辑</span><span class="esp"></span><div class="expill">导出</div></div>
+        <div class="edeck">
+          <div class="deck">
+            <div class="deck-top">
+              <div class="grp"><span class="g">亮度</span><span class="g on">红</span><span class="g">绿</span><span class="g">蓝</span></div>
+              <span class="scopebtn">重置</span>
+            </div>
+            <div class="curvebox">
+              <svg viewBox="0 0 300 110" width="100%" height="104">
+                <rect x="0" y="0" width="300" height="110" fill="rgba(0,0,0,.2)" rx="8"/>
+                <path d="M0 110 L0 96 C40 92 55 74 78 70 C108 65 120 80 150 74 C186 66 200 30 238 30 C262 30 284 44 300 56 L300 110 Z" fill="#FF6B6B" fill-opacity=".28"/>
+                <path d="M0 110 C60 108 80 92 110 86 C150 78 170 44 210 40 C250 36 280 52 300 62" fill="none" stroke="#FFB454" stroke-width="2.4"/>
+                <circle cx="6" cy="104" r="5.5" fill="#fff" stroke="#FFB454" stroke-width="2.4"/>
+                <circle cx="150" cy="74" r="5.5" fill="#fff" stroke="#FFB454" stroke-width="2.4"/>
+                <circle cx="294" cy="8" r="5.5" fill="#fff" stroke="#FFB454" stroke-width="2.4"/>
+              </svg>
+            </div>
+            <div class="anchors">
+              <div class="anch"><span class="k">黑场</span><span class="v mono">12</span></div>
+              <div class="anch"><span class="k">中间调</span><span class="v mono">138</span></div>
+              <div class="anch"><span class="k">白场</span><span class="v mono">243</span></div>
+            </div>
+            <p class="hintln">拖动曲线本体调锚点；下方三个读数是同一数据的数字通道。直方图已叠在曲线底。</p>
+          </div>
+        </div>
+        <div class="erail"><div class="rail">
+          <div class="rk"><svg class="ic"><use href="#a-user"/></svg>人像</div>
+          <div class="rk"><svg class="ic"><use href="#a-sun"/></svg>明暗</div>
+          <div class="rk"><svg class="ic"><use href="#a-drop"/></svg>颜色</div>
+          <div class="rk on"><svg class="ic"><use href="#a-curve"/></svg>曲线</div>
+          <div class="rk"><svg class="ic"><use href="#a-spark"/></svg>细节</div>
+          <div class="rk"><svg class="ic"><use href="#a-grid"/></svg>预设</div>
+        </div></div>
+        <div class="hi"></div>
+      </div></div>
+      <div class="cap"><b><i>E</i>曲线 · 控制台内嵌微编辑器</b><p>控制台 L 档（330dp）装得下：直方图底 + 可拖曲线 + 三锚点读数。曲线不再是独立分类页——它就是「颜色」的邻座工具，一步可达。<span class="tag ok">三锚点模型已有</span></p></div>
+    </div>
+
+    <!-- F 预设 + 强度环 -->
+    <div class="shot">
+      <div class="phone"><div class="scr">
+        <div class="ph hue2 ph-portrait"></div>
+        <div class="sb"><span>9:41</span><span>●●●</span></div>
+        <div class="tb"><div class="tbi"><svg class="ic"><use href="#a-back"/></svg></div><span class="title">编辑</span><span class="esp"></span><div class="expill">导出</div></div>
+        <div class="edeck">
+          <div class="deck">
+            <div class="deck-top">
+              <div class="grp"><span class="g on">风格</span><span class="g">滤镜</span></div>
+              <span class="scopebtn">另存预设</span>
+            </div>
+            <div style="display:flex; gap:14px; align-items:flex-start;">
+              <div class="pgrid2" style="flex:1;">
+                <div class="pcard2"><div class="ph ph-portrait hue0" style="position:absolute;"></div><span class="pn">原图</span></div>
+                <div class="pcard2 sel"><div class="ph hue6 ph-portrait" style="position:absolute;"></div><span class="pn">胶片</span><div class="ck"><svg class="ic"><use href="#a-check"/></svg></div></div>
+                <div class="pcard2"><div class="ph hue1 ph-portrait" style="position:absolute;"></div><span class="pn">日系</span></div>
+                <div class="pcard2"><div class="ph hue5 ph-portrait" style="position:absolute;"></div><span class="pn">黑白</span></div>
+              </div>
+              <div class="dial">
+                <svg width="96" height="96" viewBox="0 0 96 96">
+                  <circle cx="48" cy="48" r="40" fill="none" stroke="rgba(240,238,233,.12)" stroke-width="7"/>
+                  <circle cx="48" cy="48" r="40" fill="none" stroke="#FFB454" stroke-width="7" stroke-linecap="round"
+                          stroke-dasharray="163 251" transform="rotate(-90 48 48)"/>
+                </svg>
+                <div class="dv"><b class="mono">65%</b><span>强度</span></div>
+              </div>
+            </div>
+            <p class="hintln">缩略图按当前照片实时渲染。强度环直接作用在整套参数栈上——这就是预设的全部控制面。</p>
+          </div>
+        </div>
+        <div class="erail"><div class="rail">
+          <div class="rk"><svg class="ic"><use href="#a-user"/></svg>人像</div>
+          <div class="rk"><svg class="ic"><use href="#a-sun"/></svg>明暗</div>
+          <div class="rk"><svg class="ic"><use href="#a-drop"/></svg>颜色</div>
+          <div class="rk"><svg class="ic"><use href="#a-curve"/></svg>曲线</div>
+          <div class="rk"><svg class="ic"><use href="#a-spark"/></svg>细节</div>
+          <div class="rk on"><svg class="ic"><use href="#a-grid"/></svg>预设</div>
+        </div></div>
+        <div class="hi"></div>
+      </div></div>
+      <div class="cap"><b><i>F</i>预设 + 强度环</b><p>预设页只有两件事：挑一个风格、决定它有多重。「另存预设」入口已留位（预设库阶段启用）。2×2 卡 + 强度环恰好装进控制台 L 档。</p></div>
+    </div>
+
+    <!-- G 分割对比 -->
+    <div class="shot">
+      <div class="phone"><div class="scr">
+        <div class="ph ph-portrait"></div>
+        <div style="position:absolute; inset:0; left:42%; z-index:2;"><div class="ph hue5 ph-portrait" style="position:absolute;"></div></div>
+        <div class="sb"><span>9:41</span><span>●●●</span></div>
+        <span class="split-lab" style="left:16px;">修后</span>
+        <span class="split-lab" style="right:16px;">原图</span>
+        <div class="split-handle"></div>
+        <div class="split-grip">⇔</div>
+        <div class="erail ghosted"><div class="rail">
+          <div class="rk"><svg class="ic"><use href="#a-user"/></svg>人像</div>
+          <div class="rk on"><svg class="ic"><use href="#a-sun"/></svg>明暗</div>
+          <div class="rk"><svg class="ic"><use href="#a-drop"/></svg>颜色</div>
+          <div class="rk"><svg class="ic"><use href="#a-curve"/></svg>曲线</div>
+          <div class="rk"><svg class="ic"><use href="#a-spark"/></svg>细节</div>
+          <div class="rk"><svg class="ic"><use href="#a-grid"/></svg>预设</div>
+        </div></div>
+        <div class="hi"></div>
+      </div></div>
+      <div class="cap"><b><i>G</i>分割对比</b><p>顶栏「⇔」进入：拖分割线逐列对比同一张照片的修前修后（同管线同口径）。长按对比保留为快捷路径。两条位图渲染层都已存在。</p></div>
+    </div>
+
+    <!-- H 自适应亮档 -->
+    <div class="shot">
+      <div class="phone litchrome"><div class="scr">
+        <div class="ph ph-snow"></div>
+        <div class="sb" style="color:#26241F;"><span>9:41</span><span>●●●</span></div>
+        <div class="tb">
+          <div class="tbi"><svg class="ic"><use href="#a-back"/></svg></div>
+          <span class="title">编辑</span><span class="esp"></span>
+          <div class="tbi"><svg class="ic"><use href="#a-history"/></svg></div>
+          <div class="tbi"><svg class="ic"><use href="#a-split"/></svg></div>
+          <div class="expill">导出</div>
+        </div>
+        <div class="edeck">
+          <div class="deck">
+            <div class="deck-top">
+              <div class="grp"><span class="g on">明暗</span><span class="g">白平衡</span><span class="g">氛围</span></div>
+              <span class="scopebtn">作用域 · 整图</span>
+            </div>
+            <div class="sl">
+              <div class="sl-top"><span class="sl-name">曝光</span><span class="sl-val mono">−0.35 EV</span></div>
+              <div class="sl-track"><div class="sl-zero" style="left:50%"></div><div class="sl-fill" style="left:41%;width:9%"></div><div class="sl-thumb" style="left:calc(41% - 9px)"></div></div>
+            </div>
+            <div class="sl" style="margin-bottom:0;">
+              <div class="sl-top"><span class="sl-name">高光</span><span class="sl-val mono">−30%</span></div>
+              <div class="sl-track"><div class="sl-zero" style="left:50%"></div><div class="sl-fill" style="left:35%;width:15%"></div><div class="sl-thumb" style="left:calc(35% - 9px)"></div></div>
+            </div>
+          </div>
+        </div>
+        <div class="erail"><div class="rail">
+          <div class="rk"><svg class="ic"><use href="#a-user"/></svg>人像</div>
+          <div class="rk on"><svg class="ic"><use href="#a-sun"/></svg>明暗</div>
+          <div class="rk"><svg class="ic"><use href="#a-drop"/></svg>颜色</div>
+          <div class="rk"><svg class="ic"><use href="#a-curve"/></svg>曲线</div>
+          <div class="rk"><svg class="ic"><use href="#a-spark"/></svg>细节</div>
+          <div class="rk"><svg class="ic"><use href="#a-grid"/></svg>预设</div>
+        </div></div>
+        <div class="hi" style="background:rgba(0,0,0,.25);"></div>
+      </div></div>
+      <div class="cap"><b><i>H</i>自适应材质 · 亮照片 → 纸色控制台</b><p>直方图均值 &gt; 0.65 时，控制台/顶栏/工具栏整体翻到纸色，琥珀切深档——雪景里界面不再「黑乎乎压在白照片上」。这是本版独有的材质主张。</p></div>
+    </div>
+
+    <!-- I 导出回执 -->
+    <div class="shot">
+      <div class="phone"><div class="scr">
+        <div class="ph ph-portrait" style="filter:brightness(.7);"></div>
+        <div class="sb"><span>9:41</span><span>●●●</span></div>
+        <div class="receipt">
+          <div class="okc"><svg class="ic" style="width:24px;height:24px"><use href="#a-check"/></svg></div>
+          <h3>已导出</h3>
+          <div class="sub">成片已保存到系统相册</div>
+          <div class="rrow"><span class="k">格式 / 质量</span><span class="v mono">JPEG · 92</span></div>
+          <div class="rrow"><span class="k">尺寸</span><span class="v mono">7008 × 4672</span></div>
+          <div class="rrow"><span class="k">预设</span><span class="v">胶片 · 强度 65%</span></div>
+          <div class="rbtns">
+            <div class="rbtn sec"><svg class="ic" style="width:16px;height:16px;margin-right:6px"><use href="#a-share"/></svg>分享</div>
+            <div class="rbtn pri">完成</div>
+          </div>
+        </div>
+        <div class="hi"></div>
+      </div></div>
+      <div class="cap"><b><i>I</i>导出回执</b><p>导出成功不是一行状态文字，而是一张「成片回执」：尺寸、质量、用的什么预设——并顺带成为「用同样配方处理下一张」的入口（点预设行 = 复制配方）。</p></div>
+    </div>
+
+    <!-- J 相机会话 · 仪表盘 -->
+    <div class="shot">
+      <div class="phone"><div class="scr">
+        <div class="ph ph-teal" style="opacity:.22;"></div>
+        <div class="sb"><span>9:41</span><span>●●●</span></div>
+        <div class="tb">
+          <div class="tbi"><svg class="ic"><use href="#a-back"/></svg></div>
+          <span class="title">A7C II</span><span class="esp"></span>
+          <span class="campill"><span class="dot"></span>USB 已连接</span>
+        </div>
+        <div style="position:absolute; top:102px; left:10px; right:10px; bottom:14px; z-index:5; overflow:hidden;">
+          <div class="ccard">
+            <div style="display:flex; align-items:center; gap:10px;">
+              <div class="micon"><svg class="ic"><use href="#a-camera"/></svg></div>
+              <div style="flex:1; min-width:0;">
+                <b style="font-size:13.5px;">ILCE-7CM2 · M 档</b>
+                <div style="font-size:10.5px; color:var(--ink-3);">会话 12 分钟 · 已传 9 张 · 约省 18 分钟修图</div>
+              </div>
+              <span class="badge done"><svg class="ic" style="width:11px;height:11px"><use href="#a-battery"/></svg>78%</span>
+            </div>
+            <div class="cmeta">
+              <div class="cm"><span class="k">卡剩余</span><span class="v">231G</span></div>
+              <div class="cm"><span class="k">可拍</span><span class="v">4.2k</span></div>
+              <div class="cm"><span class="k">ISO</span><span class="v">400</span></div>
+              <div class="cm"><span class="k">光圈</span><span class="v">f/1.8</span></div>
+            </div>
+          </div>
+          <div class="ccard">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <b style="font-size:12.5px;">默认修图参数</b>
+              <div class="toggle"></div>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px; margin-top:9px;">
+              <span class="g on">胶片 · 65%</span>
+              <span class="g">更改</span>
+              <span style="flex:1"></span>
+              <span style="font-size:10.5px; color:var(--ink-3);">完成后自动导出相册</span>
+            </div>
+          </div>
+          <div class="ccard" style="margin-bottom:0;">
+            <div class="shimmer" style="position:relative; border-radius:12px; overflow:hidden; height:148px;">
+              <div class="ph ph-golden"></div>
+              <span class="badge proc" style="position:absolute; left:8px; top:8px;">自动套用「胶片」· 处理中</span>
+            </div>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-top:9px;">
+              <span style="font-size:11px; color:var(--ink-2);">DSC05123.ARW · 12.4MB · 刚刚</span>
+              <span style="font-size:11px; color:var(--amber);">对比 ⇔ · 编辑</span>
+            </div>
+          </div>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin:12px 2px 8px;">
+            <b style="font-size:12.5px;">本会话拍摄 · 9 张</b>
+            <span style="font-size:11px; color:var(--amber);">管理全部 →</span>
+          </div>
+          <div class="rthumbs">
+            <div class="rth"><div class="ph ph-golden" style="position:absolute;"></div><span class="badge done" style="position:absolute; left:5px; top:5px;">已导出</span></div>
+            <div class="rth"><div class="ph hue6 ph-portrait" style="position:absolute;"></div><span class="badge done" style="position:absolute; left:5px; top:5px;">已套用</span></div>
+            <div class="rth"><div class="ph hue0 ph-portrait" style="position:absolute;"></div><span class="badge skip" style="position:absolute; left:5px; top:5px;">原图</span></div>
+          </div>
+        </div>
+        <div class="hi"></div>
+      </div></div>
+      <div class="cap"><b><i>J</i>系留仪表盘</b><p>连上相机 = 多了一台「会自己出片的机器」：机身参数常驻（电量 / 存储 / 曝光），「默认修图参数」一开就是拍了即修好；最新一张大卡处理中带扫光，会话片池一眼可进。</p></div>
+    </div>
+
+    <!-- J′ 系留仪表盘 · 横屏 -->
+    <div class="shot wide">
+      <div class="phone land"><div class="scr">
+        <div class="sb" style="z-index:7;"><span>9:41</span><span>●●●</span></div>
+        <div class="land-body">
+          <div class="land-preview">
+            <div class="ph ph-golden"></div>
+            <div style="position:absolute; inset:0; left:56%; overflow:hidden;"><div class="ph hue5 ph-golden" style="position:absolute;"></div></div>
+            <div style="position:absolute; left:56%; top:0; bottom:0; width:2px; background:var(--amber);"></div>
+            <div style="position:absolute; top:10px; left:10px; display:flex; gap:8px;">
+              <div class="tbi" style="background:rgba(25,25,23,.72); border:1px solid rgba(240,238,233,.15);"><svg class="ic"><use href="#a-back"/></svg></div>
+              <div class="tbi" style="background:rgba(25,25,23,.72); border:1px solid rgba(240,238,233,.15);"><svg class="ic"><use href="#a-eye"/></svg></div>
+              <div class="tbi" style="background:rgba(25,25,23,.72); border:1px solid rgba(240,238,233,.15);"><svg class="ic"><use href="#a-split"/></svg></div>
+            </div>
+            <span class="badge done" style="position:absolute; right:12px; top:16px;">已自动套用 · 胶片 65%</span>
+            <span style="position:absolute; left:12px; bottom:12px; font-size:11px; color:#fff; background:rgba(0,0,0,.45); padding:3px 11px; border-radius:99px;">修后 · DSC05123.ARW · 12.4MB</span>
+            <span style="position:absolute; right:12px; bottom:12px; font-size:10.5px; color:#fff; background:rgba(0,0,0,.42); padding:2px 9px; border-radius:99px;">原图</span>
+          </div>
+          <div class="land-side">
+            <div style="display:flex; align-items:center; justify-content:space-between;">
+              <span class="campill"><span class="dot"></span>USB 已连接</span>
+              <span class="badge done"><svg class="ic" style="width:11px;height:11px"><use href="#a-battery"/></svg>78%</span>
+            </div>
+            <div class="ccard" style="margin-bottom:0;">
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <b style="font-size:12.5px;">默认修图参数</b>
+                <div class="toggle"></div>
+              </div>
+              <div style="display:flex; gap:6px; margin-top:9px;">
+                <span class="g on" style="font-size:11px;">胶片 · 65%</span>
+                <span class="g" style="font-size:11px;">更改</span>
+              </div>
+            </div>
+            <div class="cmeta" style="margin:0;">
+              <div class="cm"><span class="k">卡剩余</span><span class="v">231G</span></div>
+              <div class="cm"><span class="k">ISO</span><span class="v">400</span></div>
+              <div class="cm"><span class="k">快门</span><span class="v">1/250</span></div>
+              <div class="cm"><span class="k">光圈</span><span class="v">f/1.8</span></div>
+            </div>
+            <div class="rthumbs">
+              <div class="rth"><div class="ph ph-golden" style="position:absolute;"></div><span class="badge done" style="position:absolute; left:4px; top:4px;">已导出</span></div>
+              <div class="rth"><div class="ph hue6 ph-portrait" style="position:absolute;"></div><span class="badge done" style="position:absolute; left:4px; top:4px;">已套用</span></div>
+              <div class="rth"><div class="ph hue0 ph-portrait" style="position:absolute;"></div><span class="badge skip" style="position:absolute; left:4px; top:4px;">原图</span></div>
+            </div>
+            <div class="bb pri" style="height:40px;">会话 9 张 · 批量管理 →</div>
+          </div>
+        </div>
+        <div class="hi"></div>
+      </div></div>
+      <div class="cap"><b><i>J′</i>系留仪表盘 · 横屏</b><p>横屏铁律：<b>照片拿走全部宽度</b>——预览约 472×316dp，是竖屏版的 2.4 倍面积，分割对比默认展开；右侧只留 252dp 参数栏。组件与竖屏完全同一批，只是重排（无新组件、无新状态）。</p></div>
+    </div>
+
+    <!-- K 拍摄 → 自动出片流 -->
+    <div class="shot">
+      <div class="phone"><div class="scr">
+        <div class="ph ph-portrait" style="opacity:.18;"></div>
+        <div class="sb"><span>9:41</span><span>●●●</span></div>
+        <div class="tb">
+          <div class="tbi"><svg class="ic"><use href="#a-back"/></svg></div>
+          <span class="title">拍摄流</span><span class="esp"></span>
+          <span class="campill"><span class="dot"></span>自动导出 已开启</span>
+        </div>
+        <div style="position:absolute; top:102px; left:10px; right:10px; bottom:14px; z-index:5; overflow:hidden;">
+          <div class="ccard" style="padding:10px;">
+            <div style="position:relative; border-radius:12px; overflow:hidden; height:168px;">
+              <div class="ph ph-golden"></div>
+              <div style="position:absolute; inset:0; left:58%; overflow:hidden;"><div class="ph hue5 ph-golden" style="position:absolute;"></div></div>
+              <div style="position:absolute; left:58%; top:0; bottom:0; width:2px; background:var(--amber);"></div>
+              <span class="badge done" style="position:absolute; left:8px; top:8px;">已自动套用 · 胶片 65%</span>
+              <span style="position:absolute; left:8px; bottom:8px; font-size:9.5px; color:#fff; background:rgba(0,0,0,.42); padding:2px 8px; border-radius:99px;">修后</span>
+              <span style="position:absolute; right:8px; bottom:8px; font-size:9.5px; color:#fff; background:rgba(0,0,0,.42); padding:2px 8px; border-radius:99px;">原图</span>
+            </div>
+            <div style="display:flex; gap:8px; margin-top:9px;">
+              <div class="bb pri" style="height:34px;">编辑这张</div>
+              <div class="bb sec" style="height:34px;">导出</div>
+            </div>
+          </div>
+          <b style="font-size:12.5px; display:block; margin:10px 2px 2px;">本次连接 · 拍摄时间线</b>
+          <div class="tl">
+            <div class="tl-item on">
+              <div class="tl-th"><div class="ph ph-golden" style="position:absolute;"></div></div>
+              <div style="flex:1; min-width:0;"><b style="font-size:12px; color:var(--ink);">DSC05124.ARW</b><div style="font-size:10.5px; color:var(--ink-3);">传输中 8.1 / 12.9 MB</div></div>
+              <span class="badge proc">传输中</span>
+            </div>
+            <div class="tl-item ok">
+              <div class="tl-th"><div class="ph hue6 ph-portrait" style="position:absolute;"></div></div>
+              <div style="flex:1; min-width:0;"><b style="font-size:12px; color:var(--ink);">DSC05123.ARW</b><div style="font-size:10.5px; color:var(--ink-3);">套用「胶片 65%」→ 已导出</div></div>
+              <span class="badge done">1.8s</span>
+            </div>
+            <div class="tl-item ok">
+              <div class="tl-th"><div class="ph hue1 ph-portrait" style="position:absolute;"></div></div>
+              <div style="flex:1; min-width:0;"><b style="font-size:12px; color:var(--ink);">DSC05122.ARW</b><div style="font-size:10.5px; color:var(--ink-3);">套用「胶片 65%」→ 已导出</div></div>
+              <span class="badge done">1.6s</span>
+            </div>
+            <div class="tl-item">
+              <div class="tl-th"><div class="ph hue0 ph-portrait" style="position:absolute;"></div></div>
+              <div style="flex:1; min-width:0;"><b style="font-size:12px; color:var(--ink-2);">DSC05121.ARW</b><div style="font-size:10.5px; color:var(--ink-3);">未处理（会话开始前已存在）</div></div>
+              <span class="badge skip">跳过</span>
+            </div>
+          </div>
+          <p class="hintln">每张：拉取 → 套默认预设 → 出片约 1.8s（GPU 分割 11ms + 渲染）。「修后 / 原图」分割线可拖。</p>
+        </div>
+        <div class="hi"></div>
+      </div></div>
+      <div class="cap"><b><i>K</i>拍摄到达流</b><p>把「拍 → 传 → 修 → 出」变成一条可见的时间线：新片到达即滑入、扫光处理、翻绿完成；最新一张直接给修前修后分割对比。单张耗时如实标注，不装魔术。</p></div>
+    </div>
+
+    <!-- L 会话历史 · 批量 -->
+    <div class="shot">
+      <div class="phone"><div class="scr">
+        <div class="ph ph-portrait" style="opacity:.15;"></div>
+        <div class="sb"><span>9:41</span><span>●●●</span></div>
+        <div class="tb">
+          <div class="tbi"><svg class="ic"><use href="#a-back"/></svg></div>
+          <span class="title">本会话 · 9 张</span><span class="esp"></span>
+          <div class="tbi"><svg class="ic"><use href="#a-check"/></svg></div>
+        </div>
+        <div style="position:absolute; top:102px; left:10px; right:10px; bottom:80px; z-index:5; overflow:hidden;">
+          <div class="hintln" style="margin:0 2px 10px;">已自动处理 8 张 · 约省 18 分钟 · 点选后批量套用 / 导出</div>
+          <div class="sessgrid">
+            <div class="scard"><div class="ph ph-golden" style="position:absolute;"></div><span class="badge done">已导出</span></div>
+            <div class="scard sel"><div class="ph hue6 ph-portrait" style="position:absolute;"></div><div class="ck"><svg class="ic"><use href="#a-check"/></svg></div><span class="badge done">已套用</span></div>
+            <div class="scard sel"><div class="ph hue1 ph-portrait" style="position:absolute;"></div><div class="ck"><svg class="ic"><use href="#a-check"/></svg></div><span class="badge done">已套用</span></div>
+            <div class="scard"><div class="ph hue2 ph-portrait" style="position:absolute;"></div><span class="badge proc">处理中</span></div>
+            <div class="scard sel"><div class="ph hue3 ph-portrait" style="position:absolute;"></div><div class="ck"><svg class="ic"><use href="#a-check"/></svg></div><span class="badge skip">原图</span></div>
+            <div class="scard"><div class="ph hue0 ph-portrait" style="position:absolute;"></div><span class="badge skip">原图</span></div>
+          </div>
+        </div>
+        <div class="batchbar">
+          <div class="bb pri">套用「胶片 65%」· 3</div>
+          <div class="bb sec">导出 · 5</div>
+        </div>
+        <div class="hi"></div>
+      </div></div>
+      <div class="cap"><b><i>L</i>会话历史 · 批量</b><p>整个连接过程的照片池：状态徽章（已导出 / 已套用 / 处理中 / 原图）+ 点选批量。底部操作条常驻——「补套预设」「补导出」都在两次点击内。</p></div>
+    </div>
+
+    <!-- L′ 会话批量 · 横屏 -->
+    <div class="shot wide">
+      <div class="phone land"><div class="scr">
+        <div class="ph ph-portrait" style="opacity:.12;"></div>
+        <div class="sb" style="z-index:7;"><span>9:41</span><span>●●●</span></div>
+        <div style="position:absolute; top:46px; left:14px; right:14px; z-index:6; display:flex; align-items:center; gap:10px;">
+          <span style="font-size:15px; font-weight:700;">本会话 · 9 张</span>
+          <span class="hintln" style="margin:0;">已自动处理 8 张 · 约省 18 分钟</span>
+          <span style="flex:1"></span>
+          <span class="g">全选</span>
+        </div>
+        <div style="position:absolute; top:80px; left:10px; right:10px; bottom:76px; z-index:5;">
+          <div class="sessgrid" style="grid-template-columns:repeat(4,1fr); gap:8px; height:100%;">
+            <div class="scard"><div class="ph ph-golden" style="position:absolute;"></div><span class="badge done">已导出</span></div>
+            <div class="scard sel"><div class="ph hue6 ph-portrait" style="position:absolute;"></div><div class="ck"><svg class="ic"><use href="#a-check"/></svg></div><span class="badge done">已套用</span></div>
+            <div class="scard sel"><div class="ph hue1 ph-portrait" style="position:absolute;"></div><div class="ck"><svg class="ic"><use href="#a-check"/></svg></div><span class="badge done">已套用</span></div>
+            <div class="scard"><div class="ph hue2 ph-portrait" style="position:absolute;"></div><span class="badge proc">处理中</span></div>
+            <div class="scard sel"><div class="ph hue3 ph-portrait" style="position:absolute;"></div><div class="ck"><svg class="ic"><use href="#a-check"/></svg></div><span class="badge skip">原图</span></div>
+            <div class="scard"><div class="ph hue0 ph-portrait" style="position:absolute;"></div><span class="badge skip">原图</span></div>
+            <div class="scard"><div class="ph hue5 ph-portrait" style="position:absolute;"></div><span class="badge skip">原图</span></div>
+            <div class="scard sel"><div class="ph hue2 ph-portrait" style="position:absolute;"></div><div class="ck"><svg class="ic"><use href="#a-check"/></svg></div><span class="badge done">已套用</span></div>
+          </div>
+        </div>
+        <div class="batchbar">
+          <div class="bb pri">套用「胶片 65%」· 4</div>
+          <div class="bb sec">导出 · 5</div>
+        </div>
+        <div class="hi"></div>
+      </div></div>
+      <div class="cap"><b><i>L′</i>会话批量 · 横屏</b><p>批量页横屏切 4 列，一屏 8 张尽收；顶部标题行与底部操作条不变。列表用 LazyVerticalGrid（key=对象句柄）横竖共用。</p></div>
+    </div>
+
+    <!-- M 设置 -->
+    <div class="shot">
+      <div class="phone"><div class="scr">
+        <div class="ph ph-portrait" style="opacity:.08;"></div>
+        <div class="sb"><span>9:41</span><span>●●●</span></div>
+        <div style="position:absolute; top:56px; left:14px; right:14px; z-index:5; display:flex; align-items:center; gap:6px;">
+          <div class="tbi"><svg class="ic"><use href="#a-back"/></svg></div>
+          <span style="font-size:17px; font-weight:700;">设置</span>
+        </div>
+        <div style="position:absolute; top:104px; left:10px; right:10px; bottom:10px; z-index:4; overflow:hidden;">
+          <div class="sgroup"><div class="gt">外观</div>
+            <div class="srow"><div class="si"><svg class="ic"><use href="#a-aperture"/></svg></div><div class="st"><b>主题</b><span>编辑器始终为暗房；工作台可跟随系统</span></div><span class="sv">跟随系统</span><span class="arr">›</span></div>
+          </div>
+          <div class="sgroup"><div class="gt">编辑</div>
+            <div class="srow"><div class="si"><svg class="ic"><use href="#a-export"/></svg></div><div class="st"><b>导出格式</b><span>系统相册 Pictures/PixelCake</span></div><span class="sv">JPEG</span><span class="arr">›</span></div>
+            <div class="srow"><div class="si"><svg class="ic"><use href="#a-sliders"/></svg></div><div class="st"><b>JPEG 质量</b><span>高 95 / 标准 92 / 小 80</span></div><span class="sv">92</span><span class="arr">›</span></div>
+            <div class="srow"><div class="si"><svg class="ic"><use href="#a-image"/></svg></div><div class="st"><b>打开时默认分类</b></div><span class="sv">人像</span><span class="arr">›</span></div>
+          </div>
+          <div class="sgroup"><div class="gt">相机直连</div>
+            <div class="srow"><div class="si"><svg class="ic"><use href="#a-camera"/></svg></div><div class="st"><b>连接后自动打开会话</b></div><div class="toggle"></div></div>
+            <div class="srow"><div class="si"><svg class="ic"><use href="#a-wand"/></svg></div><div class="st"><b>拍摄后自动套用</b><span>默认修图参数（对应 §04-J 仪表盘）</span></div><span class="sv">胶片 65%</span><span class="arr">›</span></div>
+            <div class="srow"><div class="si"><svg class="ic"><use href="#a-check"/></svg></div><div class="st"><b>完成后自动导出相册</b></div><div class="toggle off"></div></div>
+          </div>
+          <div class="sgroup"><div class="gt">端侧智能</div>
+            <div class="srow"><div class="si"><svg class="ic"><use href="#a-spark"/></svg></div><div class="st"><b>自动皮肤蒙版</b><span>磨皮 / 美型只作用于识别到的皮肤</span></div><div class="toggle"></div></div>
+            <div class="srow"><div class="si"><svg class="ic"><use href="#a-chip"/></svg></div><div class="st"><b>端侧模型中心</b><span>分割 / 人脸 / 大模型槽位 · 推理统计</span></div><span class="sv" style="color:var(--amber);">2 已加载</span><span class="arr">›</span></div>
+          </div>
+          <div class="sgroup"><div class="gt">存储与缓存</div>
+            <div class="srow"><div class="si"><svg class="ic"><use href="#a-folder"/></svg></div><div class="st"><b>RAW 解码缓存</b><span>65MB / 张，编辑时生成 · 超时自动清理</span></div><span class="sv">1.2 GB</span><span class="arr" style="color:var(--amber);">清理</span></div>
+          </div>
+          <div class="sgroup"><div class="gt">关于</div>
+            <div class="srow"><div class="si"><svg class="ic"><use href="#a-check"/></svg></div><div class="st"><b>版本</b></div><span class="sv">v0.5.0 (13)</span></div>
+            <div class="srow"><div class="si"><svg class="ic"><use href="#a-history"/></svg></div><div class="st"><b>调试日志</b><span>log_*.txt · 可系统分享导出</span></div><span class="arr">›</span></div>
+          </div>
+        </div>
+        <div class="hi"></div>
+      </div></div>
+      <div class="cap"><b><i>M</i>设置 · 分组重组</b><p>对齐常规 App 的设置骨架（外观 / 编辑 / 相机 / 端侧智能 / 存储 / 关于），并把本 App 特有的三处默认行为（自动会话、默认修图参数、自动导出）收进「相机直连」组——与 §04-J 仪表盘一一对应。</p></div>
+    </div>
+
+    <!-- N 端侧模型中心 -->
+    <div class="shot">
+      <div class="phone"><div class="scr">
+        <div class="ph ph-teal" style="opacity:.1;"></div>
+        <div class="sb"><span>9:41</span><span>●●●</span></div>
+        <div style="position:absolute; top:56px; left:14px; right:14px; z-index:5; display:flex; align-items:center; gap:6px;">
+          <div class="tbi"><svg class="ic"><use href="#a-back"/></svg></div>
+          <span style="font-size:17px; font-weight:700;">端侧模型中心</span>
+        </div>
+        <div style="position:absolute; top:104px; left:10px; right:10px; bottom:10px; z-index:4; overflow:hidden;">
+          <div class="ccard">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <b style="font-size:12.5px;">推理概况（今日）</b>
+              <span class="badge done">GPU 正常</span>
+            </div>
+            <div class="cmeta">
+              <div class="cm"><span class="k">调用</span><span class="v">42</span></div>
+              <div class="cm"><span class="k">平均</span><span class="v">11ms</span></div>
+              <div class="cm"><span class="k">峰值内存</span><span class="v">31MB</span></div>
+              <div class="cm"><span class="k">降级</span><span class="v">0</span></div>
+            </div>
+          </div>
+          <div class="mcard">
+            <div class="mhead">
+              <div class="micon"><svg class="ic"><use href="#a-chip"/></svg></div>
+              <div class="mt"><b>人像分割 <span class="mono" style="font-weight:400;">multiclass_256</span></b><span>磨皮蒙版 / 对象作用域 / 点哪修哪</span></div>
+              <div class="toggle"></div>
+            </div>
+            <div class="mrow"><span class="k">体积 / 输入</span><span class="v mono">16.4 MB · 256×256 · 6 类</span></div>
+            <div class="mrow"><span class="k">加速器 / 延迟</span><span class="v mono">GPU · 11ms（CPU 218ms）</span></div>
+            <div class="mrow"><span class="k">加载 / SHA-256</span><span class="v mono">310ms · a3f8…9c21</span></div>
+            <div class="mrow"><span class="k">来源 / 许可</span><span class="v">MediaPipe · Apache-2.0</span></div>
+          </div>
+          <div class="mcard">
+            <div class="mhead">
+              <div class="micon"><svg class="ic"><use href="#a-user"/></svg></div>
+              <div class="mt"><b>人脸检测 <span class="mono" style="font-weight:400;">full_range_sparse</span></b><span>液化锚点 / 系会人脸框</span></div>
+              <div class="toggle"></div>
+            </div>
+            <div class="mrow"><span class="k">体积 / 输入</span><span class="v mono">0.68 MB · 192×192</span></div>
+            <div class="mrow"><span class="k">加速器 / 延迟</span><span class="v mono">GPU · 8ms</span></div>
+            <div class="mrow"><span class="k">降级链</span><span class="v">GPU → CPU → 关闭（永不崩溃）</span></div>
+          </div>
+          <div class="mcard plan">
+            <div class="mhead">
+              <div class="micon" style="background:var(--raised);"><svg class="ic"><use href="#a-spark"/></svg></div>
+              <div class="mt"><b>端侧大模型（规划）</b><span>0.5–3B · 选型中</span></div>
+              <span class="badge skip">规划中</span>
+            </div>
+            <div class="mrow"><span class="k">意图</span><span class="v">自然语言调参 ·「把天空提亮一点」</span></div>
+            <div class="mrow"><span class="k">运行时 / 精度</span><span class="v">LiteRT · int4</span></div>
+            <div class="mrow"><span class="k">内存预算 / 下载</span><span class="v">≤ 2 GB · 仅 Wi-Fi</span></div>
+          </div>
+          <div class="srow"><div class="si"><svg class="ic"><use href="#a-sliders"/></svg></div><div class="st"><b>推理后端</b><span>自动 = GPU 失败自动回落 CPU</span></div><span class="sv">自动</span><span class="arr">›</span></div>
+        </div>
+        <div class="hi"></div>
+      </div></div>
+      <div class="cap"><b><i>N</i>端侧模型中心</b><p>把端侧 AI 从黑箱变成可查的仪表：每个模型的体积 / 输入 / 加速器 / 延迟 / SHA / 许可，加运行统计与降级记录。底部预留<b>端侧大模型槽位</b>（自然语言调参的落点，选型中）——配置展示先行，能力随后接入。</p></div>
+    </div>
+
+  </div>
+  <div class="rule"></div>
+</section>
+
+<!-- ================= 05 动效 ================= -->
+<section>
+  <div class="sec-head"><span class="sec-no">05</span><h2>动效系统 · 会呼吸的暗房</h2></div>
+  <p class="sec-sub">下面每个演示都是<b style="color:var(--ink)">正在运行的 CSS 动画</b>——文档里怎么动，App 里就怎么动。Compose 映射口径：透明度一律 tween（时长确定，受手势驱动）；位移 / 尺寸用空间弹簧（damping 0.6）；颜色用效果弹簧（damping 1.0）。系统「移除动画」开启时，下表全部坍缩为直接跳变。</p>
+  <div class="demo-grid">
+
+    <div class="demo">
+      <div class="stage" style="background:linear-gradient(150deg,#6B4A41,#3A2A2C); display:flex; align-items:center; justify-content:center;">
+        <div class="bighud demo-hud">
+          <div class="pn">曝 光</div>
+          <div class="pv mono">+0.70<em>EV</em></div>
+          <div class="bar"><i></i><b></b></div>
+        </div>
+      </div>
+      <div class="cap2"><b>HUD 进出场</b><p>照片上横拖调参时浮现：进场 150ms（淡入 + 上浮），停留 800ms，退场 300ms。位置固定在下三分之一——读数要稳，不跟手乱飘。</p></div>
+    </div>
+
+    <div class="demo">
+      <div class="stage">
+        <div class="ph ph-portrait"></div>
+        <div class="dim"></div>
+        <svg class="demo-mask" style="position:absolute; inset:0;" viewBox="0 0 355 176" preserveAspectRatio="none">
+          <path d="M96 60 C120 26 200 30 222 82 C240 124 224 156 184 166 C134 178 90 152 78 118 C70 94 84 76 96 60 Z"
+                fill="#FFB454" stroke="#FFB454" stroke-width="2"/>
+        </svg>
+        <span class="facechip" style="right:12px; bottom:12px;">皮肤 ✓</span>
+      </div>
+      <div class="cap2"><b>蒙版描边生长</b><p>「点哪修哪」命中后：轮廓 400ms 描完（ease-out），琥珀填充 14% 随之浮现——AI 认出了什么，让用户亲眼看见。</p></div>
+    </div>
+
+    <div class="demo">
+      <div class="stage demo-cap" style="background:var(--canvas); padding:14px; display:flex; gap:10px; align-items:center;">
+        <div class="rth" style="opacity:.4; flex:none;"><div class="ph ph-portrait" style="position:absolute;"></div></div>
+        <div class="rth" style="opacity:.65; flex:none;"><div class="ph hue1 ph-portrait" style="position:absolute;"></div></div>
+        <div class="rth newshot" style="flex:none;"><div class="ph shimmer ph-golden" style="position:absolute;"></div><span class="badge proc" style="position:absolute; left:5px; top:5px;">处理中</span></div>
+        <span style="font-size:11px; color:var(--ink-3);">← 新拍摄<br>自动到达</span>
+      </div>
+      <div class="cap2"><b>拍摄到达</b><p>新片从右滑入 300ms（空间弹簧），处理中缩略图扫光 1.4s 循环，完成时徽章翻绿——系留流的「生命感」全在这三拍里。</p></div>
+    </div>
+
+    <div class="demo">
+      <div class="stage demo-deck" style="height:216px; background:#0E0E0D; display:flex; align-items:flex-end; padding:12px;">
+        <div style="width:100%;">
+          <div class="morph" style="background:var(--deck); border:1px solid var(--line-strong); border-radius:16px; padding:10px 14px; overflow:hidden;">
+            <div class="grp" style="margin-bottom:8px;"><span class="g on">明暗</span><span class="g">白平衡</span></div>
+            <div class="sl" style="margin-bottom:8px;">
+              <div class="sl-top"><span class="sl-name">曝光</span><span class="sl-val mono">+0.70 EV</span></div>
+              <div class="sl-track"><div class="sl-zero" style="left:50%"></div><div class="sl-fill" style="left:50%;width:17.5%"></div><div class="sl-thumb" style="left:calc(67.5% - 9px)"></div></div>
+            </div>
+            <div class="sl" style="margin-bottom:0;">
+              <div class="sl-top"><span class="sl-name">对比度</span><span class="sl-val mono">0%</span></div>
+              <div class="sl-track"><div class="sl-zero" style="left:50%"></div><div class="sl-thumb" style="left:calc(50% - 9px)"></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="cap2"><b>控制台形变</b><p>工具切换 = 控制台高度弹簧形变 320ms（damping 0.6）+ 内容交叉淡入 120ms。照片区实时让位——面板不是「弹出来盖住你」的。</p></div>
+    </div>
+
+    <div class="demo">
+      <div class="stage demo-ring" style="display:flex; align-items:center; justify-content:center; gap:20px; background:var(--canvas);">
+        <div class="dial">
+          <svg width="96" height="96" viewBox="0 0 96 96">
+            <circle cx="48" cy="48" r="40" fill="none" stroke="rgba(240,238,233,.12)" stroke-width="7"/>
+            <circle class="f" cx="48" cy="48" r="40" fill="none" stroke="#FFB454" stroke-width="7" stroke-linecap="round" transform="rotate(-90 48 48)"/>
+          </svg>
+          <div class="dv"><b class="mono">65%</b><span>强度</span></div>
+        </div>
+        <div class="pcard2 sel" style="width:118px;"><div class="ph hue6 ph-portrait" style="position:absolute;"></div><span class="pn">胶片</span></div>
+      </div>
+      <div class="cap2"><b>强度环填充</b><p>套预设瞬间：环从 0 扫到目标 420ms ease-out，缩略图同拍轻微回弹。数值用 tabular 数字直接跳变——读数要快，不做数字滚动表演。</p></div>
+    </div>
+
+    <div class="demo">
+      <div class="stage demo-mat" style="padding:0;">
+        <div class="mstage" style="height:100%; border-radius:14px; padding:18px;">
+          <div style="display:flex; justify-content:space-between; margin-bottom:12px;"><span class="sl-name">曝光</span><span class="sl-val mono">+0.70 EV</span></div>
+          <div class="sl-track"><div class="sl-zero" style="left:50%"></div><div class="sl-fill" style="left:50%;width:17.5%"></div><div class="sl-thumb" style="left:calc(67.5% - 9px)"></div></div>
+          <p class="hintln" style="margin-top:26px;">亮照片 → 纸色 · 暗照片 → 石墨</p>
+        </div>
+      </div>
+      <div class="cap2"><b>自适应材质切换</b><p>直方图均值越过阈值时，控制台表面在石墨 ↔ 纸之间 240ms 交叉渐变（效果弹簧），布局零位移。演示在两档间循环。</p></div>
+    </div>
+
+    <div class="demo">
+      <div class="stage demo-ap" style="display:flex; align-items:center; justify-content:center; background:radial-gradient(closest-side, rgba(255,180,84,.12), transparent 78%);">
+        <svg width="112" height="112" viewBox="0 0 24 24" fill="none" stroke="#FFB454" stroke-width="1.1" stroke-linecap="round" style="overflow:visible;">
+          <circle cx="12" cy="12" r="10" opacity=".5"/>
+          <g class="blades">
+            <path d="M14.31 8l5.74 9.94M9.69 8h11.48M7.38 12l5.74-9.94M9.69 16l-5.74-9.94M14.31 16H2.83M16.62 12l-5.74 9.94"/>
+          </g>
+        </svg>
+      </div>
+      <div class="cap2"><b>光圈徽标（品牌唯一动效）</b><p>首页成片卡右上角的光圈在按压时叶片旋转 60°（收小一档光圈），600ms 空间弹簧。全 App 只此一处品牌动效——多了就是噪音。</p></div>
+    </div>
+
+  </div>
+  <table style="margin-top:26px;">
+    <tr><th style="width:190px">场景</th><th style="width:210px">时长 / 曲线</th><th>Compose 映射</th></tr>
+    <tr><td><b>HUD 进出场</b></td><td>进 150ms ease-out · 出 300ms</td><td><span class="mono">tween(150, easingOut)</span>，停留 800ms 后淡出</td></tr>
+    <tr><td><b>chrome 隐形式</b></td><td>退 150ms · 回 240ms</td><td>alpha tween（布局零位移，沿用既有纪律）</td></tr>
+    <tr><td><b>控制台形变</b></td><td>320ms 弹簧</td><td><span class="mono">animateDpAsState(spring(0.6))</span></td></tr>
+    <tr><td><b>蒙版描边生长</b></td><td>400ms ease-out</td><td>PathMeasure + <span class="mono">animateFloat(0→1)</span> 取分段</td></tr>
+    <tr><td><b>拍摄滑入</b></td><td>300ms 弹簧</td><td><span class="mono">slideInHorizontally(spring)</span></td></tr>
+    <tr><td><b>处理中扫光</b></td><td>1.4s 线性循环</td><td><span class="mono">drawWithContent</span> 平移线性渐变；系统低透明度时关闭</td></tr>
+    <tr><td><b>材质切换</b></td><td>240ms</td><td><span class="mono">animateColorAsState</span>（效果族 damping 1.0）</td></tr>
+    <tr><td><b>强度环填充</b></td><td>420ms ease-out</td><td><span class="mono">animateFloat</span> → 弧端角</td></tr>
+    <tr><td><b>按下反馈</b></td><td>scale 0.97</td><td>pressScale（graphicsLayer，不变）</td></tr>
+    <tr><td><b>数值变化</b></td><td>跳变（不滚动）</td><td>tabular-nums 直接更新——读数要快，不做数字表演</td></tr>
+  </table>
+  <div class="rule"></div>
+</section>
+
+<!-- ================= 06 性能与字号审计 ================= -->
+<section>
+  <div class="sec-head"><span class="sec-no">06</span><h2>性能与字号审计 · 流畅易用的硬指标</h2></div>
+  <p class="sec-sub">设计稿不是画完就算——这一节把「流畅」和「易读」翻译成<b style="color:var(--ink)">可验收的数字</b>。标 ✓ 的项已按审计结果<b style="color:var(--ink)">回改了本稿</b>（不是停在纸面）。</p>
+
+  <h4 style="font-size:14px; margin:22px 0 10px;">6.1 字阶使用规则（五档不变，补三条红线）</h4>
+  <table>
+    <tr><th style="width:210px">规则</th><th>内容</th><th style="width:190px">状态</th></tr>
+    <tr><td><b>可点击文字 ≥ 11sp</b></td><td>按钮 / 工具栏 / Tab / 入口胶囊的文字标签下限 11sp；且 12sp 以下不得作为<b>唯一</b>编码（必须伴随图标或颜色）</td><td>✓ 工具栏、底部 Tab、首页入口胶囊 10 → 11sp</td></tr>
+    <tr><td><b>状态徽章 ≥ 10.5sp</b></td><td>badge 是「状态确认」信息（有颜色 + 图标伴随），可低于交互文本但不得低于 10.5sp</td><td>✓ badge 10 → 10.5sp</td></tr>
+    <tr><td><b>辅助信息分级</b></td><td>非关键信息（时间戳 / 参数名 / 路径详情）允许 10sp，且必须配 Ink-3 弱色；操作说明等关键文字一律 ≥11sp</td><td>✓ 参数格标签 9.5 → 10sp</td></tr>
+    <tr><td><b>系统字体缩放</b></td><td>fontScale 1.0–1.3 全量适配（sp 布局自然放大，布局不裁切）；控制台 L 档高度随缩放放宽（330→356dp）；≥1.3 时设置页提供独立「放大文本」开关</td><td>新增</td></tr>
+    <tr><td><b>数值稳定</b></td><td>一切数值 tabular-nums；deck 行内「标签左 / 数值右」互不换行（nowrap + 权重分配）</td><td>沿用</td></tr>
+  </table>
+  <p class="note" style="margin-top:10px;">对比度已核：Ink-2(#A5A29A) 于 Deck(#20201E) ≈ 7.4:1（安全）；Ink-3(#6B6963) ≈ 4.6:1——只允许承载非关键信息，<b style="color:var(--ink-2)">禁止</b>用它写操作说明。琥珀(#FFB454) 于 Deck ≈ 9.8:1，选中态文字无障碍达标。</p>
+
+  <h4 style="font-size:14px; margin:30px 0 10px;">6.2 帧预算与内存预算（120Hz = 每帧 8.3ms）</h4>
+  <table>
+    <tr><th style="width:190px">预算项</th><th style="width:250px">上限</th><th>落点 / 纪律</th></tr>
+    <tr><td><b>UI 线程每帧</b></td><td>组合 &lt;3ms · 布局 &lt;2ms · 绘制 &lt;3ms</td><td>像素渲染全部在后台分带线程完成；UI 线程只组合「已有位图」，不做任何逐像素工作</td></tr>
+    <tr><td><b>常驻合成层</b></td><td>编辑器 ≤ 4 层</td><td>照片 / 控制台 / 工具栏 / 顶栏。backdrop-blur 只允许顶栏与把手段；<b>控制台用实心 94% α（零 blur）</b>——满屏玻璃是掉帧第一来源</td></tr>
+    <tr><td><b>拖动期重组</b></td><td>0 次布局变化</td><td>隐形式只动 alpha；缩放 / 平移走 graphicsLayer（组合外读值，offset/graphicsLayer 用 lambda 版）；全部状态读取 lambda 化防陈旧捕获</td></tr>
+    <tr><td><b>位图常驻（UI 侧）</b></td><td>峰值 ≤ 55MB</td><td>代理预览 11MB + 渲染双缓冲 22MB（峰值）+ 分割概率 1.5MB + 蒙版网格 ≤2MB + 两模型 17MB；导出走全分辨率<b>分带</b>渲染，不进堆</td></tr>
+    <tr><td><b>动画属性白名单</b></td><td>只允许 transform / opacity / 颜色</td><td>pressScale（graphicsLayer）、扫光（drawWithContent）、材质切换（animateColor）——任何触发重排的动画都不许上</td></tr>
+    <tr><td><b>列表滚动</b></td><td>会话网格 0 掉帧</td><td>LazyVerticalGrid + key=对象句柄；缩略图 96px 渲染缓存复用；预取半屏</td></tr>
+    <tr><td><b>冷启动</b></td><td>首帧 &lt;800ms</td><td>模型懒加载：首次进人像分类 / 开自动蒙版才加载；系留仪表盘无模型也要可运行（只影响自动套用）</td></tr>
+    <tr><td><b>手势跟手性</b></td><td>按下到首帧位移反馈 &lt;1 帧</td><td>touchSlop 8dp；双击窗口 280ms；滑块拖动中禁用任何非值动画写入</td></tr>
+  </table>
+
+  <h4 style="font-size:14px; margin:30px 0 10px;">6.3 横屏适配规则（可用宽 ≥600dp 即启用）</h4>
+  <table>
+    <tr><th style="width:230px">屏</th><th>横屏形态</th></tr>
+    <tr><td><b>系留仪表盘（J′）</b></td><td>左预览 + 右 252dp 参数栏；<b>预览最小高度 = 屏高 − 24dp</b>——横屏下照片是全 App 最大的时刻，分割对比默认展开</td></tr>
+    <tr><td><b>会话批量（L′）</b></td><td>网格 2 列 → 4 列，底部操作条不变</td></tr>
+    <tr><td><b>拍摄流（K）</b></td><td>全宽预览 + 底部横向时间线（同一批组件重排）</td></tr>
+    <tr><td><b>编辑器</b></td><td>控制台右移成侧栏（复用 deck 内容），照片拿左侧全部空间；手势与缩放状态机与方向无关，零改动</td></tr>
+  </table>
+  <p class="note" style="margin-top:10px;">所有横屏布局<b style="color:var(--ink-2)">不引入新组件、不引入新状态</b>——只是同一批组件的重排，这是横竖屏不打架的唯一保证（J′ / L′ 两屏即证）。</p>
+  <div class="rule"></div>
+</section>
+
+<!-- ================= 07 手势 ================= -->
+<section>
+  <div class="sec-head"><span class="sec-no">07</span><h2>手势地图 · 优先级从高到低</h2></div>
+  <p class="sec-sub">冲突裁决只有一条：放大之后，单指永远属于「移动照片」，手势调参自动让位。</p>
+  <table>
+    <tr><th style="width:220px">手势</th><th style="width:330px">行为</th><th>条件 / 说明</th></tr>
+    <tr><td><b>照片上横拖</b></td><td>调当前参数（巨大 HUD 回显）</td><td>缩放 = 1x 时；控制台滑块同步</td></tr>
+    <tr><td><b>照片上竖滑</b></td><td>组内切换参数 / 跨组切换</td><td>上滑下一个参数，到组尾跳下一组</td></tr>
+    <tr><td><b>轻触照片（拾取模式）</b></td><td>命中分割蒙版 → 选中作用域</td><td>作用域按钮进入拾取；非拾取时轻触 = 无操作</td></tr>
+    <tr><td><b>双指捏合 / 拖动</b></td><td>缩放（≤8x）+ 平移</td><td>任何模式下可用；放大后单指 = 平移</td></tr>
+    <tr><td><b>双击</b></td><td>2.5x ↔ 1x（以点击处为锚）</td><td>与 v2.1 已实现行为一致</td></tr>
+    <tr><td><b>长按照片</b></td><td>看原图（松手还原）</td><td>仅 1x；顶栏 ⇔ 为分割对比</td></tr>
+    <tr><td><b>控制台滑块</b></td><td>精确调节 + 长按数值微调</td><td>与手势通道实时同步</td></tr>
+  </table>
+  <div class="rule"></div>
+</section>
+
+<!-- ================= 08 两版对照 ================= -->
+<section>
+  <div class="sec-head"><span class="sec-no">08</span><h2>两版怎么选 ·「Studio」vs「Aperture」</h2></div>
+  <p class="sec-sub">两版是同一个产品的两种性格，可以整版二选一，也可以按行混搭（每行都标注了混搭的代价）。</p>
+  <table>
+    <tr><th style="width:150px">维度</th><th>「Studio」（UI2.0.html）</th><th>「Aperture」（本稿）</th></tr>
+    <tr><td><b>结构</b></td><td>全屏画布 + 三档浮动 Sheet（面板可展开遮住大半屏）</td><td>一表面 + 固定高控制台（任何时刻最多 330dp，<b>永远看得见照片</b>）</td></tr>
+    <tr><td><b>调参主通道</b></td><td>滑块优先，手势为辅</td><td><b>手势优先</b>（照片即滑块），滑块为精密档</td></tr>
+    <tr><td><b>作用域</b></td><td>文字 chips（整图/人物/皮肤…）</td><td><b>点哪修哪</b>（蒙版命中 + 轮廓可视化），chips 兜底</td></tr>
+    <tr><td><b>预设</b></td><td>2 列网格全开档</td><td>2×2 卡 + <b>强度环</b>（参数栈 lerp）</td></tr>
+    <tr><td><b>对比</b></td><td>长按看原图</td><td>长按 + <b>分割线对比</b></td></tr>
+    <tr><td><b>材质</b></td><td>深色固定 + 玻璃浮层</td><td><b>自适应</b>（暗照片→石墨，亮照片→纸）+ 玻璃仅顶栏</td></tr>
+    <tr><td><b>强调色</b></td><td>珊瑚（人像亲和）</td><td>琥珀（暗房安全灯，注意力路由）</td></tr>
+    <tr><td><b>直方图</b></td><td>明暗面板内</td><td><b>顶部常驻条</b>（全工具可用，可收起）</td></tr>
+    <tr><td><b>适合谁</b></td><td>习惯「打开面板慢慢调」的 Lightroom 用户</td><td>习惯「在照片上直接操作」的 Snapseed / 手势党；单手场景压倒性优势</td></tr>
+  </table>
+  <div class="rule"></div>
+</section>
+
+<!-- ================= 09 落地 ================= -->
+<section>
+  <div class="sec-head"><span class="sec-no">09</span><h2>可行性总结与落地顺序</h2></div>
+  <p class="sec-sub">好消息：本稿最贵的两样东西——分割蒙版与手势状态机——引擎里都已经存在，缺的只是接线和两处小改。</p>
+  <table>
+    <tr><th style="width:230px">概念</th><th style="width:130px">工程状态</th><th>依据</th></tr>
+    <tr><td>One-Surface（rail + deck）</td><td><span class="tag ok">数据已支持</span></td><td>每组控件本来就是「chips + 滑块」结构，deck 是它的固定高呈现</td></tr>
+    <tr><td>双通道调节（照片上拖）</td><td><span class="tag mid">手势机扩展</span></td><td>v2.1 已落单协程手势状态机（含缩放仲裁），加「横拖调参/竖滑换参」两个分支</td></tr>
+    <tr><td>点哪修哪</td><td><span class="tag mid">交互新接线</span></td><td>6 类 FloatGrid 蒙版已缓存（ObjectMasks），命中 = 采样一个像素的概率比较</td></tr>
+    <tr><td>强度环</td><td><span class="tag mid">引擎小改</span></td><td>参数栈整体向中性 lerp（纯数学）；retouch 强度同乘</td></tr>
+    <tr><td>自适应材质</td><td><span class="tag mid">小改</span></td><td>直方图均值已在算（§04 明暗页），加两档 token 切换</td></tr>
+    <tr><td>分割对比 / 历史丝带（文字版）/ 导出回执</td><td><span class="tag ok">数据已支持</span></td><td>rendered + compareBase 双位图；EditSnapshot 栈；Exporter 返回 uri</td></tr>
+    <tr><td>系留出片（连接 → 拍摄 → 自动套预设 → 出片 → 批量）</td><td><span class="tag ok">链路已支持</span></td><td>PTP 下载（CameraSession）+ 单张套预设处理（CameraBatch）都已存在；缺「会话内新对象轮询 + 默认预设接线」</td></tr>
+    <tr><td>相机参数面板（电量 / 存储 / 曝光参数）</td><td><span class="tag mid">协议小改</span></td><td>GetStorageInfo 已接；电量与曝光参数需 GetDevicePropValue 扩展（PTP 帧已有）</td></tr>
+    <tr><td>设置重组 + 端侧模型中心</td><td><span class="tag ok">大部分已有</span></td><td>模型加载 / 加速器 / 降级 / SHA 都在日志里；缺统计聚合与设置页 UI；AppSettings 已有迁移框架</td></tr>
+    <tr><td>横屏双栏（系留仪表盘 / 批量 / 编辑器侧栏）</td><td><span class="tag ok">纯布局</span></td><td>同一批组件重排（J′ / L′ 即证）；手势与缩放状态机与方向无关，零改动</td></tr>
+    <tr><td>自动增强</td><td><span class="tag new">待引擎</span></td><td>需新算子（分析 + 参数推荐），入口已留</td></tr>
+    <tr><td>首页「最近编辑」</td><td><span class="tag new">需持久化</span></td><td>需保存编辑会话记录（P4 预设库同批）</td></tr>
+  </table>
+  <div class="phase" style="margin-top:22px;"><div class="no">P1</div><div class="bd"><b>琥珀 token + 组件层</b><p>色板 / 字阶 / 图标集 / 巨大 HUD / 强度环 / 历史丝带（文字版）。纯增量，零布局风险。</p></div></div>
+  <div class="phase"><div class="no">P2</div><div class="bd"><b>一表面改造</b><p>EditorScreen 从 sheet 改 rail+deck；六分类面板内容按组装进 deck（复用现有 ParamPanel 的分组数据）；直方图条上移常驻。</p></div></div>
+  <div class="phase"><div class="no">P3</div><div class="bd"><b>手势通道 + 点哪修哪</b><p>手势状态机扩展（横拖/竖滑/拾取三分支 + 缩放仲裁沿用）；蒙版命中与轮廓描边；分割对比。</p></div></div>
+  <div class="phase"><div class="no">P4</div><div class="bd"><b>强度环 + 自适应材质 + 收尾</b><p>参数栈 lerp（引擎小改 + 单测钉住单调性）；直方图均值驱动的两档材质；导出回执；首页最近编辑（随预设库持久化）。</p></div></div>
+  <div class="phase"><div class="no">P5</div><div class="bd"><b>系留出片 + 设置中心</b><p>会话内新对象轮询 → 自动套默认预设 → 到达流 UI（J/K/L）；会话历史批量复用 CameraBatch；横屏双栏适配（J′/L′，§6.3 规则）；设置重组 + 端侧模型中心（N，统计聚合）；相机参数面板随 GetDevicePropValue 扩展同批。§06 的字号红线与帧预算随组件一并落地。</p></div></div>
+</section>
+
+<footer>
+  <span>PixelCake · UI「Aperture 光圈」概念稿 v2.2（14 屏 + 2 横屏 + 动效系统 + 性能字号审计 + App 图标）· 2026-10-25 · 与「Studio」（UI2.0.html）互为备选，评审后择一落地或混搭</span>
+  <span>关联：UI_DESIGN.md（现行 v2.1 规范） · ENGINEERING_NOTES.md（工程纪律）</span>
+</footer>
+
+</div>
+</body>
+</html>

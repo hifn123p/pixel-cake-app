@@ -19,7 +19,7 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import com.hifn.pixelcake.core.decode.ExportFormat
-import com.hifn.pixelcake.ui.theme.Ok
+import com.hifn.pixelcake.ui.theme.WsOk
 import com.hifn.pixelcake.ui.theme.Radius
 import com.hifn.pixelcake.ui.theme.Spacing
 
@@ -138,7 +138,12 @@ fun ExportSheet(
                     // 顺带修掉一个实际体验问题：此前失败/取消与普通提示同色（灰色），
                     // 导出失败在视觉上几乎无法与「正在生成导出…」区分。
                     color = when (status.kind) {
-                        StatusKind.Success -> Ok
+                        // ⚠️ 导出面板在**深色工作台**里（`PixelCakeWorkspaceTheme`），
+                        // 所以成功色必须用工作台那组 `WsOk`（#4CC38A，对比度 8.46:1）。
+                        // 旧的 `Ok`（#0F7B4F）是**浅色页**语义（v2.1 遗留），
+                        // 在 #121211 画布上只有 **3.54:1** —— 达不到 WCAG AA 正文标准，
+                        // 「导出成功」这句话会显得又暗又读不清。
+                        StatusKind.Success -> WsOk
                         StatusKind.Error -> MaterialTheme.colorScheme.error
                         StatusKind.Info -> MaterialTheme.colorScheme.onSurfaceVariant
                     }
