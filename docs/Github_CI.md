@@ -11,6 +11,7 @@
 |---|---|---|---|
 | (1) main 推 UI 3.0 全量改动 | run **41311946112** | `972f41b` | **红**（`Build` + `Lint` 同报 `EditorScreen.kt:540:41`） |
 | (2) 补一个 import 后重推 | run **41312184208** | `20c6e41` | **4 job 绿**（含 `Signed Release`；`Publish` 按设计跳过） |
+| (3) 本文件覆盖重写（仅文档） | run **41312864874** | `440fc73` | **4 job 绿**（`Publish` 跳过） |
 
 > 用户要求「只 push、先不发布新版」，因此**没有** `git tag`、没有 Release，
 > 版本号也**故意保持不变**（`0.5.1` / `14`）。详见文末「版本号未变带来的副作用」。
@@ -156,4 +157,8 @@ e: .../ui/editor/EditorScreen.kt:540:75 Cannot infer type for value parameter 'd
 
 ## 文档自身的 CI
 
-本文件由独立提交推送，其运行结果见下一条提交（同型：4 绿 + `Publish` 跳过）。
+本文件由独立提交推送，run **41312864874**（`440fc73`）：`Build` / `Lint` / `Check signing` /
+`Signed Release` 四绿，`Publish` 按设计跳过 —— 与代码轮的绿轮同型。
+
+> 本轮到此为止：**main 最新提交即本文档**，未打 tag、未建 Release。
+> 下一步若要发版，按「两步走」先把 `versionName` / `versionCode` 抬到 `0.6.0` / `15`。
