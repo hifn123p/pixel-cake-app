@@ -384,4 +384,36 @@ class EditHistory(initial: EditSnapshot = EditSnapshot()) {
 
     val canUndo: Boolean get() = undoStack.isNotEmpty()
     val canRedo: Boolean get() = redoStack.isNotEmpty()
+
+    // ———— 历史丝带（UI 3.0 §09 / §B 顶栏「历史」入口）————
+    //
+    // 只暴露「第几步」这三个量，**不暴露快照本身**：丝带只需要位置，而 `EditSnapshot`
+    // 是三个大对象的容器（params / retouch / layers），把栈交出去会让调用方有机会
+    // 改到内部状态 —— 撤销栈必须是「只能通过 push/undo/redo 演进」的单向结构。
+
+    /** 当前位置：0 = 刚导入、还没编辑过。 */
+    val step: Int get() = undoStack.size
+
+    /** 这一步之前一共可以到多少步（含当前）。丝带按 [0, depth] 渲染。 */
+    val depth: Int get() = undoStack.size + redoStack.size
+
+    /**
+     * 直接跳到第 [index] 步（丝带点击）。
+     *
+     * @return 是否真的移动过。已经在该步时返回 false，调用方不必重渲染
+     *   —— 「点了当前那一步」不该产生一次全量重绘。
+     */
+    fun seekTo(index: Int): Boolean {
+        val target = index.coerceIn(0, depth)
+        if (target == step) return false
+        // ⚠️ `depth` 必须在这里先捕获：`undo()` / `redo()` 会在两个栈之间搬元素，
+        // 每次都重新求值虽然总和不变，但读一次意图更清楚、也不依赖那个不变式。
+        while (step > target) {
+            if (!undo()) break
+        }
+        while (step < target) {
+            if (!redo()) break
+        }
+        return true
+    }
 }

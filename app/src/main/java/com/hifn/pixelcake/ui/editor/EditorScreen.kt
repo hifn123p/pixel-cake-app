@@ -1,6 +1,8 @@
 package com.hifn.pixelcake.ui.editor
 
+import android.content.Intent
 import android.graphics.Bitmap
+import android.net.Uri
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.animateDpAsState
@@ -38,6 +40,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -67,7 +70,10 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -89,7 +95,9 @@ import com.hifn.pixelcake.core.edit.without
 import com.hifn.pixelcake.core.edit.preset.Preset
 import com.hifn.pixelcake.ui.components.CapsuleNote
 import com.hifn.pixelcake.ui.components.LocalHudReporter
+import com.hifn.pixelcake.ui.theme.LocalDarkTheme
 import com.hifn.pixelcake.ui.theme.Motion
+import com.hifn.pixelcake.ui.theme.PaperChromeColors
 import com.hifn.pixelcake.ui.theme.Radius
 import com.hifn.pixelcake.ui.theme.Spacing
 import com.hifn.pixelcake.ui.theme.blurredBackdrop
@@ -236,8 +244,15 @@ fun EditorScreen(
     layers: List<ObjectLayer> = emptyList(),
     canUndo: Boolean,
     canRedo: Boolean,
+    // 历史丝带（UI 3.0 §09）：当前位置 / 总步数 / 跳转。
+    historyStep: Int = 0,
+    historyDepth: Int = 0,
+    onSeekHistory: (Int) -> Unit = {},
     status: EditorStatus,
     exporting: Boolean = false,
+    // 导出回执（UI 3.0 §I）：非 null = 一张「已导出」卡正显示在屏幕上。
+    exportReceipt: Uri? = null,
+    onDismissExportReceipt: () -> Unit = {},
     exportFormat: ExportFormat = ExportFormat.JPEG,
     onParamChange: (EditParams) -> Unit,
     onParamCommit: () -> Unit = {},
@@ -254,6 +269,11 @@ fun EditorScreen(
     onPreset: (Preset) -> Unit,
     onLayersChange: (List<ObjectLayer>) -> Unit,
     onLayersCommit: () -> Unit,
+    // ⚠️ 2026-11-01：顶栏的「重置」按钮已移走，本参数因此**暂时没有使用点**。
+    // 保留它而不是删掉，是因为它与历史面板的「起始（未编辑）」**不等价**：
+    // 后者只恢复 `EditSnapshot`（参数 / 精修 / 图层），而 `onReset` 在上层还可能顺带
+    // 清掉运行时的画笔蒙版与预设选中态。要不要给它一个新入口（历史面板底部 / 设置页）
+    // 属于产品决策，未定之前不要静默删除 —— 删了就等于悄悄丢掉「清蒙版」这条路。
     onReset: () -> Unit,
     onUndo: () -> Unit,
     onRedo: () -> Unit,
@@ -317,6 +337,39 @@ fun EditorScreen(
     var splitPos by remember { mutableStateOf(0.5f) }
     val beforeBmp = remember(compareSource) { compareSource.asImageBitmap() }
     val afterBmp = remember(rendered) { rendered?.asImageBitmap() }
+
+    // ———— H 自适应亮档（`UI3.0.html` §H / `.litchrome`）————
+    //
+    // 照片本身很亮时深色 chrome「压不住画面」，规范给的解法是把 chrome 切纸色
+    // （米白底 + 墨字 + 棕色琥珀）。判据用直方图的**亮度重心**：
+    // `Histogram.normalize` 是**乘性缩放**（整体除以峰值），不改变各 bin 的相对权重，
+    // 所以归一化后的数据照样反映「整体偏亮还是偏暗」——不必再为它扫一遍像素。
+    //
+    // ⚠️ 双阈值滞回（0.66 / 0.58）：单阈值会让临界亮度的照片每帧横跳，整条 chrome 闪个不停。
+    var lightChrome by remember { mutableStateOf(false) }
+    // 历史丝带是否展开（UI 3.0 §09 顶栏「历史」）。
+    var showHistory by remember { mutableStateOf(false) }
+    val lumaCentroid = remember(histogram) {
+        val h = histogram ?: return@remember -1f
+        val bins = minOf(h.first.size, h.second.size, h.third.size)
+        if (bins < 2) return@remember -1f
+        var num = 0f
+        var den = 0f
+        for (i in 0 until bins) {
+            val v = (h.first[i] + h.second[i] + h.third[i]) / 3f
+            if (v > 0f) {
+                num += v * i
+                den += v
+            }
+        }
+        if (den <= 0f) -1f else num / den / (bins - 1).toFloat()
+    }
+    LaunchedEffect(lumaCentroid) {
+        // -1 = 还没算出直方图（首帧）。保持现状，别在打开编辑器的瞬间闪一下。
+        if (lumaCentroid < 0f) return@LaunchedEffect
+        if (!lightChrome && lumaCentroid > 0.66f) lightChrome = true
+        else if (lightChrome && lumaCentroid < 0.58f) lightChrome = false
+    }
 
     // 隐形式：目标 0.32f 的「幽灵残影」（规范 §04-D），而不是完全消失 —— 残影保住空间感，
     // 且 `inertUnless` 仍保证残影不可点。回场 240ms（规范口径）比隐去 150ms 慢半拍：
@@ -572,11 +625,12 @@ fun EditorScreen(
                         showOriginal = showOriginal,
                         canUndo = canUndo,
                         canRedo = canRedo,
+                        onOpenHistory = { showHistory = true },
                         exporting = exporting,
+                        lightChrome = lightChrome,
                         onBack = onBack,
                         onUndo = onUndo,
                         onRedo = onRedo,
-                        onReset = onReset,
                         onToggleCompare = { showOriginal = !showOriginal },
                         splitCompare = splitCompare,
                         // 进入分割对比时收起「看原图」：两者都改 display，同时开着会让
@@ -599,6 +653,7 @@ fun EditorScreen(
                     HistogramStrip(
                         data = histogram,
                         expanded = histExpanded,
+                        lightChrome = lightChrome,
                         onToggle = { histExpanded = !histExpanded }
                     )
                 }
@@ -665,6 +720,9 @@ fun EditorScreen(
                                     activeScope = scope,
                                     activeLayer = activeLayer,
                                     presetThumbs = presetThumbs,
+                                    // 与直方图条**同一份**数据：曲线页要把它垫在曲线底下（UI 3.0 §E），
+                                    // 两处各算一次会得到两个形状不同的分布，而它们会同屏可见。
+                                    histogram = histogram,
                                     onSelectionChange = { selection = it },
                                     onParamChange = writeParams,
                                     onParamCommit = onParamCommit,
@@ -805,6 +863,205 @@ fun EditorScreen(
             jpegQuality = jpegQuality
         )
     }
+
+    // ———— 4. 导出回执（`UI3.0.html` §I）————
+    //
+    // 规范：已导出 / 成片已保存到系统相册 / 格式·质量 / 尺寸 / 预设 / 分享 · 完成。
+    // 声明在 `showExport` **之后** = z 轴最高：导出面板关掉的那一刻回执必须已经在那儿，
+    // 否则用户会经历「面板消失 → 一秒后才有东西出现」的空窗。
+    //
+    // 只依赖 `exportReceipt != null`：上面 `MainActivity` 已排除「openOutputStream 返回 null」
+    // 与「IS_PENDING 清不掉」两条静默失败（否则相册里会有 0 字节图、界面还报成功）。
+    // ———— 5. 历史丝带（`UI3.0.html` §09 顶栏「历史」）————
+    //
+    // 只显示「第 N 步」，**不给每一步起名字**：那需要给 `EditHistory.push()` 加标签，
+    // 而它有 6 个调用点（参数 / 精修 / 图层 / 预设 / 自动 / 相机批量），改签名会扩散到
+    // 所有编辑入口。位置本身就有信息量 —— 用户要的是「回到刚才那一步」，不是那步的名字。
+    //
+    // 列表用 `heightIn(max) + verticalScroll`：连续拖滑块几十次就有几十步，
+    // 不设上限会把卡片撑出屏幕（而 `Dialog` 式的固定高度又会浪费短历史的空间）。
+    if (showHistory) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.55f))
+                .clickable(interactionSource = null, indication = null) { showHistory = false },
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(Spacing.page)
+                    .clip(RoundedCornerShape(28.dp))
+                    .background(MaterialTheme.colorScheme.surface)
+                    // 吃掉卡片内的点击，否则点列表空白处会穿透到底下遮罩、把面板关掉。
+                    .clickable(interactionSource = null, indication = null) { }
+                    .padding(Spacing.m),
+                verticalArrangement = Arrangement.spacedBy(Spacing.xs)
+            ) {
+                Text(
+                    "历史",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    "共 ${historyDepth + 1} 个状态 · 当前第 $historyStep 步",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                // 「重置」的归宿：顶栏那个按钮移走后，功能由列表里的**「起始（未编辑）」**承担。
+                // 比原来的 `history.reset()` 更好 —— `reset()` 会清空整个栈（不可撤销），
+                // 而「跳到起始」只是往回走，用户随时可以再跳回来。
+                Text(
+                    "点任意一步跳回；「起始」即重置全部参数",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(Spacing.s))
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 360.dp)
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    // 从「起始」到最远的一步，全程可见 —— 包括重做方向的那些：
+                    // 撤销掉三步之后，那三步仍在 `depth` 里，用户能一键跳回去。
+                    for (i in 0..historyDepth) {
+                        val isCurrent = i == historyStep
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(Radius.chip)
+                                .background(
+                                    if (isCurrent) MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+                                    else Color.Transparent
+                                )
+                                .clickable(interactionSource = null, indication = null) {
+                                    onSeekHistory(i)
+                                    showHistory = false
+                                }
+                                .padding(horizontal = Spacing.m, vertical = Spacing.s),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                if (i == 0) "起始（未编辑）" else "第 $i 步",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = if (isCurrent) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurface
+                            )
+                            Spacer(Modifier.weight(1f))
+                            if (isCurrent) {
+                                Text(
+                                    "当前",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (exportReceipt != null) {
+        val ctx = LocalContext.current
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.55f))
+                // 点遮罩即关闭：这是一个「确认型」弹层，不是必须二选一的操作。
+                .clickable(interactionSource = null, indication = null) { onDismissExportReceipt() },
+            contentAlignment = Alignment.BottomCenter
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(Spacing.page)
+                    .clip(RoundedCornerShape(28.dp))
+                    .background(MaterialTheme.colorScheme.surface)
+                    .clickable(interactionSource = null, indication = null) { /* 吃掉点击，别穿透到底下遮罩 */ }
+                    .padding(Spacing.xl),
+                verticalArrangement = Arrangement.spacedBy(Spacing.s)
+            ) {
+                Text(
+                    "已导出",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    "成片已保存到系统相册",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    "格式 / 质量　${exportFormat.name} · $jpegQuality",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                // 导出的是**全分辨率**，所以要报原图尺寸而不是预览尺寸 ——
+                // 报预览尺寸会让用户以为「导出变小了」。
+                Text(
+                    "尺寸　${original.width} × ${original.height}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                if (activePresetId != "none") {
+                    Text(
+                        "预设　$activePresetId",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Spacer(Modifier.height(Spacing.s))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.s)
+                ) {
+                    // 分享：直接交给系统 chooser。`EXTRA_STREAM` + 读权限是 MediaStore uri
+                    // 能被其它 App 打开的两个必要条件，缺一个对方就拿到「无法访问」。
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(Radius.pill)
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f))
+                            .clickable {
+                                val send = Intent(Intent.ACTION_SEND).apply {
+                                    type = "image/*"
+                                    putExtra(Intent.EXTRA_STREAM, exportReceipt)
+                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                }
+                                ctx.startActivity(Intent.createChooser(send, "分享成片"))
+                                onDismissExportReceipt()
+                            }
+                            .padding(vertical = Spacing.m),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            "分享",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(Radius.pill)
+                            .background(MaterialTheme.colorScheme.primary)
+                            .clickable(interactionSource = null, indication = null) { onDismissExportReceipt() }
+                            .padding(vertical = Spacing.m),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            "完成",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onPrimary
+                        )
+                    }
+                }
+            }
+        }
+    }
 }
 
 // ———————————————————————————————————————————————————————————————
@@ -818,58 +1075,95 @@ fun EditorScreen(
  * 少占一半宽度；「对比」是双态（长按照片也可以临时看原图）。
  * 「导出」是唯一强调色元素（[ExportPill]）。
  */
+/**
+ * 给 chrome 组件套皮肤（UI 3.0 §H 自适应亮档）。
+ *
+ * 深色路径**原样输出内容**：零包裹、零开销、零回归 —— 只有照片偏亮时才多一层覆盖。
+ *
+ * 之所以做成「每个组件各自包一层」而不是包住整条 chrome 列：后者要动一个几百行 `Column`
+ * 的收尾括号，而那是本项目最容易错的地方（括号闸门能过、缩进也对，但语义范围可能错位）。
+ *
+ * ⚠️ 两个必须同时下发的值：
+ * 1. `LocalContentColor` —— 它**只有 `Surface` 会 provide**，嵌套 `MaterialTheme` 不下发。
+ *    漏了它，纸色底上会继承深色主题的 contentColor ⇒ 浅底浅字、**文字消失**
+ *    （编辑页在 v0.4.2 栽过同款，见 `ENGINEERING_NOTES` §2.5）。
+ * 2. `LocalDarkTheme = false` —— 玻璃材质的 tint 由它决定，漏了会得到「纸色底 + 深色玻璃」。
+ */
+@Composable
+private fun ChromeSkin(light: Boolean, content: @Composable () -> Unit) {
+    if (light) {
+        CompositionLocalProvider(
+            LocalDarkTheme provides false,
+            LocalContentColor provides PaperChromeColors.onSurface
+        ) {
+            MaterialTheme(colorScheme = PaperChromeColors) { content() }
+        }
+    } else {
+        content()
+    }
+}
+
 @Composable
 private fun EditorTopBar(
     showOriginal: Boolean,
     canUndo: Boolean,
     canRedo: Boolean,
+    onOpenHistory: () -> Unit,
     exporting: Boolean,
+    lightChrome: Boolean,
     onBack: () -> Unit,
     onUndo: () -> Unit,
     onRedo: () -> Unit,
-    onReset: () -> Unit,
     onToggleCompare: () -> Unit,
     splitCompare: Boolean,
     onToggleSplit: () -> Unit,
     onExport: () -> Unit
 ) {
-    val tint = rememberGlassTint()
-    Box(modifier = Modifier.fillMaxWidth()) {
-        Box(
-            modifier = Modifier
-                .statusBarsPadding()
-                .padding(horizontal = 10.dp, vertical = 8.dp)
-                .glassSurface(tint, Radius.pill)
-        ) {
-            Row(
+    ChromeSkin(lightChrome) {
+        val tint = rememberGlassTint()
+        Box(modifier = Modifier.fillMaxWidth()) {
+            Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(TOP_BAR_HEIGHT)
-                    .padding(horizontal = Spacing.s),
-                verticalAlignment = Alignment.CenterVertically
+                    .statusBarsPadding()
+                    .padding(horizontal = 10.dp, vertical = 8.dp)
+                    .glassSurface(tint, Radius.pill)
             ) {
-                IconAction(def = AppIcons.Back, label = "返回", onClick = onBack)
-                Text("编辑", style = MaterialTheme.typography.titleMedium)
-                Spacer(Modifier.weight(1f))
-                IconAction(def = AppIcons.Undo, label = "撤销", enabled = canUndo, onClick = onUndo)
-                IconAction(def = AppIcons.Redo, label = "重做", enabled = canRedo, onClick = onRedo)
-                IconAction(def = AppIcons.Reset, label = "重置", onClick = onReset)
-                IconAction(
-                    def = AppIcons.Eye,
-                    label = "对比原图",
-                    selected = showOriginal,
-                    onClick = onToggleCompare
-                )
-                // 分割对比（UI 3.0 §09 顶栏入口之一）。`AppIcons.Split` 此前是**声明未使用**
-                // 的悬空图标，正是为这个入口准备的 —— 接上之后它才有意义。
-                IconAction(
-                    def = AppIcons.Split,
-                    label = "分割对比",
-                    selected = splitCompare,
-                    onClick = onToggleSplit
-                )
-                Spacer(Modifier.width(Spacing.s))
-                ExportPill(enabled = !exporting, exporting = exporting, onClick = onExport)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(TOP_BAR_HEIGHT)
+                        .padding(horizontal = Spacing.s),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconAction(def = AppIcons.Back, label = "返回", onClick = onBack)
+                    // ⚠️ 这里**不再有「编辑」标题文字**：顶栏元素已经到 7 个，而标题是唯一
+                    // 占宽的长文字（约 40dp）。编辑器是全 App 唯一的编辑界面，照片 + 工具栏
+                    // 本身已经说明「你在哪」—— 省下的宽度留给操作本身。
+                    Spacer(Modifier.weight(1f))
+                    IconAction(def = AppIcons.Undo, label = "撤销", enabled = canUndo, onClick = onUndo)
+                    IconAction(def = AppIcons.Redo, label = "重做", enabled = canRedo, onClick = onRedo)
+                    // 历史（§09）：与撤销/重做并列 —— 它们回答的是同一个问题「我改过些什么」，
+                    // 只是粒度不同（一步 vs 列出每一步）。
+                    IconAction(def = AppIcons.History, label = "历史", onClick = onOpenHistory)
+                    // 「重置」已从顶栏移走（移到历史面板底部）：全局重置是低频且破坏性的动作，
+                    // 不该和撤销/重做挤在一起；而它本质上是「跳到第 0 步」，归到历史里更自洽。
+                    IconAction(
+                        def = AppIcons.Eye,
+                        label = "对比原图",
+                        selected = showOriginal,
+                        onClick = onToggleCompare
+                    )
+                    // 分割对比（UI 3.0 §09 顶栏入口之一）。`AppIcons.Split` 此前是**声明未使用**
+                    // 的悬空图标，正是为这个入口准备的 —— 接上之后它才有意义。
+                    IconAction(
+                        def = AppIcons.Split,
+                        label = "分割对比",
+                        selected = splitCompare,
+                        onClick = onToggleSplit
+                    )
+                    Spacer(Modifier.width(Spacing.s))
+                    ExportPill(enabled = !exporting, exporting = exporting, onClick = onExport)
+                }
             }
         }
     }
@@ -901,7 +1195,11 @@ private fun IconAction(
                 indication = null,
                 enabled = enabled,
                 onClick = onClick
-            ),
+            )
+            // ⚠️ `label` 从 v0.4 起就一直传进来了，但**从来没有被使用过** ——
+            // 顶栏那 6 个图标对读屏是无声的（`PathIcon` 只画路径，不带任何语义）。
+            // 图标化程度越高，这一行越是必需品：这是这些按钮对无障碍**唯一**的名称来源。
+            .semantics { contentDescription = label },
         contentAlignment = Alignment.Center
     ) {
         PathIcon(def = def, tint = tint, size = 20.dp)
@@ -968,34 +1266,39 @@ private val HIST_B = Color(0xFF6FA8FF)
 private fun HistogramStrip(
     data: Triple<FloatArray, FloatArray, FloatArray>?,
     expanded: Boolean,
+    lightChrome: Boolean,
     onToggle: () -> Unit
 ) {
     if (!expanded || data == null) return
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 10.dp, vertical = 6.dp)
-            .clip(Radius.card)
-            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.92f))
-            .clickable(interactionSource = null, indication = null, onClick = onToggle)
-            .padding(horizontal = 12.dp, vertical = 6.dp)
-    ) {
-        Canvas(modifier = Modifier.fillMaxWidth().height(26.dp)) {
-            val channels = listOf(data.first to HIST_R, data.second to HIST_G, data.third to HIST_B)
-            for ((arr, color) in channels) {
-                val n = arr.size
-                if (n < 2) continue
-                val path = Path()
-                path.moveTo(0f, size.height)
-                for (i in 0 until n) {
-                    path.lineTo(
-                        i.toFloat() / (n - 1) * size.width,
-                        size.height * (1f - arr[i].coerceIn(0f, 1f))
-                    )
+    // 规范 `.litchrome` 的覆盖面就是 `.tb, .histstrip` 两个 —— Deck / Rail 不跟着切，
+    // 因为它们是「操作面」而不是「信息面」：一块米白的参数台会让滑块读数更难分辨。
+    ChromeSkin(lightChrome) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp, vertical = 6.dp)
+                .clip(Radius.card)
+                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.92f))
+                .clickable(interactionSource = null, indication = null, onClick = onToggle)
+                .padding(horizontal = 12.dp, vertical = 6.dp)
+        ) {
+            Canvas(modifier = Modifier.fillMaxWidth().height(26.dp)) {
+                val channels = listOf(data.first to HIST_R, data.second to HIST_G, data.third to HIST_B)
+                for ((arr, color) in channels) {
+                    val n = arr.size
+                    if (n < 2) continue
+                    val path = Path()
+                    path.moveTo(0f, size.height)
+                    for (i in 0 until n) {
+                        path.lineTo(
+                            i.toFloat() / (n - 1) * size.width,
+                            size.height * (1f - arr[i].coerceIn(0f, 1f))
+                        )
+                    }
+                    path.lineTo(size.width, size.height)
+                    path.close()
+                    drawPath(path, color.copy(alpha = 0.42f))
                 }
-                path.lineTo(size.width, size.height)
-                path.close()
-                drawPath(path, color.copy(alpha = 0.42f))
             }
         }
     }

@@ -30,6 +30,7 @@ import com.hifn.pixelcake.core.edit.RetouchState
 import com.hifn.pixelcake.core.edit.ToneCurve
 import com.hifn.pixelcake.core.edit.preset.Preset
 import com.hifn.pixelcake.core.edit.retouch.ColorTransfer
+import com.hifn.pixelcake.ui.components.CurveEditor
 import com.hifn.pixelcake.ui.components.GlassChipRow
 import com.hifn.pixelcake.ui.components.ParamSlider
 import com.hifn.pixelcake.ui.components.PresetThumbRow
@@ -317,6 +318,10 @@ fun ParamPanel(
     activeScope: ObjectScope?,
     // 当前对象层（`activeScope != null` 时非 null）。只用来读「层强度」并写回。
     activeLayer: ObjectLayer?,
+    // 当前渲染图的 RGB 直方图（UI 3.0 §E：「直方图已叠在曲线底」）。
+    // 与 `EditorScreen` 给直方图条的是**同一份数据**——两处各算一次会得到两个不同的分布形状，
+    // 而用户会在同一屏上同时看到它们。
+    histogram: Triple<FloatArray, FloatArray, FloatArray>? = null,
     // 预设 id → 缩略图（由上层按**原图**渲染一次，见 `MainActivity.buildPresetThumbs`）。缺失即占位。
     presetThumbs: Map<String, Bitmap> = emptyMap(),
     onSelectionChange: (PanelSelection) -> Unit,
@@ -393,7 +398,8 @@ fun ParamPanel(
                 )
 
                 EditorCategory.Curve -> CurveParams(
-                    params, selection.curveTab, onParamChange, onParamCommit, onDraggingChange
+                    params, selection.curveTab, onParamChange, onParamCommit, onDraggingChange,
+                    histogram
                 )
 
                 EditorCategory.Detail -> DetailParams(
@@ -905,7 +911,8 @@ private fun CurveParams(
     tab: CurveTab,
     onParamChange: (EditParams) -> Unit,
     onCommit: () -> Unit,
-    onDraggingChange: (Boolean) -> Unit
+    onDraggingChange: (Boolean) -> Unit,
+    histogram: Triple<FloatArray, FloatArray, FloatArray>? = null
 ) {
     val points = when (tab) {
         CurveTab.Luma -> params.lumaPoints
@@ -937,6 +944,16 @@ private fun CurveParams(
             onCommit()
         }
     )
+    // 曲线本体（UI 3.0 §E）：拖这三个锚点就是改下面那三个数字，两者是同一份数据的
+    // 图形/数字两种通道。**没有这一块时用户是在盲调** —— 只看得见「黑场 12」这种数字，
+    // 看不见「这条线把输入映射成了什么形状」。
+    CurveEditor(
+        points = points,
+        onPointsChange = { setPoints(it) },
+        onCommit = onCommit,
+        histogram = histogram
+    )
+    Spacer(Modifier.height(Spacing.s))
     EditSlider("黑场", black.toFloat(), ToneCurve.BLACK_RANGE.start, ToneCurve.BLACK_RANGE.endInclusive, 1f, { _, v -> setPoints(ToneCurve.points(v.toInt(), mid, white)) }, params, onParamChange, onCommit, onDraggingChange, format = BYTE)
     EditSlider("中间调", mid.toFloat(), ToneCurve.MID_RANGE.start, ToneCurve.MID_RANGE.endInclusive, 1f, { _, v -> setPoints(ToneCurve.points(black, v.toInt(), white)) }, params, onParamChange, onCommit, onDraggingChange, format = BYTE)
     EditSlider("白场", white.toFloat(), ToneCurve.WHITE_RANGE.start, ToneCurve.WHITE_RANGE.endInclusive, 1f, { _, v -> setPoints(ToneCurve.points(black, mid, v.toInt())) }, params, onParamChange, onCommit, onDraggingChange, format = BYTE)

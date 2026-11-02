@@ -198,6 +198,9 @@ private fun AppRoot(settings: AppSettings) {
     // 状态行：**类别 + 文案一起**存（审计 M2）。UI 侧按 kind 取色，不再拿文案做判断。
     var status by remember { mutableStateOf(EditorStatus()) }
     var exporting by remember { mutableStateOf(false) }
+    // 导出回执（UI 3.0 §I）：成功后弹出的那张卡片要「分享 / 完成」两个出口，
+    // 而状态行只是一行文字、没有可点的目标。非 null 即表示回执在显示。
+    var exportReceipt by remember { mutableStateOf<Uri?>(null) }
     var loading by remember { mutableStateOf(false) }
     val exportCancelled = remember { AtomicBoolean(false) }
     val renderMutex = remember { Mutex() }
@@ -660,8 +663,19 @@ private fun AppRoot(settings: AppSettings) {
                     layers = layers,
                     canUndo = history.canUndo,
                     canRedo = history.canRedo,
+                    // 历史丝带（UI 3.0 §09）：只报「第几步」。
+                    // ⚠️ 跳步之后**必须** `applySnapshot` —— `seekTo` 只搬栈，
+                    // 不碰界面持有的 params/retouch/layers；漏了这一步，界面会停在原处
+                    // 而栈已经跑到另一格，正是 §7 里记过的「栈与界面永久漂移」同款。
+                    historyStep = history.step,
+                    historyDepth = history.depth,
+                    onSeekHistory = { idx ->
+                        if (history.seekTo(idx)) applySnapshot(history.current)
+                    },
                     status = status,
                     exporting = exporting,
+                    exportReceipt = exportReceipt,
+                    onDismissExportReceipt = { exportReceipt = null },
                     exportFormat = settings.exportFormat,
                     jpegQuality = settings.jpegQuality.value,
                     onParamChange = {
@@ -942,6 +956,12 @@ private fun AppRoot(settings: AppSettings) {
                                 DebugLog.i(DebugLog.TAG_EDIT, "export end", memorySnapshot())
                             }
                             val (exportedUri, label) = result
+                            // 回执只在**真成功**时弹：`exportedUri != null` 已经排除了
+                            // 「openOutputStream 返回 null」与「IS_PENDING 清不掉」两条静默失败路径
+                            // （见 `Exporter.export` 的注释），所以这里不需要再判断一次。
+                            if (exportedUri != null && !exportCancelled.get()) {
+                                exportReceipt = exportedUri
+                            }
                             status = when {
                                 exportCancelled.get() -> EditorStatus(StatusKind.Info, "已取消导出")
                                 exportedUri != null ->

@@ -77,6 +77,30 @@ object MlMaskProvider {
     /** 已加载模型的加速器名（`GPU` / `CPU`）；模型未加载时为 `null`。供 UI 展示与真机验收核对。 */
     val accelerator: String? get() = model?.acceleratorName
 
+    // ———— 只读状态（UI 3.0 §N「端侧模型中心」）————
+    //
+    // 一律暴露成**只读 val**，不把字段改 public：这些量由内部推理路径维护，
+    // 外部只该「看」。改错一个 `disabled` 就能让自动蒙版在这个会话里永久停摆，
+    // 而界面上没有任何东西会解释为什么 —— 那正是这个页面存在的理由（让状态可见）。
+
+    /** 模型实例是否已解析出来（`false` + [accelerator] 为 null = 本进程还没加载过）。 */
+    val isModelResolved: Boolean get() = modelResolved
+
+    /** 本会话已放弃自动蒙版（加载失败 / 首次 OOM）。换图后可能恢复。 */
+    val isDisabled: Boolean get() = disabled
+
+    /** 连续 OOM 次数。达到 [oomThreshold] 即永久关闭。 */
+    val oomCountForUi: Int get() = oomCount
+
+    /** 进程内永久关闭（连续 OOM 达到阈值）—— 只有重启 App 才能恢复。 */
+    val isPermanentlyDisabled: Boolean get() = permanentlyDisabled
+
+    /** 已缓存概率的边长；0 = 当前这张图还没推理过。 */
+    val cachedSideForUi: Int get() = cacheSide
+
+    /** 永久关闭的 OOM 阈值（UI 要显示「1 / 2」这类进度）。 */
+    val oomThreshold: Int get() = MAX_OOM_BEFORE_PERMANENT
+
     /**
      * 为 [src] 生成皮肤蒙版；返回对象的 [MlSkinMask.resampleTo] 可安全用于任意目标尺寸。
      *

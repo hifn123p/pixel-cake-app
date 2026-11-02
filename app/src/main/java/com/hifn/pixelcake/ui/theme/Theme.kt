@@ -43,6 +43,18 @@ private val LightColors = lightColorScheme(
  * ⚠️ `primary` 用 [SeedOnDark]（而非 [Seed]）：[Seed] 在深底上的对比度只有 4.11 : 1，
  * 达不到 WCAG AA 的正文标准；[SeedOnDark] 是它降饱和 ~13% + 提亮后的派生色，对比度 6.04 : 1。
  */
+/**
+ * 纸色 Chrome（UI 3.0 §H「自适应亮档」）。
+ *
+ * 规范 `.litchrome` 的三要素与这套浅色取值**逐一对应**：
+ * `--p-deck:#F4F1EA` = [ContainerLight]、`--p-ink:#26241F` = [Ink]、`--p-amber:#B8791A` = [Seed]。
+ * 所以不需要新造色板 —— 编辑器在「照片本身很亮」时把 chrome 层切到这套值即可。
+ *
+ * ⚠️ 只用于 **chrome**（顶栏 / 直方图条 / Deck / Rail），**绝不**用它包住照片：
+ * 照片的颜色由像素决定，不是 UI 皮肤。
+ */
+internal val PaperChromeColors = LightColors
+
 private val DarkColors = darkColorScheme(
     primary = SeedOnDark,
     onPrimary = Color(0xFF3A2A05),

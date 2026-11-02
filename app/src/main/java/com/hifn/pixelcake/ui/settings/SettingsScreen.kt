@@ -1,5 +1,6 @@
 package com.hifn.pixelcake.ui.settings
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -26,6 +27,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import com.hifn.pixelcake.core.decode.ExportFormat
+import com.hifn.pixelcake.core.ml.MlMaskProvider
 import com.hifn.pixelcake.diag.DebugLog
 import com.hifn.pixelcake.ui.components.GlassCard
 import com.hifn.pixelcake.ui.components.SectionHeader
@@ -77,6 +79,8 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
     var showAbout by remember { mutableStateOf(false) }
+    // 「端侧模型」状态的刷新计数：`MlMaskProvider` 没有可观察性，改它做 key 即可重读快照。
+    var modelRefresh by remember { mutableStateOf(0) }
     var logExported by remember { mutableStateOf(false) }
     var cacheMiB by remember { mutableStateOf<Long?>(null) }
     // 版本号只需读一次（同一个进程内不会变）。
@@ -229,6 +233,19 @@ fun SettingsScreen(
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+
+                Spacer(Modifier.height(Spacing.m))
+
+                // ———— 端侧模型状态（UI 3.0 §N「端侧模型中心」的降级形态）————
+                //
+                // 规范给的是独立页面。这里先内联在「AI 与性能」里，因为独立页要新增一层导航，
+                // 而这块信息本身只有两行 —— 为两行开一页不划算。等相机系留那批（J/K/L）
+                // 一起做时再抽成正式页面。
+                //
+                // 数据是**快照**：`MlMaskProvider` 是普通 object、没有可观察性；
+                // 给它套 State 会侵入核心推理路径（那里每帧都在跑），不值得。
+                // 用「刷新」按钮主动重读即可 —— 这个页面是给人排查问题用的，不是仪表盘。
+                ModelStatusRows(refreshKey = modelRefresh, onRefresh = { modelRefresh++ })
             }
         }
 
@@ -369,6 +386,82 @@ private fun SettingChips(
  * 尾随控件用 `@Composable () -> Unit` 而不是泛型：开关、chip 组、文字、按钮都要能放，
  * 事先枚举类型只会让调用点更啰嗦（而且每加一种控件就要改这里）。
  */
+/**
+ * 「端侧模型」状态快照（UI 3.0 §N）。
+ *
+ * 之所以拍快照而不是直接读 `MlMaskProvider.xxx`：那是个普通 `object`，字段靠 `@Volatile`
+ * 维护、**没有可观察性**。直接读不会在推理状态变化时触发重组（界面会永远停在第一次进页面
+ * 那一刻），而给它套 `State` 会侵入每帧都在跑的推理路径。折中 = 进页面读一次 + 手动刷新。
+ */
+private data class ModelStatus(
+    val accelerator: String?,
+    val resolved: Boolean,
+    val disabled: Boolean,
+    val permanent: Boolean,
+    val oom: Int,
+    val threshold: Int,
+    val cachedSide: Int
+)
+
+/**
+ * 端侧模型的状态两行（嵌在「AI 与性能」卡片里）。
+ *
+ * ## 为什么这些内部状态值得显示出来
+ *
+ * 「自动蒙版不可用」有**两种完全不同的原因**，而编辑器里只会说一句「对象识别不可用」：
+ * - 模型还没加载（第一次打开照片才预热）→ 等一下就好；
+ * - 连续 OOM 被熔断（`permanentlyDisabled`）→ **只有重启 App 才能恢复**。
+ *
+ * 两者在画面上表现一模一样，用户只会判定「功能坏了」。把 OOM 计数与熔断状态摆出来，
+ * 是这个页面唯一的价值。
+ */
+@Composable
+private fun ModelStatusRows(refreshKey: Int, onRefresh: () -> Unit) {
+    val status = remember(refreshKey) {
+        ModelStatus(
+            accelerator = MlMaskProvider.accelerator,
+            resolved = MlMaskProvider.isModelResolved,
+            disabled = MlMaskProvider.isDisabled,
+            permanent = MlMaskProvider.isPermanentlyDisabled,
+            oom = MlMaskProvider.oomCountForUi,
+            threshold = MlMaskProvider.oomThreshold,
+            cachedSide = MlMaskProvider.cachedSideForUi
+        )
+    }
+    // ⚠️ 顺序有意义：熔断优先于「就绪」。一台设备可能**先成功加载过**（accelerator 非 null）、
+    // 之后才 OOM 熔断 —— 那时若先判 accelerator，就会显示「就绪」，把真正的问题盖掉。
+    val stateText = when {
+        status.permanent ->
+            "已永久关闭：连续 OOM ${status.oom}/${status.threshold}，重启 App 才恢复"
+        status.disabled ->
+            "本会话已关闭：OOM ${status.oom}/${status.threshold}，换图后会再试"
+        status.accelerator != null -> "就绪 · 走 ${status.accelerator}"
+        status.resolved -> "已加载，但未报告加速器名"
+        else -> "未加载 · 打开一张照片后自动预热"
+    }
+    SettingRow(title = "模型状态", subtitle = stateText) {
+        Text(
+            "刷新",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.clickable(
+                interactionSource = null,
+                indication = null,
+                onClick = onRefresh
+            )
+        )
+    }
+    Spacer(Modifier.height(Spacing.s))
+    SettingRow(
+        title = "概率缓存",
+        subtitle = if (status.cachedSide > 0) {
+            "当前图已推理（${status.cachedSide}×${status.cachedSide}）"
+        } else {
+            "空 · 还没推理过任何图片"
+        }
+    ) {}
+}
+
 @Composable
 private fun SettingRow(
     title: String,
