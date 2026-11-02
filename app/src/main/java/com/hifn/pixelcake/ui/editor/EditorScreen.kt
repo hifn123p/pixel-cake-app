@@ -1373,7 +1373,16 @@ private fun Modifier.previewGestures(
     onDoubleTapToggle: (Offset) -> Unit,
     onBrushStroke: (Float, Float) -> Unit,
     onInpaintStroke: (Float, Float) -> Unit,
-    onPressChanged: (Boolean) -> Unit
+    onPressChanged: (Boolean) -> Unit,
+    /**
+     * 点哪修哪（§D）：画面上的单击落点（组件坐标）。
+     *
+     * 传 `null` = 关闭拾取（没有对象蒙版时）。
+     * ⚠️ 这是**第一击**就回调、不等双击超时 —— 延迟 300ms 会让「点一下」有明显滞后感。
+     * 代价是「双击缩放的第一击也会拾取一次」，这是自觉的取舍：拾取是幂等的，
+     * 而用户双击放大时看到的选区变化正好告诉他「点到了哪个对象」。
+     */
+    onPick: ((Offset) -> Unit)? = null
 ): Modifier = pointerInput(retouchTool, boxPx, contentSize) {
     val slopPx = 8.dp.toPx()
     var lastTapUp = 0L
@@ -1441,6 +1450,9 @@ private fun Modifier.previewGestures(
                     lastTapUp = 0L
                 } else {
                     lastTapUp = now
+                    // 点哪修哪（§D）：**第一击**即拾取，不等双击超时。
+                    // 只在不处于画笔 / 祛瑕工具时生效（那两种工具的单击/拖动有自己的语义）。
+                    onPick?.invoke(first.position)
                 }
             }
         } else {

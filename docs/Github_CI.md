@@ -11,6 +11,7 @@
 |---|---|---|---|
 | (1) main 推 UI 3.0 第二批 | run **41459602649** | `50929ef` | **红**（`EditorScreen.kt:352:33`） |
 | (2) 把计算块移到声明之后 | run **41460439627** | `aaf0a34` | **4 job 绿**（含 `Signed Release`；`Publish` 按设计跳过） |
+| (3) 本文件覆盖重写（仅文档） | run **41463963927** | `a249d77` | **4 job 绿**（`Publish` 跳过） |
 
 ## 失败轮（run `41459602649`）：局部变量前向引用
 
@@ -128,8 +129,23 @@ e: .../ui/editor/EditorScreen.kt:359:61 Unresolved reference 'div' for operator 
 
 ## 本轮网络现实
 
-三次网络操作（`5dd41f9..50929ef`、`50929ef..aaf0a34` 及两次 fetch）全部**一次成功**，
-统一用 `-c http.sslVerify=false -c http.curloptResolve=github.com:443:140.82.121.3`。
+代码轮的两次 push（`5dd41f9..50929ef`、`50929ef..aaf0a34`）**一次成功**，
+用 `-c http.sslVerify=false -c http.curloptResolve=github.com:443:140.82.121.3`。
+
+**文档轮遇上了代理上游故障**（20:50–22:35 之间）：
+
+- 连续 8 次失败：`schannel: server closed abruptly (missing close_notify)` ×2、
+  `CONNECT tunnel failed, response 502` ×5（`140.82.112.3` / `140.82.121.3` /
+  `140.82.114.3` / `20.205.243.166` / `20.27.177.116` 全试）、不带 `curloptResolve` 也是 502；
+- 绕代理直连（`-c http.proxy=`）被 `Connection was reset`；
+- **同时 `https://api.github.com/rate_limit` 返回 200（0.5 s）** —— 代理本身活着，
+  是它到 `github.com:443` 的上游不通。**所以这不是「抽样阻断」，换 IP 无效**；
+- 约 40 分钟后原命令一次成功（`aaf0a34..a249d77`）。
+
+> 判据补充：**先打 `api.github.com`**。
+> 它通而 `github.com` 502 ⇒ 代理上游故障，**等**；两个都挂 ⇒ 本地网络/代理进程问题。
+> 只有「偶发、单次失败、重试就好」才是抽样阻断。这条能省掉一轮无意义的换 IP。
+
 `CRYPT_E_NO_REVOCATION_CHECK`（代理 MITM 证书做不了吊销检查）依旧存在，
 `http.schannelCheckRevoke=false` 对它无效；`sslVerify=false` 只作用于单条命令，
 **不改任何持久化配置**。

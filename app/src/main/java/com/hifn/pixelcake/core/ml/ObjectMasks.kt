@@ -2,6 +2,8 @@ package com.hifn.pixelcake.core.ml
 
 import com.hifn.pixelcake.core.edit.ObjectScope
 import com.hifn.pixelcake.core.edit.RetouchMask
+import com.hifn.pixelcake.core.edit.ScopePart
+import kotlin.math.roundToInt
 
 /**
  * 一次分割推理的**全部**作用域蒙版（批次 5，`docs/OBJECT_TONE_DESIGN.md` §3 / §8）。
@@ -60,6 +62,53 @@ class ObjectMasks private constructor(
         ObjectMask(grids.gridFor(scope), targetW, targetH, scope)
 
     /**
+     * 命中测试（`UI3.0.html` §D「点哪修哪」）：给定**归一化**坐标，返回该点最可能的作用域。
+     *
+     * ## 为什么不复用 [maskFor]
+     *
+     * `maskFor` 要为每个作用域构建网格（求和 → 阈值羽化 → 3×3 平滑），首次命中要跑满 8 遍；
+     * 而「点一下画面就选中对象」是**手势响应**动作，不能等几十毫秒。
+     * 这里直接读 6 类原始概率做 argmax —— 一次查表、零分配。
+     *
+     * ## 什么时候返回 null
+     *
+     * 最大概率低于 [HIT_THRESHOLD] 时返回 null，表示「这一点不属于任何一类」
+     * （天空、纯色背景、严重失焦）。**语义是「这次点击不改变当前选择」**，不是「没有对象」——
+     * 让用户随手点一下空白就把好不容易选中的作用域清掉，是更坏的体验。
+     *
+     * @return **原生**作用域（`面部 / 身体 / 头发 / 衣服 / 配饰 / 背景`）。
+     *   派生作用域（`人物` / `皮肤`）永远不会被点出来 —— 它们是多类的并集，
+     *   而一个像素只属于一类；把 `人物` 作为点击结果等于让用户失去细分的入口。
+     */
+    fun scopeAt(u: Float, v: Float): ObjectScope? {
+        val side = grids.side
+        if (side <= 0) return null
+        val x = (u.coerceIn(0f, 1f) * (side - 1)).roundToInt()
+        val y = (v.coerceIn(0f, 1f) * (side - 1)).roundToInt()
+        val base = (y * side + x) * SkinMaskPostProcess.CLASSES
+        if (base < 0 || base + SkinMaskPostProcess.CLASSES > grids.probs.size) return null
+        var bestClass = -1
+        var bestP = 0f
+        for (c in 0 until SkinMaskPostProcess.CLASSES) {
+            val p = grids.probs[base + c]
+            if (p > bestP) {
+                bestP = p
+                bestClass = c
+            }
+        }
+        if (bestClass < 0 || bestP < HIT_THRESHOLD) return null
+        val part = when (bestClass) {
+            SkinMaskPostProcess.CLASS_BACKGROUND -> ScopePart.Background
+            SkinMaskPostProcess.CLASS_HAIR -> ScopePart.Hair
+            SkinMaskPostProcess.CLASS_BODY_SKIN -> ScopePart.BodySkin
+            SkinMaskPostProcess.CLASS_FACE_SKIN -> ScopePart.FaceSkin
+            SkinMaskPostProcess.CLASS_CLOTHES -> ScopePart.Clothes
+            else -> ScopePart.Others
+        }
+        return ObjectScope.entries.firstOrNull { it.parts.size == 1 && it.parts.first() == part }
+    }
+
+    /**
      * 换目标尺寸：**共享同一份网格缓存**，不重建任何网格（见类 KDoc）。
      * 尺寸未变时返回自身。
      */
@@ -100,6 +149,15 @@ class ObjectMasks private constructor(
          */
         const val LO = 0.35f
         const val HI = 0.65f
+
+        /**
+         * 命中测试的最低置信度（[ObjectMasks.scopeAt]）。
+         *
+         * 取值与羽化下界 [LO] 同值不是巧合：低于它连蒙版都不认为「属于」，
+         * 那点击也就不该选中它 —— 两个判据必须同口径，否则会出现
+         * 「点中了、但选中后蒙版全黑」这种自相矛盾的状态。
+         */
+        const val HIT_THRESHOLD = 0.35f
 
         /**
          * 由模型输出的 6 通道概率构造。
