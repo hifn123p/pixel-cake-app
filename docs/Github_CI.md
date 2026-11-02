@@ -12,6 +12,7 @@
 | (1) main 推 UI 3.0 第二批 | run **41459602649** | `50929ef` | **红**（`EditorScreen.kt:352:33`） |
 | (2) 把计算块移到声明之后 | run **41460439627** | `aaf0a34` | **4 job 绿**（含 `Signed Release`；`Publish` 按设计跳过） |
 | (3) 本文件覆盖重写（仅文档） | run **41463963927** | `a249d77` | **4 job 绿**（`Publish` 跳过） |
+| (4) 「点哪修哪」命中测试 + 文档补记 | run **41464950345** | `872492f` | **4 job 绿**（含 `Signed Release`；`Publish` 跳过） |
 
 ## 失败轮（run `41459602649`）：局部变量前向引用
 
@@ -92,6 +93,22 @@ e: .../ui/editor/EditorScreen.kt:359:61 Unresolved reference 'div' for operator 
   **从未被使用**，顶栏图标对读屏是无声的。
 - 设置页内联「端侧模型」两行：把「未加载」与「OOM 熔断」区分开 —— 两者画面表现一样，
   用户只会判定「功能坏了」。`MlMaskProvider` 只新增只读访问器，字段仍不可外部写。
+
+### 6. 点哪修哪的命中测试（第 4 个 run 才进来的）
+
+并行会话在轮末补了 `ObjectMasks.scopeAt(u, v)`：归一化坐标 -> 六类原始概率 argmax，
+返回**原生**作用域（派生作用域如「人物 / 皮肤」永远不会被点出来）。
+
+- 不复用 `maskFor`：后者首次命中要为 8 个作用域各建一次网格（求和 + 羽化 + 平滑），
+  而点击是手势响应动作；`scopeAt` 是一次查表、零分配。
+- 置信度低于 `HIT_THRESHOLD`（0.35，与羽化下界 `LO` 同值）返回 `null`，
+  语义是「这次点击不改变当前选择」，不是「没有对象」。
+
+> ⚠️ **尚未接线**：`previewGestures` 加了 `onPick` 参数，但调用点还没传，功能目前是惰性的
+> （编译通过、行为未生效）。接的时候注意 `pointerInput` 的 key 是
+> `(retouchTool, boxPx, contentSize)`、**没有 `onPick`** —— 直接捕获外部 lambda 会拿到
+> 首次组合时的旧值。要么用 `rememberUpdatedState`，要么把它加进 key（后者会打断进行中
+> 的手势）。这是 `CurveEditor` 那一课的重演。
 
 ## 静态闸门：本轮漏 1 处，并修好了闸门自身的 bug
 
