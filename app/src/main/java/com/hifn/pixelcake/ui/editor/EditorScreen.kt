@@ -338,6 +338,8 @@ fun EditorScreen(
     val beforeBmp = remember(compareSource) { compareSource.asImageBitmap() }
     val afterBmp = remember(rendered) { rendered?.asImageBitmap() }
 
+    // 历史丝带是否展开（UI 3.0 §09 顶栏「历史」）。
+    var showHistory by remember { mutableStateOf(false) }
     // ———— H 自适应亮档（`UI3.0.html` §H / `.litchrome`）————
     //
     // 照片本身很亮时深色 chrome「压不住画面」，规范给的解法是把 chrome 切纸色
@@ -346,30 +348,9 @@ fun EditorScreen(
     // 所以归一化后的数据照样反映「整体偏亮还是偏暗」——不必再为它扫一遍像素。
     //
     // ⚠️ 双阈值滞回（0.66 / 0.58）：单阈值会让临界亮度的照片每帧横跳，整条 chrome 闪个不停。
+    // ⚠️ 这里**只声明状态**：亮度重心的计算必须排在 `histogram` 的 produceState **之后**
+    // （Kotlin 局部变量按声明顺序可见，提前引用 = Unresolved reference）。
     var lightChrome by remember { mutableStateOf(false) }
-    // 历史丝带是否展开（UI 3.0 §09 顶栏「历史」）。
-    var showHistory by remember { mutableStateOf(false) }
-    val lumaCentroid = remember(histogram) {
-        val h = histogram ?: return@remember -1f
-        val bins = minOf(h.first.size, h.second.size, h.third.size)
-        if (bins < 2) return@remember -1f
-        var num = 0f
-        var den = 0f
-        for (i in 0 until bins) {
-            val v = (h.first[i] + h.second[i] + h.third[i]) / 3f
-            if (v > 0f) {
-                num += v * i
-                den += v
-            }
-        }
-        if (den <= 0f) -1f else num / den / (bins - 1).toFloat()
-    }
-    LaunchedEffect(lumaCentroid) {
-        // -1 = 还没算出直方图（首帧）。保持现状，别在打开编辑器的瞬间闪一下。
-        if (lumaCentroid < 0f) return@LaunchedEffect
-        if (!lightChrome && lumaCentroid > 0.66f) lightChrome = true
-        else if (lightChrome && lumaCentroid < 0.58f) lightChrome = false
-    }
 
     // 隐形式：目标 0.32f 的「幽灵残影」（规范 §04-D），而不是完全消失 —— 残影保住空间感，
     // 且 `inertUnless` 仍保证残影不可点。回场 240ms（规范口径）比隐去 150ms 慢半拍：
@@ -429,6 +410,30 @@ fun EditorScreen(
                 Triple(Histogram.normalize(br), Histogram.normalize(bg), Histogram.normalize(bb))
             }.getOrNull()
         }
+    }
+
+    // —— 亮度重心：判「要不要切纸色 chrome」（§H）。
+    // 必须排在 `histogram` 的 produceState 之后 —— 局部变量按声明顺序可见。
+    // -1f = 还没算出直方图（首帧）：保持现状，别在打开编辑器的瞬间闪一下。
+    val lumaCentroid = remember(histogram) {
+        val h = histogram ?: return@remember -1f
+        val bins = minOf(h.first.size, h.second.size, h.third.size)
+        if (bins < 2) return@remember -1f
+        var num = 0f
+        var den = 0f
+        for (i in 0 until bins) {
+            val v = (h.first[i] + h.second[i] + h.third[i]) / 3f
+            if (v > 0f) {
+                num += v * i
+                den += v
+            }
+        }
+        if (den <= 0f) -1f else num / den / (bins - 1).toFloat()
+    }
+    LaunchedEffect(lumaCentroid) {
+        if (lumaCentroid < 0f) return@LaunchedEffect
+        if (!lightChrome && lumaCentroid > 0.66f) lightChrome = true
+        else if (lightChrome && lumaCentroid < 0.58f) lightChrome = false
     }
     var histExpanded by remember { mutableStateOf(true) }
 
