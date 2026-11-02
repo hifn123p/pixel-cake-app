@@ -176,8 +176,6 @@ private const val DOUBLE_TAP_ZOOM = 2.5f
 /** 双击的两次按下间隔上限（毫秒）。 */
 private const val DOUBLE_TAP_MS = 280L
 
-/** 长按判定阈值：按住此时长且未移动 ⇒ 进入「看原图」对比（横拖调参优先于它）。 */
-private const val LONG_PRESS_MS = 350L
 
 /**
  * 静态模糊底图的不透明度。刻意压得很低（0.26）：
