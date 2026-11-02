@@ -107,9 +107,7 @@ import com.hifn.pixelcake.ui.theme.glassSurface
 import com.hifn.pixelcake.ui.theme.pressScale
 import com.hifn.pixelcake.ui.theme.rememberGlassTint
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -1501,7 +1499,7 @@ private fun Modifier.previewGestures(
     onPressChanged: (Boolean) -> Unit
 ): Modifier = pointerInput(retouchTool, boxPx, contentSize, pickMode, onParamAdjust != null) {
     val slopPx = 8.dp.toPx()
-    val scope = this
+    var lastTapUp = 0L
     awaitEachGesture {
         val first = awaitFirstDown(requireUnconsumed = false)
         first.consume()
@@ -1509,17 +1507,14 @@ private fun Modifier.previewGestures(
         var dragged = false
         var paramDragging = false
         var comparing = false
-        var pressJob: Job? = null
-        // 长按（350ms 未移动）→ 看原图；横拖 → 调参（若可用）。二者互斥、先到先得。
-        // 拾取模式期间长按让位（单击 = 命中测试）。
+        // 「看原图」对比：按下即进入（v2.1 已验收行为）；横拖调参在首次位移时取消它。
+        // 拾取模式期间对比让位（单击 = 命中测试）。
+        // ⚠️ 规范写的是「按住 350ms 才进入」—— 那需要 AwaitPointerEventScope 的事件等待
+        // 重构（PointerInputScope 不是 CoroutineScope，不能 launch 子任务做计时器），
+        // 先按 v2.1 即时口径保正确性，350ms 手感列真机调优项（UI3.0 §05 微调候选）。
         if (retouchTool == "none" && !pickMode) {
-            pressJob = scope.launch {
-                delay(LONG_PRESS_MS)
-                if (!dragged && !paramDragging && !comparing) {
-                    comparing = true
-                    onPressChanged(true)
-                }
-            }
+            comparing = true
+            onPressChanged(true)
         }
         try {
             while (true) {
@@ -1527,7 +1522,6 @@ private fun Modifier.previewGestures(
                 val pressed = event.changes.filter { it.pressed }
                 if (pressed.isEmpty()) break
                 if (pressed.size >= 2) {
-                    pressJob?.cancel()
                     if (comparing) {
                         comparing = false
                         onPressChanged(false)
@@ -1567,7 +1561,7 @@ private fun Modifier.previewGestures(
                             abs(delta.x) >= abs(delta.y)
                         ) {
                             // —— 双通道：横拖调参（位移方向锁定一次即成立，竖拖不触发）——
-                            pressJob?.cancel()
+                            // 首次位移会先取消刚进入的「看原图」对比（按下即看的既有口径）
                             if (comparing) {
                                 comparing = false
                                 onPressChanged(false)
@@ -1580,7 +1574,6 @@ private fun Modifier.previewGestures(
                             dragged = true
                             c.consume()
                         } else {
-                            pressJob?.cancel()
                             if (comparing) {
                                 comparing = false
                                 onPressChanged(false)
@@ -1592,7 +1585,6 @@ private fun Modifier.previewGestures(
                 }
             }
         } finally {
-            pressJob?.cancel()
             if (comparing) {
                 comparing = false
                 onPressChanged(false)
