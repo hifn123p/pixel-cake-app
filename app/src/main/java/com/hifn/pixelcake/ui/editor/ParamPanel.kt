@@ -1,6 +1,9 @@
 package com.hifn.pixelcake.ui.editor
 
 import android.graphics.Bitmap
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -8,17 +11,21 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 import com.hifn.pixelcake.core.edit.ColorGrading
 import com.hifn.pixelcake.core.edit.ColorMath
 import com.hifn.pixelcake.core.edit.EditParams
@@ -34,6 +41,7 @@ import com.hifn.pixelcake.ui.components.CurveEditor
 import com.hifn.pixelcake.ui.components.GlassChipRow
 import com.hifn.pixelcake.ui.components.ParamSlider
 import com.hifn.pixelcake.ui.components.PresetThumbRow
+import com.hifn.pixelcake.ui.theme.Radius
 import com.hifn.pixelcake.ui.theme.Spacing
 import kotlin.math.abs
 
@@ -456,9 +464,14 @@ fun ParamScopeBar(
     available: Boolean,
     adjusted: (ObjectScope) -> Boolean,
     onSelect: (ObjectScope?) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    // 「点哪修哪」（UI 3.0 §D）：非 null 时在行尾渲染 36dp 准星按钮；pickActive = 拾取中。
+    pickActive: Boolean = false,
+    onTogglePick: (() -> Unit)? = null
 ) {
     Column(modifier = modifier) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(modifier = Modifier.weight(1f)) {
         GlassChipRow(
             items = SCOPE_ITEMS,
             selected = current,
@@ -474,6 +487,39 @@ fun ParamScopeBar(
             singleRow = true,
             compact = true
         )
+            }
+            if (onTogglePick != null && available) {
+                Box(
+                    modifier = Modifier
+                        .padding(start = Spacing.s)
+                        .size(36.dp)
+                        .clip(Radius.pill)
+                        .background(
+                            if (pickActive) MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+                            else Color.Transparent
+                        )
+                        .border(
+                            1.dp,
+                            if (pickActive) MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)
+                            else MaterialTheme.colorScheme.outlineVariant,
+                            Radius.pill
+                        )
+                        .clickable(
+                            interactionSource = null,
+                            indication = null,
+                            onClick = onTogglePick
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    PathIcon(
+                        def = AppIcons.Target,
+                        tint = if (pickActive) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                        size = 19.dp
+                    )
+                }
+            }
+        }
         if (!available) {
             Text(
                 "对象识别不可用，仅支持整图。",
@@ -1241,6 +1287,19 @@ private fun EditSlider(
     onDraggingChange: (Boolean) -> Unit,
     format: (Float) -> String = DEFAULT_FORMAT
 ) {
+    // 双通道调节（UI 3.0）：把本滑块的规格登记进当前组的登记簿 ——
+    // 照片上横拖即可调同一个参数（SideEffect 每次重组都会用最新 value 刷新）。
+    // 注册簿为 null 的场合（非编辑器 / 测试）直接跳过。
+    LocalParamAdjust.current?.register(
+        ParamAdjustSpec(
+            label = label,
+            range = min..max,
+            step = step,
+            format = format,
+            apply = apply,
+            value = value,
+        )
+    )
     ParamSlider(
         label = label,
         value = value,

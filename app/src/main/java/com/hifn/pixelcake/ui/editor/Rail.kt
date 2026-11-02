@@ -119,6 +119,11 @@ object AppIcons {
         IconPath("M12,4.5v15"),
         IconPath("M7.5,12h2M14.5,12h2"),
     ))
+    /** 准星（「点哪修哪」拾取入口：作用域行尾的 36dp 按钮）。 */
+    val Target = IconDef(listOf(
+        IconPath("M7,12a5,5 0 1,0 10,0a5,5 0 1,0 -10,0Z"),
+        IconPath("M12,2.5v4M12,17.5v4M2.5,12h4M17.5,12h4"),
+    ))
     /** 光圈徽标（品牌唯一图形；首页成片卡右上角，App 图标同源路径）。 */
     val Aperture = IconDef(listOf(
         IconPath("M2,12a10,10 0 1,0 20,0a10,10 0 1,0 -20,0Z"),

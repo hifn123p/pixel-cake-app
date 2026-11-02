@@ -50,6 +50,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -93,6 +94,7 @@ import com.hifn.pixelcake.core.edit.isAdjusted
 import com.hifn.pixelcake.core.edit.upsert
 import com.hifn.pixelcake.core.edit.without
 import com.hifn.pixelcake.core.edit.preset.Preset
+import com.hifn.pixelcake.core.ml.ObjectMasks
 import com.hifn.pixelcake.ui.components.CapsuleNote
 import com.hifn.pixelcake.ui.components.LocalHudReporter
 import com.hifn.pixelcake.ui.theme.LocalDarkTheme
@@ -105,7 +107,9 @@ import com.hifn.pixelcake.ui.theme.glassSurface
 import com.hifn.pixelcake.ui.theme.pressScale
 import com.hifn.pixelcake.ui.theme.rememberGlassTint
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -174,6 +178,9 @@ private const val DOUBLE_TAP_ZOOM = 2.5f
 /** 双击的两次按下间隔上限（毫秒）。 */
 private const val DOUBLE_TAP_MS = 280L
 
+/** 长按判定阈值：按住此时长且未移动 ⇒ 进入「看原图」对比（横拖调参优先于它）。 */
+private const val LONG_PRESS_MS = 350L
+
 /**
  * 静态模糊底图的不透明度。刻意压得很低（0.26）：
  * 底图的作用是给玻璃层提供可透出的色彩信息，不是当壁纸。
@@ -241,6 +248,9 @@ fun EditorScreen(
     activePresetId: String,
     presetThumbs: Map<String, Bitmap> = emptyMap(),
     objectScopesAvailable: Boolean = false,
+    // 「点哪修哪」的命中测试数据源（探测 effect 顺手存下的那份，无额外推理）。
+    // null = 模型不可用 ⇒ 拾取入口隐藏。
+    objectMasks: ObjectMasks? = null,
     layers: List<ObjectLayer> = emptyList(),
     canUndo: Boolean,
     canRedo: Boolean,
@@ -304,6 +314,12 @@ fun EditorScreen(
     var selection by remember { mutableStateOf(PanelSelection()) }
     var showExport by remember { mutableStateOf(false) }
     var dragging by remember { mutableStateOf(false) }
+    // 「点哪修哪」拾取模式（UI 3.0 §D）：作用域行的准星按钮进入；
+    // 激活期间照片单击 = 命中测试选作用域（双击缩放在此期间让位）。
+    var pickActive by remember { mutableStateOf(false) }
+    var pickNote by remember { mutableStateOf("") }
+    // 拾取只对「可分层」的分类有意义（细节/效果是整幅阶段；人像/预设与作用域无关）
+    val pickAvailable = objectScopesAvailable && objectMasks != null && category.scopeMode.layerable
 
     // —— 预览缩放 / 平移（双指捏合 ≤8x、双击 2.5x、单指平移；换图整体复位）——
     var previewZoom by remember(original) { mutableStateOf(1f) }
@@ -317,6 +333,34 @@ fun EditorScreen(
 
     // 对比基准：优先用上层给的零编辑渲染图（同管线同口径），缺省退回导入预览。
     val compareSource: Bitmap = compareBase ?: original
+
+    // ———— 双通道调节（UI 3.0）：登记簿按「分类 × 二级分组」各一份 ————
+    //
+    // Deck 里的 EditSlider 在组合期把规格登记进当前组的簿子；照片上的横拖手势取
+    // 「当前激活」规格（组内首个登记者 = 第一个滑块），走同一条 writeParams 通道。
+    // key 含 selection 的分组字段 ⇒ 切组即换簿，旧组规格不可能泄漏。
+    // （Crossfade 过渡期旧内容仍在组合 ⇒ 它们的登记用的是**它们自己的**簿子实例，
+    // 不会污染新簿 —— 这是把 provide 放在 Crossfade lambda 内部的原因。）
+    val adjustRegistries = remember { mutableMapOf<Pair<EditorCategory, String>, ParamAdjustRegistry>() }
+    fun groupKeyOf(cat: EditorCategory): String = when (cat) {
+        EditorCategory.Light -> selection.lightTab.name
+        EditorCategory.Color -> selection.colorTab.name
+        EditorCategory.Curve -> selection.curveTab.name
+        EditorCategory.Detail -> selection.detailTab.name
+        EditorCategory.Preset -> selection.presetTab.name
+        EditorCategory.Portrait -> "portrait"
+    }
+    val activeAdjustKey = category to groupKeyOf(category)
+    val activeRegistry = adjustRegistries.getOrPut(activeAdjustKey) { ParamAdjustRegistry() }
+    val regFor: (EditorCategory) -> ParamAdjustRegistry = { cat ->
+        adjustRegistries.getOrPut(cat to groupKeyOf(cat)) { ParamAdjustRegistry() }
+    }
+    // 手势协程里读「最新」状态的四个口（rememberUpdatedState：闭包捕获的是 State 对象，
+    // 每次读都拿到最新值 —— pointerInput 不重启也能拿到新参数）。
+    val regNow = rememberUpdatedState(activeRegistry)
+    val writeNow = rememberUpdatedState(writeParams)
+    val shownNow = rememberUpdatedState(shownParams)
+    val screenWNow = rememberUpdatedState(screenW)
 
     // renderVersion 每次重渲自增；remember 钉住包装对象（裸调 asImageBitmap 每帧 new
     // 会让 BitmapPainter 失效重绘 —— 拖动期发闪的根因）。
@@ -499,6 +543,32 @@ fun EditorScreen(
             )
             if (clampedPan != previewPan) previewPan = clampedPan
 
+            // —— 「点哪修哪」拾取回调：单击位置 → 内容归一化 → 六类概率 argmax → 选中作用域。
+            // 命中 null（天空 / 纯背景）时**不改变**当前选择，只提示 —— 随手一点就清掉
+            // 好不容易选中的作用域是更坏的体验（语义与 ObjectMasks.scopeAt 一致）。
+            val masksNow = rememberUpdatedState(objectMasks)
+            val selNow = rememberUpdatedState(selectScope)
+            val boxNow = rememberUpdatedState(boxPx)
+            val imgNow = rememberUpdatedState(imagePx)
+            val zoomNow = rememberUpdatedState(previewZoom)
+            val panNow = rememberUpdatedState(previewPan)
+            val onPickHandler: ((Offset) -> Unit)? = if (pickAvailable) {
+                { pos ->
+                    val norm = pointToContentNorm(
+                        pos, boxNow.value, imgNow.value, zoomNow.value, panNow.value
+                    )
+                    if (norm != null) {
+                        val hit = masksNow.value?.scopeAt(norm.first, norm.second)
+                        if (hit != null) {
+                            selNow.value(hit)
+                            pickNote = "已选中：" + hit.label + "（点其它对象可切换，再按准星退出）"
+                        } else {
+                            pickNote = "这一点没有可识别的对象"
+                        }
+                    }
+                }
+            } else null
+
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -526,9 +596,34 @@ fun EditorScreen(
                         },
                         onBrushStroke = onBrushStroke,
                         onInpaintStroke = onInpaintStroke,
+                        // —— 双通道：照片上横拖 = 调「当前激活参数」（量程全宽 = 全程）——
+                        // 增量按「位移 / 画布宽 × 量程」换算，deck 滑块与 HUD 实时同步；
+                        // 拖动起止即隐形式开关（chrome 退到 32% 残影）。
+                        onParamAdjust = if (retouchTool == "none") {
+                            { dx ->
+                                val spec = regNow.value.activeSpec()
+                                if (spec != null) {
+                                    val span = spec.range.endInclusive - spec.range.start
+                                    var nv = spec.value + dx / maxOf(1, screenWNow.value).toFloat() * span
+                                    nv = nv.coerceIn(spec.range.start, spec.range.endInclusive)
+                                    if (spec.step > 0f) nv = (nv / spec.step).roundToInt() * spec.step
+                                    nv = nv.coerceIn(spec.range.start, spec.range.endInclusive)
+                                    writeNow.value(spec.apply(shownNow.value, nv))
+                                    regNow.value.updateValue(spec.label, nv)
+                                    hudSetter(Pair(spec.label, spec.format(nv)))
+                                }
+                            }
+                        } else null,
+                        onParamDragStart = { dragging = true },
+                        onParamDragEnd = {
+                            dragging = false
+                            hudActive = false // 松手 → HUD 停留 800ms 再淡出（状态机在上方）
+                        },
                         // 分割对比期间禁用「按住看原图」：那个动作会把 display 整屏切成「之前」，
                         // 而分割线右侧本该是「之后」—— 两者叠加的结果是两侧一模一样，读起来像功能坏了。
-                        onPressChanged = { pressed -> if (!splitCompare) showOriginal = pressed }
+                        onPressChanged = { pressed -> if (!splitCompare) showOriginal = pressed },
+                        pickMode = pickActive,
+                        onPick = onPickHandler,
                     ),
                 contentAlignment = Alignment.Center
             ) {
@@ -615,6 +710,18 @@ fun EditorScreen(
                 } else {
                     Text("渲染中…", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
+
+                // 拾取模式：整幅照片压暗 + 顶部提示（设计 §D）；单击命中后由 pickNote 回显结果
+                if (pickActive) {
+                    Box(Modifier.fillMaxSize().background(Color(0x73000000)))
+                    CapsuleNote(
+                        "点一下要调整的对象",
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .statusBarsPadding()
+                            .padding(top = 96.dp)
+                    )
+                }
             }
 
             // ———— 2. Chrome 层（顶栏 + 直方图条 + Deck + Rail）————
@@ -690,7 +797,14 @@ fun EditorScreen(
                                 modifier = Modifier.padding(
                                     horizontal = Spacing.cardInner,
                                     vertical = Spacing.s
-                                )
+                                ),
+                                pickActive = pickActive,
+                                onTogglePick = if (pickAvailable) {
+                                    {
+                                        pickActive = !pickActive
+                                        pickNote = ""
+                                    }
+                                } else null
                             )
                         }
                         ParamSubBar(
@@ -710,6 +824,10 @@ fun EditorScreen(
                                 animationSpec = tween(Motion.durationFor(Motion.base), easing = Motion.easingOut),
                                 label = "paramCategory"
                             ) { cat ->
+                                // 每个分类自己的登记簿实例：Crossfade 过渡期新旧内容同在组合，
+                                // 各自登记进各自的簿子才不会互相污染（见 ParamAdjust 的 KDoc）。
+                                val catRegistry = regFor(cat)
+                                CompositionLocalProvider(LocalParamAdjust provides catRegistry) {
                                 ParamPanel(
                                     category = cat,
                                     params = shownParams,
@@ -751,6 +869,7 @@ fun EditorScreen(
                                     },
                                     onDraggingChange = { dragging = it }
                                 )
+                                }
                             }
                         }
                     }
@@ -850,6 +969,7 @@ fun EditorScreen(
                 PreviewNotes(
                     autoMaskNote = autoMaskNote,
                     liquifyNote = liquifyNote,
+                    pickNote = pickNote,
                     bottomPadding = deckH + RAIL_HEIGHT + 76.dp
                 )
             }
@@ -1371,35 +1491,51 @@ private fun Modifier.previewGestures(
     readPan: () -> Offset,
     onTransform: (zoomFactor: Float, panDelta: Offset) -> Unit,
     onDoubleTapToggle: (Offset) -> Unit,
+    pickMode: Boolean = false,
+    onPick: ((Offset) -> Unit)? = null,
+    onParamAdjust: ((Float) -> Unit)? = null,
+    onParamDragStart: () -> Unit = {},
+    onParamDragEnd: () -> Unit = {},
     onBrushStroke: (Float, Float) -> Unit,
     onInpaintStroke: (Float, Float) -> Unit,
-    onPressChanged: (Boolean) -> Unit,
-    /**
-     * 点哪修哪（§D）：画面上的单击落点（组件坐标）。
-     *
-     * 传 `null` = 关闭拾取（没有对象蒙版时）。
-     * ⚠️ 这是**第一击**就回调、不等双击超时 —— 延迟 300ms 会让「点一下」有明显滞后感。
-     * 代价是「双击缩放的第一击也会拾取一次」，这是自觉的取舍：拾取是幂等的，
-     * 而用户双击放大时看到的选区变化正好告诉他「点到了哪个对象」。
-     */
-    onPick: ((Offset) -> Unit)? = null
-): Modifier = pointerInput(retouchTool, boxPx, contentSize) {
+    onPressChanged: (Boolean) -> Unit
+): Modifier = pointerInput(retouchTool, boxPx, contentSize, pickMode, onParamAdjust != null) {
     val slopPx = 8.dp.toPx()
-    var lastTapUp = 0L
+    val scope = this
     awaitEachGesture {
         val first = awaitFirstDown(requireUnconsumed = false)
         first.consume()
         var mode = 0
         var dragged = false
-        // 查看模式：按下即看原图（保持既有语义，抬起/进入双指时还原）。
-        if (retouchTool == "none") onPressChanged(true)
+        var paramDragging = false
+        var comparing = false
+        var pressJob: Job? = null
+        // 长按（350ms 未移动）→ 看原图；横拖 → 调参（若可用）。二者互斥、先到先得。
+        // 拾取模式期间长按让位（单击 = 命中测试）。
+        if (retouchTool == "none" && !pickMode) {
+            pressJob = scope.launch {
+                delay(LONG_PRESS_MS)
+                if (!dragged && !paramDragging && !comparing) {
+                    comparing = true
+                    onPressChanged(true)
+                }
+            }
+        }
         try {
             while (true) {
                 val event = awaitPointerEvent()
                 val pressed = event.changes.filter { it.pressed }
                 if (pressed.isEmpty()) break
                 if (pressed.size >= 2) {
-                    if (mode != 2 && retouchTool == "none") onPressChanged(false)
+                    pressJob?.cancel()
+                    if (comparing) {
+                        comparing = false
+                        onPressChanged(false)
+                    }
+                    if (paramDragging) {
+                        paramDragging = false
+                        onParamDragEnd()
+                    }
                     mode = 2
                     val zf = event.calculateZoom()
                     val pd = event.calculatePan()
@@ -1427,8 +1563,28 @@ private fun Modifier.previewGestures(
                             onTransform(1f, delta)
                             dragged = true
                             c.consume()
+                        } else if (!pickMode && onParamAdjust != null &&
+                            abs(delta.x) >= abs(delta.y)
+                        ) {
+                            // —— 双通道：横拖调参（位移方向锁定一次即成立，竖拖不触发）——
+                            pressJob?.cancel()
+                            if (comparing) {
+                                comparing = false
+                                onPressChanged(false)
+                            }
+                            if (!paramDragging) {
+                                paramDragging = true
+                                onParamDragStart()
+                            }
+                            onParamAdjust(delta.x)
+                            dragged = true
+                            c.consume()
                         } else {
-                            // 未放大时的单指拖动：超过 slop 才算「拖过」（微抖不算，别误杀 tap）。
+                            pressJob?.cancel()
+                            if (comparing) {
+                                comparing = false
+                                onPressChanged(false)
+                            }
                             if ((c.position - first.position).getDistance() > slopPx) dragged = true
                         }
                     }
@@ -1436,23 +1592,30 @@ private fun Modifier.previewGestures(
                 }
             }
         } finally {
-            if (retouchTool == "none") onPressChanged(false)
+            pressJob?.cancel()
+            if (comparing) {
+                comparing = false
+                onPressChanged(false)
+            }
+            if (paramDragging) onParamDragEnd()
         }
         // —— 抬指判定：没拖过、没进过多指 ⇒ 是一次 tap ——
-        if (!dragged) {
+        if (!dragged && !paramDragging) {
             if (retouchTool == "blemish") {
                 pointToContentNorm(first.position, boxPx, contentSize, readZoom(), readPan())
                     ?.let { onInpaintStroke(it.first, it.second) }
             } else if (retouchTool == "none") {
-                val now = System.currentTimeMillis()
-                if (now - lastTapUp < DOUBLE_TAP_MS) {
-                    onDoubleTapToggle(first.position)
-                    lastTapUp = 0L
-                } else {
-                    lastTapUp = now
-                    // 点哪修哪（§D）：**第一击**即拾取，不等双击超时。
-                    // 只在不处于画笔 / 祛瑕工具时生效（那两种工具的单击/拖动有自己的语义）。
+                if (pickMode) {
+                    // 拾取模式：单击即命中测试（双击缩放在此期间让位）
                     onPick?.invoke(first.position)
+                } else {
+                    val now = System.currentTimeMillis()
+                    if (now - lastTapUp < DOUBLE_TAP_MS) {
+                        onDoubleTapToggle(first.position)
+                        lastTapUp = 0L
+                    } else {
+                        lastTapUp = now
+                    }
                 }
             }
         } else {
@@ -1532,11 +1695,16 @@ internal fun panAnchorAtPoint(
  * One-Surface 下固定在 Deck + Rail 之上（[bottomPadding] 由调用方按当前 Deck 档位传入）。
  */
 @Composable
-private fun BoxScope.PreviewNotes(autoMaskNote: String, liquifyNote: String, bottomPadding: Dp) {
+private fun BoxScope.PreviewNotes(
+    autoMaskNote: String,
+    liquifyNote: String,
+    pickNote: String,
+    bottomPadding: Dp
+) {
     var visible by remember { mutableStateOf(false) }
 
-    LaunchedEffect(autoMaskNote, liquifyNote) {
-        if (autoMaskNote.isEmpty() && liquifyNote.isEmpty()) return@LaunchedEffect
+    LaunchedEffect(autoMaskNote, liquifyNote, pickNote) {
+        if (autoMaskNote.isEmpty() && liquifyNote.isEmpty() && pickNote.isEmpty()) return@LaunchedEffect
         visible = true
         delay(NOTE_VISIBLE_MS)
         visible = false
@@ -1557,6 +1725,7 @@ private fun BoxScope.PreviewNotes(autoMaskNote: String, liquifyNote: String, bot
         ) {
             if (autoMaskNote.isNotEmpty()) CapsuleNote(autoMaskNote)
             if (liquifyNote.isNotEmpty()) CapsuleNote(liquifyNote)
+            if (pickNote.isNotEmpty()) CapsuleNote(pickNote)
         }
     }
 }

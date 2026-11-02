@@ -48,6 +48,7 @@ import com.hifn.pixelcake.core.edit.preset.Presets
 import com.hifn.pixelcake.core.edit.retouch.RetouchLayer
 import com.hifn.pixelcake.core.ml.MlFaceProvider
 import com.hifn.pixelcake.core.ml.MlMaskProvider
+import com.hifn.pixelcake.core.ml.ObjectMasks
 import com.hifn.pixelcake.diag.DebugLog
 import com.hifn.pixelcake.ui.editor.EditorScreen
 import com.hifn.pixelcake.ui.editor.EditorStatus
@@ -174,15 +175,21 @@ private fun AppRoot(settings: AppSettings) {
     // 渲染协程的首帧是用户真正在等的东西（几百毫秒），不该被这次探测（GPU ≈70ms / CPU ≈218ms）
     // 推后。两者并发进入时，`MlMaskProvider` 的 `@Synchronized` 会把它们串行化，
     // 后到的那个命中缓存 —— 无论谁先到，结果都只有一次推理。
+    // 「点哪修哪」的命中测试数据源：探测 effect 顺手把 ObjectMasks 实例存下（同一份概率缓存，
+    // 不多花一次推理）。换图 / 探测失败时置 null，拾取入口随之隐藏。
+    var objectMasks by remember { mutableStateOf<ObjectMasks?>(null) }
+
     LaunchedEffect(imported) {
         val src = imported ?: return@LaunchedEffect
         objectScopesAvailable = false
+        objectMasks = null
         val key = mlCacheKey(srcUri, src.bitmap.width, src.bitmap.height, imageEpoch.get())
-        val ok = withContext(Dispatchers.Default) {
-            MlMaskProvider.objectMasksFor(context, src.bitmap, key) != null
+        val masks = withContext(Dispatchers.Default) {
+            MlMaskProvider.objectMasksFor(context, src.bitmap, key)
         }
-        objectScopesAvailable = ok
-        DebugLog.i(DebugLog.TAG_ML, "object scopes probed", mapOf("available" to ok))
+        objectScopesAvailable = masks != null
+        objectMasks = masks
+        DebugLog.i(DebugLog.TAG_ML, "object scopes probed", mapOf("available" to (masks != null)))
     }
 
     var rendered by remember { mutableStateOf<Bitmap?>(null) }
@@ -660,6 +667,7 @@ private fun AppRoot(settings: AppSettings) {
                     presetThumbs = presetThumbs,
                     // 对象作用域（批次 5）：可用性来自上面的预热探测；层列表是编辑状态的一部分。
                     objectScopesAvailable = objectScopesAvailable,
+                    objectMasks = objectMasks,
                     layers = layers,
                     canUndo = history.canUndo,
                     canRedo = history.canRedo,
