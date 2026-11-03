@@ -86,6 +86,7 @@ import androidx.compose.ui.unit.sp
 import com.hifn.pixelcake.core.decode.ExportFormat
 import com.hifn.pixelcake.core.edit.EditParams
 import com.hifn.pixelcake.core.edit.Histogram
+import com.hifn.pixelcake.core.edit.lerped
 import com.hifn.pixelcake.core.edit.ObjectLayer
 import com.hifn.pixelcake.core.edit.ObjectScope
 import com.hifn.pixelcake.core.edit.RetouchState
