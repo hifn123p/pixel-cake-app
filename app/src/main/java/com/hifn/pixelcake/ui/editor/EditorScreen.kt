@@ -286,6 +286,7 @@ fun EditorScreen(
     onExport: () -> Unit,
     onExportFormatChange: (ExportFormat) -> Unit = {},
     onCancelExport: () -> Unit = {},
+    onAutoEnhance: (Triple<FloatArray, FloatArray, FloatArray>?) -> Unit = {},
     jpegQuality: Int = 92,
     onBack: () -> Unit
 ) {
@@ -310,6 +311,13 @@ fun EditorScreen(
     var selection by remember { mutableStateOf(PanelSelection()) }
     var showExport by remember { mutableStateOf(false) }
     var dragging by remember { mutableStateOf(false) }
+    // 强度环（UI 3.0 §F）：当前预设的强度（0..1）；切预设时重置为 1。
+    var presetAmount by remember(activePresetId) { mutableStateOf(1f) }
+    val onPresetAmount: (Float) -> Unit = { a ->
+        presetAmount = a
+        val base = presets.firstOrNull { it.id == activePresetId }?.params
+        if (base != null) onParamChange(base.lerped(a))
+    }
     // 「点哪修哪」拾取模式（UI 3.0 §D）：作用域行的准星按钮进入；
     // 激活期间照片单击 = 命中测试选作用域（双击缩放在此期间让位）。
     var pickActive by remember { mutableStateOf(false) }
@@ -747,6 +755,8 @@ fun EditorScreen(
                             splitCompare = !splitCompare
                             if (splitCompare) showOriginal = false
                         },
+                        onAutoEnhance = { onAutoEnhance(histogram) },
+                        histogramReady = histogram != null,
                         onExport = { showExport = true }
                     )
                 }
@@ -839,6 +849,8 @@ fun EditorScreen(
                                     activeScope = scope,
                                     activeLayer = activeLayer,
                                     presetThumbs = presetThumbs,
+                                    presetAmount = presetAmount,
+                                    onPresetAmount = onPresetAmount,
                                     // 与直方图条**同一份**数据：曲线页要把它垫在曲线底下（UI 3.0 §E），
                                     // 两处各算一次会得到两个形状不同的分布，而它们会同屏可见。
                                     histogram = histogram,
@@ -1238,6 +1250,8 @@ private fun EditorTopBar(
     onToggleCompare: () -> Unit,
     splitCompare: Boolean,
     onToggleSplit: () -> Unit,
+    histogramReady: Boolean = false,
+    onAutoEnhance: () -> Unit = {},
     onExport: () -> Unit
 ) {
     ChromeSkin(lightChrome) {
@@ -1281,6 +1295,13 @@ private fun EditorTopBar(
                         label = "分割对比",
                         selected = splitCompare,
                         onClick = onToggleSplit
+                    )
+                    Spacer(Modifier.width(Spacing.s))
+                    IconAction(
+                        def = AppIcons.Wand,
+                        label = "自动增强",
+                        enabled = histogramReady,
+                        onClick = onAutoEnhance
                     )
                     Spacer(Modifier.width(Spacing.s))
                     ExportPill(enabled = !exporting, exporting = exporting, onClick = onExport)

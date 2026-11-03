@@ -333,6 +333,8 @@ fun ParamPanel(
     histogram: Triple<FloatArray, FloatArray, FloatArray>? = null,
     // 预设 id → 缩略图（由上层按**原图**渲染一次，见 `MainActivity.buildPresetThumbs`）。缺失即占位。
     presetThumbs: Map<String, Bitmap> = emptyMap(),
+    presetAmount: Float = 1f,
+    onPresetAmount: (Float) -> Unit = {},
     onSelectionChange: (PanelSelection) -> Unit,
     onParamChange: (EditParams) -> Unit,
     onParamCommit: () -> Unit,
@@ -417,7 +419,8 @@ fun ParamPanel(
 
                 EditorCategory.Preset -> PresetParams(
                     presets, activePresetId, presetThumbs, onPreset,
-                    selection.presetTab, params, onParamChange, onParamCommit, onDraggingChange
+                    selection.presetTab, params, onParamChange, onParamCommit, onDraggingChange,
+                    presetAmount, onPresetAmount
                 )
             }
         }
@@ -1176,7 +1179,9 @@ private fun PresetParams(
     params: EditParams,
     onParamChange: (EditParams) -> Unit,
     onCommit: () -> Unit,
-    onDraggingChange: (Boolean) -> Unit
+    onDraggingChange: (Boolean) -> Unit,
+    presetAmount: Float = 1f,
+    onPresetAmount: (Float) -> Unit = {}
 ) {
     when (tab) {
         PresetTab.Style -> {
@@ -1188,6 +1193,19 @@ private fun PresetParams(
                 thumb = { presetThumbs[it.id] },
                 onSelect = onPreset
             )
+            // 强度环（UI 3.0 §F）：只在套了预设时显示。改量 = 参数栈从基座等比回退。
+            if (activePresetId != "none") {
+                ParamSlider(
+                    label = "强度",
+                    value = presetAmount,
+                    valueRange = 0f..1f,
+                    step = 0.05f,
+                    format = { "%.0f%%".format(it * 100) },
+                    onValueChange = onPresetAmount,
+                    onValueChangeFinished = onCommit,
+                    onDraggingChange = onDraggingChange,
+                )
+            }
             Text(
                 if (activePresetId == "none") {
                     "缩略图按「当前照片」渲染，所以每个预设的效果是所见即所得。" +

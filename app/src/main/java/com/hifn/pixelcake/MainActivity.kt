@@ -33,7 +33,9 @@ import com.hifn.pixelcake.core.decode.Exporter
 import com.hifn.pixelcake.core.edit.BeautyParams
 import com.hifn.pixelcake.core.edit.EditEngine
 import com.hifn.pixelcake.core.edit.EditHistory
+import com.hifn.pixelcake.core.edit.AutoEnhance
 import com.hifn.pixelcake.core.edit.EditParams
+import com.hifn.pixelcake.core.edit.lerped
 import com.hifn.pixelcake.core.edit.EditSnapshot
 import com.hifn.pixelcake.core.edit.FullMask
 import com.hifn.pixelcake.core.edit.InpaintStroke
@@ -983,6 +985,19 @@ private fun AppRoot(settings: AppSettings) {
                                 DebugLog.TAG_EDIT, "export",
                                 mapOf("ok" to (exportedUri != null), "tier" to label) + memorySnapshot()
                             )
+                        }
+                    },
+                    onAutoEnhance = { h ->
+                        if (h != null) {
+                            scope.launch {
+                                val suggestion = withContext(Dispatchers.Default) { AutoEnhance.suggest(h) }
+                                activePresetId = "none"
+                                params = suggestion
+                                history.push(EditSnapshot(suggestion, retouch, layers))
+                                status = EditorStatus(StatusKind.Info, "已自动增强")
+                                DebugLog.i(DebugLog.TAG_EDIT, "auto enhance", mapOf(
+                                    "ev" to suggestion.exposureEv, "c" to suggestion.contrast))
+                            }
                         }
                     },
                     onExportFormatChange = {

@@ -120,6 +120,11 @@ object AppIcons {
         IconPath("M7.5,12h2M14.5,12h2"),
     ))
     /** 准星（「点哪修哪」拾取入口：作用域行尾的 36dp 按钮）。 */
+    /** 魔法棒（「自动增强」入口：顶栏，启发式 v1）。 */
+    val Wand = IconDef(listOf(
+        IconPath("M4,20L14.5,9.5"),
+        IconPath("M17,3l0.9,2.1L20,6l-2.1,0.9L17,9l-0.9,-2.1L14,6l2.1,-0.9Z", fill = true),
+    ))
     val Target = IconDef(listOf(
         IconPath("M7,12a5,5 0 1,0 10,0a5,5 0 1,0 -10,0Z"),
         IconPath("M12,2.5v4M12,17.5v4M2.5,12h4M17.5,12h4"),
