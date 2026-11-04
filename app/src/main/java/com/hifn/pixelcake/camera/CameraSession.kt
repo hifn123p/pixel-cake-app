@@ -59,6 +59,25 @@ class CameraSession private constructor(
 
     suspend fun objectHandles(storageId: Int): HandleQuery = io.withLock { queryHandles(storageId) }
 
+    /** 查询设备属性（电量 / ISO / 光圈等）。返回 u16 值（模型端解析），失败 null。 */
+    suspend fun getDeviceProp(propCode: Int): Int? = io.withLock {
+        withContext(Dispatchers.IO) {
+            val r = transport.execute(PtpProtocol.OP_GET_DEVICE_PROP_VALUE, propCode)
+            if (!r.ok || r.data == null || r.data.size < 2) return@withContext null
+            (r.data[0].toInt() and 0xFF) or ((r.data[1].toInt() and 0xFF) shl 8)
+        }
+    }
+
+    /** 系留仪表盘的快照：电量 + 存储 + 曝光参数（一次调用，不逐个查询）。 */
+    suspend fun tetherSnapshot(): Map<String, String> {
+        val props = mapOf("battery" to 0x5001, "iso" to 0x5007, "fNumber" to 0x500D)
+        val out = mutableMapOf<String, String>()
+        for ((name, code) in props) {
+            try { getDeviceProp(code)?.let { out[name] = it.toString() } } catch (_: Exception) {}
+        }
+        return out
+    }
+
     suspend fun objectInfo(handle: Int): PtpObjectInfo? = io.withLock { readObjectInfo(handle) }
 
     /**

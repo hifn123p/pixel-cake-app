@@ -54,6 +54,13 @@ object PtpProtocol {
     const val OP_GET_OBJECT_INFO = 0x1008
     const val OP_GET_OBJECT = 0x1009
 
+    // ── DevicePropCode（Sony A7C II 常用）──
+    const val DP_BATTERY_LEVEL = 0x5001
+    const val DP_EXPOSURE_INDEX = 0x5007 // ISO
+    const val DP_F_NUMBER = 0x500D       // 光圈
+    const val DP_EXPOSURE_TIME = 0x500D  // 快门（秒 × 10⁴）
+    const val OP_GET_DEVICE_PROP_VALUE = 0x1015
+
     // ---------------- ResponseCode ----------------
     const val RC_OK = 0x2001
     const val RC_GENERAL_ERROR = 0x2002
@@ -93,7 +100,8 @@ object PtpProtocol {
         OP_GET_NUM_OBJECTS,
         OP_GET_OBJECT_HANDLES,
         OP_GET_OBJECT_INFO,
-        OP_GET_OBJECT
+        OP_GET_OBJECT,
+        OP_GET_DEVICE_PROP_VALUE
     )
 
     fun hasDataPhase(operationCode: Int): Boolean = operationCode in DATA_PHASE_OPS
