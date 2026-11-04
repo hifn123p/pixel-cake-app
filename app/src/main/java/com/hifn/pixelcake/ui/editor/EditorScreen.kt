@@ -19,6 +19,7 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculatePan
 import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -543,7 +544,7 @@ fun EditorScreen(
             val dispW = fit.width * previewZoom
             val dispH = fit.height * previewZoom
             val clampedPan = clampPreviewPan(
-                previewPan, boxPx.width.toFloat(), boxPx.height.toFloat(), dispW, dispH
+                previewPan, photoBoxSize.width.toFloat(), photoBoxSize.height.toFloat(), dispW, dispH
             )
             if (clampedPan != previewPan) previewPan = clampedPan
 
@@ -573,10 +574,7 @@ fun EditorScreen(
                 }
             } else null
 
-            // ⚠️ 可视区约束（用户反馈：Deck 挡住照片调不了）：
-            // padding 把照片 fit 区域限制在顶栏/直方图以下、Deck 以上，
-            // backdrop 仍然铺满全屏（One-Surface 质感不变），但照片本身不再被 chrome 遮挡。
-            // onSizeChanged 在 padding 之后 ⇒ photoBoxSize 就是真正的可视区域尺寸。
+            // 可视区域尺寸（在 fit 计算之前声明，避免前向引用）
             var photoBoxSize by remember { mutableStateOf(IntSize.Zero) }
             val photoTopPad = 96.dp // statusbar + topbar + histogram（近似值，onSizeChanged 会给准确值）
             val photoBottomPad = deckH + RAIL_HEIGHT + 16.dp
@@ -601,7 +599,7 @@ fun EditorScreen(
                             if (f.width > 0f && f.height > 0f) {
                                 val newZoom = if (previewZoom > 1.05f) 1f else DOUBLE_TAP_ZOOM
                                 previewPan = panAnchorAtPoint(
-                                    tap, boxPx.width.toFloat(), boxPx.height.toFloat(),
+                                    tap, photoBoxSize.width.toFloat(), photoBoxSize.height.toFloat(),
                                     f.width, f.height, previewZoom, previewPan, newZoom
                                 )
                                 previewZoom = newZoom
