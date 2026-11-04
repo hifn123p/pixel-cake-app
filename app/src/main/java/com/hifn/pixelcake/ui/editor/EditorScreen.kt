@@ -336,6 +336,8 @@ fun EditorScreen(
     // fit / 缩放补偿都必须用实测值当分母。
     var screenW by remember { mutableStateOf(0) }
     var ownerHeightPx by remember { mutableStateOf(0) }
+    // 照片可视区（除去 chrome 后的区域）—— fit 计算用这个而不是全屏
+    var photoBoxSize by remember { mutableStateOf(IntSize.Zero) }
 
     // 对比基准：优先用上层给的零编辑渲染图（同管线同口径），缺省退回导入预览。
     val compareSource: Bitmap = compareBase ?: original
@@ -574,8 +576,6 @@ fun EditorScreen(
                 }
             } else null
 
-            // 可视区域尺寸（在 fit 计算之前声明，避免前向引用）
-            var photoBoxSize by remember { mutableStateOf(IntSize.Zero) }
             val photoTopPad = 96.dp // statusbar + topbar + histogram（近似值，onSizeChanged 会给准确值）
             val photoBottomPad = deckH + RAIL_HEIGHT + 16.dp
             Box(
