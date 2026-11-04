@@ -92,7 +92,21 @@ fun CameraPanel(
     var presetId by remember { mutableStateOf("none") }
     var progress by remember { mutableStateOf<CameraBatch.Progress?>(null) }
     var batchLines by remember { mutableStateOf(emptyList<String>()) }
+    // —— 系留出片（UI3.0 §J/K/L）——
+    var tetherOn by remember { mutableStateOf(false) }
+    var defaultPresetId by remember { mutableStateOf("portra") }
+    var tetherParams by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    var arrivalLog by remember { mutableStateOf(emptyList<String>()) }
+    var knownHandles by remember { mutableStateOf(setOf<Int>()) }
     val batchCancel = remember { AtomicBoolean(false) }
+    val tetherScope = rememberCoroutineScope()
+
+    // 系留仪表盘快照：连接后拉一次（电量/ISO/光圈）
+    LaunchedEffect(session) {
+        session?.let { s ->
+            tetherParams = s.tetherSnapshot()
+        }
+    }
 
     // 会话常驻 → 离开面板必须兜底释放 USB（HomeScreen 的 LazyColumn 滑出也会触发）。
     DisposableEffect(Unit) {
