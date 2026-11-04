@@ -29,6 +29,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.hifn.pixelcake.ui.components.CardMaterial
 import com.hifn.pixelcake.ui.components.GlassCard
@@ -288,8 +289,7 @@ private fun HeroAction(
         modifier = modifier
             .pressScale(interaction)
             .clip(Radius.card)
-            .background(tint.surface)
-            .border(1.dp, tint.border, Radius.card)
+            .background(Color(0xB8121014))
             .clickable(
                 interactionSource = interaction,
                 indication = null,
@@ -305,6 +305,7 @@ private fun HeroAction(
             size = 19.dp,
             modifier = Modifier.padding(bottom = Spacing.xs)
         )
-        Text(label, style = MaterialTheme.typography.labelSmall, color = Color.White)
+        Text(label, style = MaterialTheme.typography.labelSmall, color = Color.White,
+            fontWeight = FontWeight.Medium)
     }
 }

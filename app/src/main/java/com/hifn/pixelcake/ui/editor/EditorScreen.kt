@@ -528,9 +528,8 @@ fun EditorScreen(
             // 各自消费自己的指针事件；它们之间的空隙（Spacer）事件自然落到本层 ——
             // 这是「空白处照样捏合缩放」的结构性保证。
             val density = LocalDensity.current
-            val boxPx = IntSize(screenW, ownerHeightPx)
             val imagePx = display?.let { IntSize(it.width, it.height) } ?: IntSize.Zero
-            val fit = fitContentRect(boxPx, imagePx)
+            val fit = fitContentRect(photoBoxSize, imagePx)
 
             // 分隔条已退役，但「面板高度变化不牵动已放大的图片」这条不变量仍在：
             // 框尺寸变化时按新旧 fit 之比反向补偿 zoom，绝对显示尺寸恒定。
@@ -553,7 +552,7 @@ fun EditorScreen(
             // 好不容易选中的作用域是更坏的体验（语义与 ObjectMasks.scopeAt 一致）。
             val masksNow = rememberUpdatedState(objectMasks)
             val selNow = rememberUpdatedState(selectScope)
-            val boxNow = rememberUpdatedState(boxPx)
+            val boxNow = rememberUpdatedState(photoBoxSize)
             val imgNow = rememberUpdatedState(imagePx)
             val zoomNow = rememberUpdatedState(previewZoom)
             val panNow = rememberUpdatedState(previewPan)
@@ -574,13 +573,22 @@ fun EditorScreen(
                 }
             } else null
 
+            // ⚠️ 可视区约束（用户反馈：Deck 挡住照片调不了）：
+            // padding 把照片 fit 区域限制在顶栏/直方图以下、Deck 以上，
+            // backdrop 仍然铺满全屏（One-Surface 质感不变），但照片本身不再被 chrome 遮挡。
+            // onSizeChanged 在 padding 之后 ⇒ photoBoxSize 就是真正的可视区域尺寸。
+            var photoBoxSize by remember { mutableStateOf(IntSize.Zero) }
+            val photoTopPad = 96.dp // statusbar + topbar + histogram（近似值，onSizeChanged 会给准确值）
+            val photoBottomPad = deckH + RAIL_HEIGHT + 16.dp
             Box(
                 modifier = Modifier
                     .fillMaxSize()
+                    .padding(top = photoTopPad, bottom = photoBottomPad)
+                    .onSizeChanged { photoBoxSize = it }
                     .clipToBounds()
                     .previewGestures(
                         retouchTool = retouchTool,
-                        boxPx = boxPx,
+                        boxPx = photoBoxSize,
                         contentSize = imagePx,
                         readZoom = { previewZoom },
                         readPan = { previewPan },
@@ -589,7 +597,7 @@ fun EditorScreen(
                             previewPan += panDelta
                         },
                         onDoubleTapToggle = { tap ->
-                            val f = fitContentRect(boxPx, imagePx)
+                            val f = fitContentRect(photoBoxSize, imagePx)
                             if (f.width > 0f && f.height > 0f) {
                                 val newZoom = if (previewZoom > 1.05f) 1f else DOUBLE_TAP_ZOOM
                                 previewPan = panAnchorAtPoint(
@@ -780,15 +788,43 @@ fun EditorScreen(
                 // 照片区：weight 吃掉剩余高度（照片本体在上面第一层，全屏铺底）。
                 Spacer(Modifier.weight(1f))
 
-                // ———— Deck 控制台（固定高 S/L）————
+                // ———— Deck 拖拽调高手柄（用户可自由调整 Deck 高度）————
+                // 上拖 = Deck 变高（更多参数可见），下拖 = 变矮（更多照片可见）。
+                // 拖拽只改 deckHOverride，不触发动画（跟手）。
+                var deckHOverride by remember { mutableStateOf<Dp?>(null) }
+                val deckDragHandle = Modifier
+                    .fillMaxWidth()
+                    .height(20.dp)
+                    .pointerInput(Unit) {
+                        detectVerticalDragGestures { change, dragAmount ->
+                            change.consume()
+                            val current = deckHOverride ?: deckH
+                            deckHOverride = (current - dragAmount.toDp())
+                                .coerceIn(160.dp, 520.dp)
+                        }
+                    }
+                Box(
+                    modifier = deckDragHandle,
+                    contentAlignment = Alignment.Center
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .width(36.dp)
+                            .height(4.dp)
+                            .clip(Radius.pill)
+                            .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f))
+                    )
+                }
+
+                // ———— Deck 控制台（高度可调）————
                 //
-                // 实心容器（零 blur —— 满屏玻璃是掉帧第一来源，§6.2），顶部 20dp 圆角。
+                // 实心容器（零 blur），顶部 20dp 圆角。高度由拖拽手柄或分类切换决定。
                 // 作用域行 / 分组 chips 钉在滚动之外；内容区滚动兜底（4 滑块的组）。
                 // ⚠️ 这里是参数的一部分（决定「改谁 / 改什么」），**不**随 chrome 淡出。
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(deckH)
+                        .height(deckHOverride ?: deckH)
                         .background(
                             MaterialTheme.colorScheme.surface,
                             RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
