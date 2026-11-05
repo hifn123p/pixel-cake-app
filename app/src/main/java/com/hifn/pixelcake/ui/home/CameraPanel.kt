@@ -366,6 +366,22 @@ fun CameraPanel(
                 )
             }
 
+            // —— 相机参数行（系留仪表盘 §J）——
+            if (tetherParams.isNotEmpty()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    tetherParams.forEach { (name, value) ->
+                        Text(
+                            "$name: $value",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+
             Row(
                 modifier = Modifier.fillMaxWidth().padding(top = Spacing.s),
                 horizontalArrangement = Arrangement.spacedBy(Spacing.s)

@@ -9,7 +9,7 @@
 [![targetSdk](https://img.shields.io/badge/targetSdk-36-blue)](https://developer.android.com)
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.2.21-7F52FF?logo=kotlin)](https://kotlinlang.org)
 [![Compose](https://img.shields.io/badge/Jetpack%20Compose-Material3%204285F4?logo=jetpackcompose)](https://developer.android.com/jetpack/compose)
-[![Version](https://img.shields.io/badge/version-v0.5.0-success)](https://github.com/hifn123p/pixel-cake-app/releases)
+[![Version](https://img.shields.io/badge/version-v0.6.3-success)](https://github.com/hifn123p/pixel-cake-app/releases)
 [![Build](https://img.shields.io/badge/Build-GitHub%20Actions-2088FF?logo=githubactions)](https://github.com/features/actions)
 [![License](https://img.shields.io/badge/License-TBD-lightgrey)](#许可)
 
@@ -45,11 +45,13 @@
 |---|---|
 | 🖼 导入与解码 | Photo Picker / SAF；JPEG、HEIF；Sony ARW 内嵌全分辨率预览（纯 Kotlin TIFF/IFD 链遍历）与 LibRaw 全量解码（16-bit 线性） |
 | 🎚 非破坏编辑 | 白平衡、明暗（曝光/对比/高光/阴影/白点/黑点/高光恢复）、颜色（自然饱和/饱和/去雾/HSL 八通道/彩色分级）、曲线（亮度 + R/G/B 分通道）、细节与效果（锐化/降噪/清晰度/纹理/暗角/颗粒）、LUT；撤销/重做、长按对比 |
+| 🪄 **UI 3.0「Aperture」** | **One-Surface** 全屏画布（照片不被遮挡）；**双通道调节**（照片横拖调参 + deck 滑块同步，HUD 46sp 巨大读数）；**点哪修哪**（单击命中分割蒙版选作用域）；**强度环**（预设参数栈整体向中性回退）；**自动增强**（直方图启发式，零模型）；**历史丝带**（步骤跳转）；**分割对比**（逐列修前修后）；**导出回执**（尺寸/格式/预设名）；曲线本体（deck 内嵌可拖曲线+直方图底）；暖石墨+琥珀主题；自适应图标三层 |
 | 🔍 预览缩放 | 双指缩放（≤8×）与平移、双击 2.5×↔1×（以点击处为锚）、画笔模式下单指恒为涂抹、未放大时按住看原图；已放大时显示「已放大 N% · 复位」胶囊 |
 | 🎨 调色预设 | **44 套**分类预设（参数栈），按当前照片生成真实缩略图；套用后可继续微调 |
 | 🧴 人像精修 | 皮肤画笔与 AI 肤色蒙版、磨皮、美型液化（人脸锚点）、祛瑕、追色 |
 | 🪄 对象作用域调色 | **批次 5**：同一套调色参数可作用在「整图」或识别到的对象（8 个作用域 = 模型原生 6 类 + 2 个派生），图层栈可叠加 |
 | 🤖 端侧 ML | LiteRT `CompiledModel`（GPU→CPU 级联、永不崩的降级链）：6 类人体分割染色蒙版 + 人脸框/关键点，模型随包内置 |
+| 📸 **系留出片 v2** | 连接 Sony A7C II → 仪表盘（电量/存储/曝光）→ **拍摄到达流**（轮询新对象→自动下载→套默认修图参数→导出相册，3s 轮询）→ 会话批量 |
 | 📷 相机直连 | Sony USB PTP 探测、浏览、下载（256KB 流式分块）；单张导入 + 批量套预设导出，导完即删 |
 | 💾 导出 | JPEG / PNG（可选画质）；RAW 全分辨率分带渲染，非 RAW 按设备档位选分辨率；导出成功后按钮切换形态 |
 | 📊 工具 | 曲线编辑器（黑场/中间调/白场锚点）+ **RGB 三通道直方图**（明暗页，叠加显示） |
@@ -141,6 +143,10 @@ com.hifn.pixelcake
 
 | 版本 | 内容 |
 |---|---|
+| `v0.6.2` | **UI 3.0「Aperture」全量改版**：One-Surface 编辑器 + 双通道调节 + 点哪修哪 + 强度环 + 自动增强 + 历史丝带 + 分割对比 + 导出回执 + 曲线本体 + 系留出片 v2 + 暖石墨琥珀主题 + 自适应图标 |
+| `v0.6.1` | PTP GetDevicePropValue 扩展（电量/ISO/光圈） |
+| `v0.6.0` | UI 3.0 架构 + 版本抬升 |
+| `v0.5.1` | PTP GetDevicePropValue 预备 + 版本号对齐 |
 | `v0.5.0` | **第二轮全量审查**（3 个 P1：`RawLinearSource` 的 use-after-free 互斥、`raw_bridge` 缓冲校验的 32 位截断、ARW 预览候选超限回退；另 12 个 P2 含两个 `Histogram` 真 bug）+ **删除 `ui/editor/curves/` 死代码**（3 文件）+ 3 个新测试；**UI v2.1**：预览缩放（双指 ≤8×/ 双击 2.5× / 按住看原图，单协程手势状态机）、调色菜单 7→6 重排、RGB 三通道直方图、尺寸回调（字阶 28→24 等） |
 | `v0.4.7` | **全量代码审查修复**：21 个 P0（撤销丢对象层、绿/蓝曲线静默跳过、颗粒映射反向、JPEG 与 RAW 阶段顺序不一致、导出 0 字节图、native 句柄竞态、USB close 竞态、PTP 失步、19 个美容滑块无效果等）+ 性能批次（逐像素 64 位除法、900MB 分带垃圾、131MB 无谓重采样）+ UI 规范修复 + 新增 13 条回归断言 |
 | `v0.4.6` | ML 缓存键改为**会话代次**（修「同 URI 更新后误用旧人脸/分割」）+ 渲染提交判据补 `completed`；chip/预设改按宽度换行；控件尺寸回调（一级分类 48dp、滑块拇指 20dp） |
