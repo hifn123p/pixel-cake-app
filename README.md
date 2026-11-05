@@ -37,6 +37,32 @@
 
 ---
 
+## 📱 截图
+
+> 真机截图待补充。设计稿参见 [`docs/UI3.0.html`](docs/UI3.0.html)（14 屏 + 2 横屏 + 动效演示）。
+
+| 调色台 | 编辑器 | 系留仪表盘 |
+|---|---|---|
+| *待补充* | *待补充* | *待补充* |
+
+---
+
+## 🚀 快速开始
+
+```bash
+# 克隆（含 LibRaw 子模块）
+git clone --recurse-submodules https://github.com/hifn123p/pixel-cake-app.git
+
+# Android Studio 打开项目根目录，Sync + Run（真机 Android 16+）
+# 或命令行构建：
+./gradlew assembleDebug
+```
+
+> ⚠️ 本仓库 CI 是唯一编译器，本地不装 Android 开发环境。
+> 推送到 main 即自动触发 CI（单测 → Lint → 签名 APK → Release）。
+
+---
+
 ## ✨ 特性
 
 ### 已实现
@@ -136,6 +162,7 @@ com.hifn.pixelcake
 | **批次 1~5** | 调色参数体系（81 项）+ 对象作用域图层 | ✅ |
 | **UI v2.0** | 玻璃化的工作台外壳与五段式编辑器 | ✅ |
 | **UI v2.1** | 预览缩放/平移/双击 + 调色菜单重排（7→6）+ RGB 直方图 + 尺寸回调 | ✅ |
+| **UI 3.0** | **「Aperture」全量改版**（One-Surface / 双通道 / 点哪修哪 / 强度环 / 自动增强 / 历史丝带 / 分割对比 / 导出回执 / 曲线本体 / 系留出片 v2） | ✅ |
 | **P2** | Sony USB PTP 传输与批量预设处理 | ✅（真机兼容性 / liveview 仍需验证） |
 | **P3** | NAS Docker 化 + HTTP API，单张/批量后台修图 | 🔜 |
 
@@ -154,7 +181,7 @@ com.hifn.pixelcake
 | `v0.4.4` | UI Redesign v2.0 |
 | `v0.4.0` / `v0.4.1` | 调色批次 1~4（81 项）/ 批次 5 对象作用域 |
 
-（`v0.1.0` → `v0.5.0` tag 齐全，Release 页可下载签名 APK。）
+（`v0.1.0` → `v0.6.3` tag 齐全，Release 页可下载签名 APK。）
 
 ---
 
@@ -221,7 +248,11 @@ App 内置调试日志（`diag/DebugLog.kt`）：
 | [`docs/OBJECT_TONE_DESIGN.md`](docs/OBJECT_TONE_DESIGN.md) | 对象作用域调色（批次 5）：作用域全表、数据模型、单趟逐层 lerp、验收方式 |
 | [`docs/PHASE_DESIGN_HISTORY.md`](docs/PHASE_DESIGN_HISTORY.md) | **阶段设计存档**：P1b / P1+ / P2 三阶段设计 + 审查修复台账（`F01~F24` / `R01~R10` / `D01~D10` 编号溯源）。代码 KDoc 直接引用这些编号 |
 | [`docs/Github_CI.md`](docs/Github_CI.md) | 最近一次 CI 运行的完整报告（**每次 CI 后覆盖重写**，工具性文档） |
-| [`docs/ui_preview.html`](docs/ui_preview.html) | 四个界面的静态预览 + token 表（无法本地构建时的版式评审手段） |
+| [`docs/UI3.0.html`](docs/UI3.0.html) | **UI 3.0「Aperture」设计稿**（14 屏 + 2 横屏 + 动效系统 + 性能字号审计）—— 当前 UI 真值 |
+| [`docs/UI2.0.html`](docs/UI2.0.html) | UI 3.0「Studio」备选方案（未被采纳，保留供对比） |
+| [`docs/app_icon.svg`](docs/app_icon.svg) | App 图标资产（自适应三层：背景/前景/单色） |
+| [`docs/ONDEVICE_MODEL_PLAN.md`](docs/ONDEVICE_MODEL_PLAN.md) | **端侧模型规划**：P6/P7 候选模型表 + 体积延迟预算 + 接入架构 |
+| `docs/archive/` | 本机历史存档：P1 之前的 4 份规划稿。**被 `.gitignore` 屏蔽 ⇒ 不上传 GitHub**（仓库内还有一份同名目录的说明写在它自己的 README 里，克隆者看不到） |
 | `docs/archive/` | 本机历史存档：P1 之前的 4 份规划稿。**被 `.gitignore` 屏蔽 ⇒ 不上传 GitHub**（仓库内还有一份同名目录的说明写在它自己的 README 里，克隆者看不到） |
 
 > 三层文档体系：`docs/*_DESIGN.md`（设计决策，入库）→ `docs/ENGINEERING_NOTES.md`（工程纪律）→ 代码 KDoc（实现细节）。

@@ -788,12 +788,12 @@ python .workbuddy/tools/kotlin_gates.py --root app/src/main/java --extra-root ap
 
 | | 每条参数高度 | 3 条 + chips + 提示 + 内边距 |
 |---|---|---|
-| 项目 `ParamSlider@B>（标签行 22dp + M3 Slider 48dp，**两行式**） | ≈70dp | ≈292dp |
-| UI 3.0 的 `.sl@B>（标签与数值同行 + 轨道下一行，**紧凑式**） | ≈44dp | ≈214dp |
-| 规范标称 `S = 168dp@B> | — | **连规范自己的 S 档内容都装不下**（30+32+140+20 = 222dp） |
+| 项目 `ParamSlider`（标签行 22dp + M3 Slider 48dp，**两行式**） | ≈70dp | ≈292dp |
+| UI 3.0 的 `.sl`（标签与数值同行 + 轨道下一行，**紧凑式**） | ≈44dp | ≈214dp |
+| 规范标称 `S = 168dp` | — | **连规范自己的 S 档内容都装不下**（30+32+140+20 = 222dp） |
 
 差值 26dp/条 × 3 条 ≈ 78dp —— 正好是 `248 − 168` 的量级。
-⇒ **Deck 高度不是独立可修项**：先把 `ParamSlider@B> 改成「标签与数值同行」的紧凑形态，
+⇒ **Deck 高度不是独立可修项**：先把 `ParamSlider` 改成「标签与数值同行」的紧凑形态，
 高度才有意义；否则任何高度值都会立刻裁内容（或退回滚动兜底）。
 
 #### 本轮补修的两处真实缺陷（语义色用错场景）
@@ -817,8 +817,8 @@ python .workbuddy/tools/kotlin_gates.py --root app/src/main/java --extra-root ap
 5. **语义色要按「场景 × 生效主题」两维选，不能只按「色相」选。**
    同一枚「成功绿」在浅色页达标、在深色工作台就不达标（3.54:1）。
    ⇒ 代码里**必须**区分「浅色页语义组」与「深色工作台语义组」两套 token，
-   并且**深色场景一律用后者**；选色判据用 `LocalDarkTheme.current@B>（生效主题），
-   **不是** `isSystemInDarkTheme()@B> —— 后者在「编辑页强制深色」时会取错色板。
+   并且**深色场景一律用后者**；选色判据用 `LocalDarkTheme.current`（生效主题），
+   **不是** `isSystemInDarkTheme()` —— 后者在「编辑页强制深色」时会取错色板。
 6. **新增 token 要当场接上，否则就是死代码。**
    `Ws*` 四色定义了却零引用，等于「色板换了但界面没跟上」——
    审计时看到「新旧两套并存」要先问：**哪一套真的在被用？**
@@ -841,7 +841,7 @@ python .workbuddy/tools/kotlin_gates.py --root app/src/main/java --extra-root ap
 2. **Deck 高度随字号缩放放宽**：规范 §06 明文「fontScale 1.0–1.3 全量适配（布局不裁切）；
    **控制台 L 档高度随缩放放宽（330→356dp）**」。
    ⇒ 高度乘以 `1 + (fontScale - 1) × 0.26`（330→356 是 +7.9%，**不是**线性放大）。
-   此前是写死的 `height(deckH)@B>，fontScale 1.3 时滑块行被压住、底部内容被裁
+   此前是写死的 `height(deckH)`，fontScale 1.3 时滑块行被压住、底部内容被裁
    （代码注释里原本写着「列入真机验收」—— 现在不用等了，规范给了确切口径）。
 
 #### 🟡 A 项的完整结论：规范给了**解法**，不是「抄数值」
@@ -863,7 +863,7 @@ python .workbuddy/tools/kotlin_gates.py --root app/src/main/java --extra-root ap
 
 #### 🔴 新发现的规范冲突：**触控热区 26dp vs 48dp**
 
-`ParamSlider@B> 本轮把滑杆收成 26dp 并显式 `LocalMinimumInteractiveComponentEnforcement provides false`。
+`ParamSlider` 本轮把滑杆收成 26dp 并显式 `LocalMinimumInteractiveComponentEnforcement provides false`。
 视觉上对齐 UI3.0（`.sl-track{height:24px}`）—— **但**项目自己的规范明文相反：
 
 - `docs/UI_DESIGN.md` §4.0.8 / §4.0.9：「滑块拇指 20dp（**保留** M3 `Slider` 的 **48dp 拖拽触控热区**）、
