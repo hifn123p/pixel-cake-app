@@ -43,6 +43,17 @@ import com.hifn.pixelcake.camera.CameraSession
 import com.hifn.pixelcake.camera.CameraSessionResult
 import com.hifn.pixelcake.camera.UsbCameraScanner
 import com.hifn.pixelcake.camera.UsbDeviceSummary
+import android.graphics.Bitmap
+import android.net.Uri
+import com.hifn.pixelcake.camera.CameraPhoto
+import com.hifn.pixelcake.camera.CameraPhotoFilter
+import com.hifn.pixelcake.core.decode.Decoder
+import com.hifn.pixelcake.core.decode.ExportFormat
+import com.hifn.pixelcake.core.decode.Exporter
+import com.hifn.pixelcake.core.edit.EditEngine
+import com.hifn.pixelcake.core.edit.RetouchScale
+import com.hifn.pixelcake.core.edit.lerped
+import kotlinx.coroutines.delay
 import com.hifn.pixelcake.core.edit.preset.Presets
 import com.hifn.pixelcake.diag.DebugLog
 import com.hifn.pixelcake.ui.components.GlassCard
@@ -106,6 +117,48 @@ fun CameraPanel(
     LaunchedEffect(session) {
         session?.let { s ->
             tetherParams = s.tetherSnapshot()
+        }
+    }
+
+    // —— 系留轮询（UI3.0 §J/K/L）：检测新拍摄 → 下载 → 套预设 → 导出 ——
+    LaunchedEffect(session, tetherOn, defaultPresetId) {
+        val sn = session ?: return@LaunchedEffect
+        if (!tetherOn) return@LaunchedEffect
+        val preset = Presets.byId(defaultPresetId) ?: return@LaunchedEffect
+        val storageId = sn.storageIds.firstOrNull() ?: return@LaunchedEffect
+        while (tetherOn) {
+            delay(3000)
+            try {
+                val query = sn.objectHandles(storageId)
+                val newH = query.handles.filter { it !in knownHandles }
+                for (h in newH.take(3)) {
+                    val info = sn.objectInfo(h) ?: continue
+                    if (!CameraPhotoFilter.isPhoto(info)) continue
+                    val photo = CameraPhoto(h, info)
+                    knownHandles = knownHandles + h
+                    arrivalLog = arrivalLog + (info.filename + " · 传输中...")
+                    val target = CameraBatch.newSingleTarget(context, photo)
+                    val outcome = sn.download(h, target) { _, _ -> }
+                    if (!outcome.ok) {
+                        arrivalLog = arrivalLog + (info.filename + " · 传输失败")
+                        continue
+                    }
+                    arrivalLog = arrivalLog + (info.filename + " · 套「" + preset.name + "」")
+                    val decoded = Decoder.decodeFullRes(context, Uri.fromFile(target), 2048)
+                    if (decoded == null) {
+                        arrivalLog = arrivalLog + (info.filename + " · 解码失败")
+                        continue
+                    }
+                    val lp = preset.params.lerped(1f)
+                    val lr = preset.retouch.lerped(1f)
+                    val bmp = Bitmap.createBitmap(decoded.bitmap.width, decoded.bitmap.height, Bitmap.Config.ARGB_8888)
+                    EditEngine.renderIntoSrgb(bmp, decoded.bitmap, lp, RetouchScale.toRenderState(lr, bmp.width, bmp.height))
+                    val expUri = Exporter.export(context, bmp, ExportFormat.JPEG, 92)
+                    bmp.recycle()
+                    decoded.bitmap.recycle()
+                    arrivalLog = arrivalLog + (info.filename + if (expUri != null) " · 已导出 ✓" else " · 导出失败")
+                }
+            } catch (_: Exception) { }
         }
     }
 
@@ -266,6 +319,36 @@ fun CameraPanel(
         // ---------------- 已连接：列图 / 拉图 / 批量 ----------------
         val s = session
         if (s != null) {
+            
+            // —— 默认修图参数（§J 系留仪表盘）——
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("默认修图参数", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                Switch(checked = tetherOn, onCheckedChange = { tetherOn = it })
+            }
+            if (tetherOn) {
+                Row(modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf("portra" to "波特拉", "jp" to "日系", "none" to "不套用").forEach { (id, name) ->
+                        FilterChip(
+                            selected = defaultPresetId == id,
+                            onClick = { defaultPresetId = id },
+                            label = { Text(name) }
+                        )
+                    }
+                }
+                if (arrivalLog.isNotEmpty()) {
+                    Column(modifier = Modifier.padding(top = Spacing.s)) {
+                        for (line in arrivalLog.takeLast(5)) {
+                            Text(line, style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+            }
             HorizontalDivider(modifier = Modifier.padding(top = Spacing.m))
 
             Text(
