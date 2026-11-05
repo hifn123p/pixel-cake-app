@@ -43,17 +43,6 @@ import com.hifn.pixelcake.camera.CameraSession
 import com.hifn.pixelcake.camera.CameraSessionResult
 import com.hifn.pixelcake.camera.UsbCameraScanner
 import com.hifn.pixelcake.camera.UsbDeviceSummary
-import android.graphics.Bitmap
-import android.net.Uri
-import com.hifn.pixelcake.camera.CameraPhoto
-import com.hifn.pixelcake.camera.CameraPhotoFilter
-import com.hifn.pixelcake.core.decode.Decoder
-import com.hifn.pixelcake.core.decode.ExportFormat
-import com.hifn.pixelcake.core.decode.Exporter
-import com.hifn.pixelcake.core.edit.EditEngine
-import com.hifn.pixelcake.core.edit.RetouchScale
-import com.hifn.pixelcake.core.edit.lerped
-import kotlinx.coroutines.delay
 import com.hifn.pixelcake.core.edit.preset.Presets
 import com.hifn.pixelcake.diag.DebugLog
 import com.hifn.pixelcake.ui.components.GlassCard
@@ -87,49 +76,6 @@ import java.util.concurrent.atomic.AtomicBoolean
 fun CameraPanel(
     longEdge: Int,
     onOpenLocalFile: (File) -> Unit = {}
-
-    // —— 系留轮询：检测新拍摄 → 自动下载 → 套默认修图参数 → 导出（UI3.0 §J/K/L）——
-    LaunchedEffect(session, tetherOn, defaultPresetId) {
-        val sn = session ?: return@LaunchedEffect
-        if (!tetherOn) return@LaunchedEffect
-        val preset = Presets.byId(defaultPresetId) ?: return@LaunchedEffect
-        val storageId = sn.storageIds.firstOrNull() ?: return@LaunchedEffect
-        while (tetherOn) {
-            delay(3000)
-            try {
-                val query = sn.objectHandles(storageId)
-                val newHandles = query.handles.filter { it !in knownHandles }
-                for (handle in newHandles.take(3)) {
-                    val info = sn.objectInfo(handle) ?: continue
-                    if (!CameraPhotoFilter.isPhoto(info)) continue
-                    val photo = CameraPhoto(handle, info)
-                    knownHandles = knownHandles + handle
-                    arrivalLog = arrivalLog + info.filename + " · 传输中..."
-                    val target = CameraBatch.newSingleTarget(context, photo)
-                    val outcome = sn.download(handle, target) { _, _ -> }
-                    if (!outcome.ok) {
-                        arrivalLog = arrivalLog + info.filename + " · 传输失败"
-                        continue
-                    }
-                    arrivalLog = arrivalLog + info.filename + " · 自动套「" + preset.name + "」"
-                    val decoded = Decoder.decodeFullRes(context, Uri.fromFile(target), 2048)
-                    if (decoded == null) {
-                        arrivalLog = arrivalLog + info.filename + " · 解码失败"
-                        continue
-                    }
-                    val lp = preset.params.lerped(presetAmountSafe.value)
-                    val lr = preset.retouch.lerped(presetAmountSafe.value)
-                    val rendered = Bitmap.createBitmap(decoded.bitmap.width, decoded.bitmap.height, Bitmap.Config.ARGB_8888)
-                    EditEngine.renderIntoSrgb(rendered, decoded.bitmap, lp,
-                        RetouchScale.toRenderState(lr, rendered.width, rendered.height))
-                    val expUri = Exporter.export(context, rendered, ExportFormat.JPEG, 92)
-                    rendered.recycle()
-                    decoded.bitmap.recycle()
-                    arrivalLog = arrivalLog + info.filename + (if (expUri != null) " · 已导出 ✓" else " · 导出失败")
-                }
-            } catch (_: Exception) { }
-        }
-    }
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -330,19 +276,7 @@ fun CameraPanel(
             )
             if (s.storages.isNotEmpty()) {
                 Text(
-                    "存储：${s.storagesSummary()
-
-                // 相机参数（系留仪表盘 §J）
-                if (tetherParams.isNotEmpty()) {
-                    Row(modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        tetherParams.forEach { (name, value) ->
-                            Text("$name: $value",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
-                }}",
+                    "存储：${s.storagesSummary()}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
