@@ -50,3 +50,8 @@ example/
 # 此前只忽略 .ci_token.txt / .ci_*.json，PAT 有入库风险（FIX_LIST F09）。
 .ci_*
 .ci_ghtoken
+
+# CI 应急日志（tee 落在仓库根，不入库）
+lint-debug.log
+unit-tests.log
+assemble-debug.log
