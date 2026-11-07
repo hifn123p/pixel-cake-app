@@ -74,7 +74,10 @@ class PtpTransport private constructor(
         val data: ByteArray?,
         val responseHeader: PtpProtocol.Header?,
         val failure: String?,
-        val elapsedMs: Long
+        val elapsedMs: Long,
+        // E2：Response 负载里的 u32 参数（如 OpenSession 的 SessionID）。
+        // 旧实现解析后丢弃，调用方拿不到 —— 对诊断与会话语义都有用。
+        val responseParams: List<Int> = emptyList()
     ) {
         val ok: Boolean
             get() = failure == null && responseCode == PtpProtocol.RC_OK
@@ -87,7 +90,8 @@ class PtpTransport private constructor(
                 return "${PtpProtocol.operationName(operationCode)} → 传输失败：$failure"
             }
             val dataNote = data?.let { "，data=${it.size}B" } ?: "，无数据"
-            return "${PtpProtocol.operationName(operationCode)} → ${responseName()}$dataNote，${elapsedMs}ms"
+            val paramNote = if (responseParams.isEmpty()) "" else "，params=$responseParams"
+            return "${PtpProtocol.operationName(operationCode)} → ${responseName()}$dataNote$paramNote，${elapsedMs}ms"
         }
 
         companion object {
@@ -139,6 +143,16 @@ class PtpTransport private constructor(
             val container = readContainer(operationCode, txId)
                 ?: return Transaction.failure(operationCode, txId, "数据阶段读取失败（见上一条日志）", System.currentTimeMillis() - started)
             val (header, payload) = container
+            // 事务号校验（E1 修复「校验不对称」的另一半）：响应阶段校验了 txId，
+            // 数据阶段却放行 —— 失步后残留的数据集同样会被当成下一事务的合法数据。
+            if (header.transactionId != txId) {
+                desynced = true
+                return Transaction.failure(
+                    operationCode, txId,
+                    "数据阶段事务号不匹配（期望 $txId，实际 ${header.transactionId}）——会话已失步",
+                    System.currentTimeMillis() - started
+                )
+            }
             if (header.type == PtpProtocol.CONTAINER_RESPONSE) {
                 // 设备在有数据阶段的操作上直接回了错误响应（常见：OperationNotSupported）
                 DebugLog.d(
@@ -179,8 +193,11 @@ class PtpTransport private constructor(
                 System.currentTimeMillis() - started
             )
         }
+        // Response 负载 = 0~5 个 u32 参数（E2）：逐个解出交给调用方。
+        val respPayload = response.second
+        val respParams = (0 until respPayload.size / 4).map { PtpProtocol.readU32(respPayload, it * 4) }
         logTransaction(operationCode, txId, responseCode, data, started)
-        return Transaction(operationCode, txId, responseCode, data, responseHeader, null, System.currentTimeMillis() - started)
+        return Transaction(operationCode, txId, responseCode, data, responseHeader, null, System.currentTimeMillis() - started, respParams)
     }
 
     /** `GetObject` 的流式下载结果。 */
@@ -369,7 +386,10 @@ class PtpTransport private constructor(
         }
         if (payloadLength == 0) return header to ByteArray(0)
         if (payloadLength > MAX_INLINE_BYTES) {
-            // 本阶段只做握手/枚举，数据都很小；>1MiB 说明走错了操作（真正的对象流式下载留待 PoC-4）
+            // 注意（E5 旧注释滞后修正）：`GetObject` 的对象流式下载走 `downloadObject`（按块直写
+            // 文件流，不经本分支）；本上限只约束**内联**数据集（DeviceInfo / StorageIDs /
+            // ObjectHandles 等）。ObjectHandles 每 12 字节一个句柄 ⇒ >1MiB 需要 ~26 万个对象，
+            // 现实碰不到；真触到说明操作码/设备行为异常，放弃并诊断是对的。
             DebugLog.w(
                 DebugLog.TAG_CAMERA, "ptp payload too large",
                 mapOf("op" to PtpProtocol.operationName(operationCode), "bytes" to payloadLength)

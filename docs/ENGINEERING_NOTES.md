@@ -719,7 +719,7 @@ python .workbuddy/tools/kotlin_gates.py --root app/src/main/java --extra-root ap
 | 字阶 | display `28/36 Bold(700)` · title `20/28 SemiBold` · body `15/22 Regular` · label `13/18 Medium` · caption `11/16 Regular` · HUD `46/300 Mono`（数值一律 `tabular-nums`） |
 | 间距 | **只有 4 / 8 / 12 / 16 / 24 / 32 / 48** 七档 |
 | 圆角 | chip `12` / deck `20`（HTML 是 22px，见 9.4）/ sheet `28` / pill `99` |
-| 结构 | One-Surface：顶栏 → 直方图条 → 照片 → Deck → Rail；**Rail 高 58dp** 六工具；Deck 两档 S=168 / L=330 且**永不滚动** |
+| 结构 | One-Surface：顶栏 → 直方图条 → 照片 → Deck → Rail；**Rail 高 58dp** 六工具；Deck 高度按内容预算取 S≈248 / L≈344（「永不滚动」已降级为意图，见 §9.3-A 的账与 Q3 改写） |
 
 ⚠️ 旧 `UI_DESIGN.md` §4.0.9 的字阶（24/16/14/12/11）被 UI 3.0 覆盖；
 `ENGINEERING_NOTES` §2.6 仍写圆角 14/22/40 —— **三方不一致，需一并订正**。
@@ -741,7 +741,7 @@ python .workbuddy/tools/kotlin_gates.py --root app/src/main/java --extra-root ap
 
 | # | 问题 | 为什么不在本轮改 |
 |---|---|---|
-| A | **Deck 高度 248/344dp** vs 规范 168/330dp，且内容区**可滚动**（规范明令「永不滚动」） | 直接砍到 168 会装不下「chips + 2 滑块 + 说明」⇒ 需真机看内容是否溢出。这是**布局取舍**，不是抄数值 |
+| A | **Deck 高度 248/344dp** vs 规范 168/330dp，且内容区**可滚动**（规范原句「永不滚动」已按 Q3 降级为意图：4 滑块组 278dp > 248dp 是算过的账，滚动兜底为当前正确实现） | 直接砍到 168 会装不下「chips + 2 滑块 + 说明」⇒ 需真机看内容是否溢出。这是**布局取舍**，不是抄数值 |
 | B | chrome 隐身：代码全隐藏（alpha 0）vs 规范「退到 32% 残影」；回场 150ms vs 规范 240ms；且规范的隐形式绑定「照片上横拖」，代码绑定「滑块拖动」 | 语义不同（拖滑块 vs 拖照片），改法取决于产品要哪一种 |
 | C | ~~顶栏入口集~~ **2026-11-01 已处置**：分割对比 ✅、历史丝带 ✅（只显示「第 N 步」）、「重置」已移出顶栏（由历史面板的「起始」承担）。现存差异只剩「撤销/重做」两项是规范没有的 —— 规范把「回到之前」整个交给历史，但撤销/重做是高频操作，暂保留 | 见 §10 / §12.3 与 `UI_DESIGN.md` §11.1 |
 | D | Ink-2（#A5A29A）/ Surface（#191917）/ 语义色板（Ok/Warn/Bad 仍是 v2.1 色、缺 Info 色） | 是**全局色板替换**，会改变所有次要文字与状态提示的观感，需真机一起看 |
@@ -853,7 +853,7 @@ python .workbuddy/tools/kotlin_gates.py --root app/src/main/java --extra-root ap
 
 | 方案 | 算式 | 结果 |
 |---|---|---|
-| 现状（3 滑块组 + 滚动兜底） | chips 36 + 3×46 + hint 30 + padding 28 | **232dp**（S 档 248 有余量，但**违反「永不滚动」**） |
+| 现状（3 滑块组 + 滚动兜底） | chips 36 + 3×46 + hint 30 + padding 28 | **232dp**（S 档 248 有余量；「永不滚动」已按 Q3 降级为意图，滚动兜底不是缺陷） |
 | 拆组到 ≤2 滑块 | chips 36 + 2×46 + hint 30 + padding 28 | **186dp** |
 | 拆组 + 提示行收到 16dp | chips 36 + 2×46 + 16 + 28 | **172dp** ≈ 规范的 168 |
 
@@ -1050,3 +1050,53 @@ UI 层不需要再判断一次。
 - T2 导航层 / T3 横屏 / T4 无障碍 —— hy4 §6 Q3/Q4 待决策；
 - release 变体真机跑一遍抄性能数据（M-2/T5）；
 - `catch(Throwable)` CE 重抛静态闸门（本轮已人工核对全部 4 处 `catch (t: Throwable)`：Export 弹窗、CameraPanel 轮询、基线播种、EditSnapshotJson.decode（非挂起无 CE）—— 均不吞 CE 或不可能有 CE）。
+
+## §14 审计剩余项清账批次（v0.6.5，2026-11-07）
+
+> hy4 §5 阶段 2/3 + §6 Q 决策在本批全部落定（Q4 热区手感 / Q5 手动旋转 / Q7 视觉对比
+> 三项需要真机，明确后置 —— 见 §14.3）。判据全部来自 hy4，编号沿用。
+
+### 14.1 已修（按审计系列）
+
+| 系列 | 修复 | 判据 |
+|---|---|---|
+| E1 | 属性码按 PTP 标准修正（0x5007=FNumber / 0x5008=ExposureTime / 0x5009=ISO，旧表 0x500D 撞码）+ `PtpPropDatatype`（U8/U16/U32 按类型解析，不再一律 u16）+ **数据阶段事务号校验**（与响应阶段对称，失步即作废） | 真机上电量/ISO/光圈/快门各读各的值；注入错位响应时会话作废而非静默错位 |
+| E2/E3(b)/E5 | OpenSession 的 SessionID 存档进 `CameraSession.sessionId`；`getDeviceProp` 返回带原因的结果、失败直接上屏（「ISO: 不可用（SessionNotOpen）」）；MAX_INLINE_BYTES 注释改为与 downloadObject 流式路径一致的说法 | 仪表盘上每个属性要么有值、要么有可读原因 |
+| A4 | onBack 回收加 `withFrameNanos` 帧栅栏：回收发生在退出帧之后，`asImageBitmap` 包装不再可能撞上已回收位图 | 低概率绘制崩溃窗口结构性关闭 |
+| A5 | CameraBatch 进度回调经 scope(Main) 转一手再写 Compose 状态 | 进度条不滞后 |
+| A6 | 预设缩略图协程**不再持 renderMutex**（只读 src.bitmap，其「从不手动回收」的契约见 onBack 注释）+ 逐张 isActive 取消 | 打开大图的首帧不再排在 10 张缩略图后面 |
+| D1 | DisposableEffect 的 USB 释放移到 daemon 线程（ioLock 最坏 10s 超时不许在主线程抢） | 退出面板永不冻结主线程 |
+| D2 | 四个按钮（握手/刷新/断开/导入）的 busy/phase 全部进 finally | 任一失败路径界面不复位为死 |
+| D3 | DebugLog：ERROR/WARN 立即落盘，DEBUG/INFO 攒 16 条刷一次；导出分享前强制 flush | 拖滑块时不再每帧一次磁盘写 |
+| D4 | 设置页「清理缓存」移入 IO 协程 | 主线程无递归删除 |
+| D5 | `runBand` 分片等待加 30s 总时限 + 残留取消；超时按帧失败上抛 | 原生卡死不再永久挂住渲染/导出 |
+| B1 | sRGB 导出：渲染成功**立即回收解码底图**（编码期单份）；6–8GB 档导出长边收敛 4096（双全幅 262MB→≈90MB） | 33MP 导出编码期堆峰值减半（旗舰档）；中端档 ≈90MB |
+| B2 | `RasterMask` 网格化：短边 1/4、钳 256..1024 的低分辨率网格 + 双线性采样，椭圆栅格化保笔触圆形 | 33MP 导出的笔刷蒙版 131MB → ≤4MB；MaskCombineTest/RetouchScaleTest 语义不变 |
+| B4 | `RawLinearSource.open` 先查 MemAvailable（纯函数解析 + 单测），低于预算（全质 560MB / 代理 170MB）拒绝打开 | 低内存设备拿「RAW 解码失败」而不是被 lowmemorykiller 杀进程 |
+| M-3 | 16-bit 线性路径最终量化加 **8×8 Bayer 有序抖动**（±0.5 LSB，坐标由 (u,v) 反解，预览/导出逐位一致）；sRGB 路径不动 | DitherTest：确定性 / 跨像素散布 ≤1 LSB / 关闭时零影响 |
+| M-4 | `memorySnapshot(context)` 增加 thermalHeadroom（PowerManager） | 「越用越卡」有数据可对 |
+| U2 | 强度 0 的组（锐化/降噪/暗角/颗粒/磨皮）修饰量滑块**禁用**且不登记双通道 + 一句说明；磨皮阈值滑块补进 UI（NeutralGrayParams.threshold 一直无 UI） | 「能操作但无效果」的滑块清零 |
+| U3 | 分区着色强度 0 时色相 chip 禁用 + 说明 | 同上 |
+| U6 | `onReset` 接进历史面板底部「重置全部」；顺手补 inpaintStrokes 清理的口径核对 | 清蒙版之路恢复，且按钮文案与行为一致 |
+| 债 | 横滑 chips 行尾截断渐隐（仅溢出时）；死代码删除（EditEngine.render / 两个 Ml*.reset / tetherScope）；K4 校准版收尾（系留长边 2048 硬编码 → longEdge 参数） | `git grep` 无悬空引用 |
+| T2 | **BackHandler**：编辑器内系统返回 = editorOnBack 安全回收流程（此前无处理，预测性返回直接退出 Activity）；导出单/历史面板先关弹层；回收**决策**抽进 `EditorSessionLifecycle`（planRetirement/retireInLock，有单测） | 系统返回不再杀 App；「导出期间不回收」成为有名字的判据 |
+| T3 | 编辑器横屏最小可用：宽 ≥600dp 且横比 ⇒ Deck 右侧栏（400dp 满高），直方图 + Rail 收左侧列；竖屏布局逐字节不变；Deck 内容两态共用同一 `deckInner` | 横握 3:2 时直方图 + 3 滑块全可见 |
+| T4 | 无障碍语义：ParamSlider 名称并进滑杆节点 / 画布手势说明 / 直方图描述 / Deck 手柄名称+点击等价动作 / 拾取准星名称与选中态（TopBar IconAction 已在前轮修复） | TalkBack 可走完「导图 → 调曝光 → 导出」（待真机验收） |
+| Tether | 轮询决策抽进 `core/camera/TetherProcessor`（纯 JVM）—— K1 路由契约 / K2 基线播种 / K3 坏对象记账各有会红的回归测试；CameraPanel 只剩下载/渲染/导出 | 假设备测试三条判据会红 |
+
+### 14.2 护栏上线
+
+- **CE 闸门**进 `kotlin_gates.py`：suspend 函数内的 `catch(x: Exception|Throwable)` 必须显式交代
+  CancellationException 去向（重抛臂或含 CE 字样的豁免注释）。上线即抓出 Exporter 三处
+  清理路径（补豁免标注）。`runCatching` 仍无法文本判定，纪律上等同遵守。
+- **新测试 5 组**：TetherProcessorTest(5) / EditorSessionLifecycleTest(4) / RawMemBudgetTest(4) /
+  DitherTest(3) + 既有测试全绿。依赖新增 `kotlinx-coroutines-test`（仅测试）。
+
+### 14.3 明确后置（需真机/需视觉，非遗漏）
+
+- **Q4 热区** 26/36/48dp 折中档（36dp）—— 必须真机试手感；
+- **Q5 手动旋转工具** —— 需要 EditSnapshot 契约扩展 + 三条渲染入口几何化，单独立项；
+- **Q7 首页渐变** —— 需真机视觉对比（技术上是一行）；
+- **T2 完整形态**（sealed 路由 + Home/Settings 入栈）与「系留期间可修图」「独立模型中心页」——
+  BackHandler + 生命周期可测化已就位，路由层是纯 UI 重组，单独一批；
+- **M-2/T5** release 变体真机跑性能基线。

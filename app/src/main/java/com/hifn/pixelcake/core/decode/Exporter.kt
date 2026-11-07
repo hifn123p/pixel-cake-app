@@ -97,7 +97,7 @@ object Exporter {
             // 压缩**完成之后**才发现取消：文件已经存在于相册，必须删掉 ——
             // 否则「取消导出」提示弹了、相册里却躺着一张用户没要的幽灵文件（A3 判据）。
             if (isCancelled()) {
-                try { cr.delete(uri, null, null) } catch (_: Throwable) {}
+                try { cr.delete(uri, null, null) } catch (_: Throwable) { /* 清理路径刻意吞 CE（闸门豁免） */ }
                 return@withContext null
             }
             writeMinimalExif(cr, uri, exifFrom)
@@ -105,7 +105,7 @@ object Exporter {
         } catch (c: CancellationException) {
             // 协程取消不是失败：清掉 IS_PENDING 记录后**原样上抛**（与 Decoder/CameraBatch
             // 同一纪律 —— 吞掉它会把「取消」伪装成「导出失败」）。
-            try { cr.delete(uri, null, null) } catch (_: Throwable) {}
+            try { cr.delete(uri, null, null) } catch (_: Throwable) { /* 清理路径刻意吞 CE（闸门豁免） */ }
             throw c
         } catch (t: Throwable) {
             // ⚠️ 必须 Throwable 而不是 Exception：33MP 的 compress 是 OOM 高发点，
@@ -115,7 +115,7 @@ object Exporter {
                 DebugLog.TAG_DECODE, "export failed",
                 mapOf("fmt" to format.name, "err" to (t.message ?: t.javaClass.simpleName))
             )
-            try { cr.delete(uri, null, null) } catch (_: Throwable) {}
+            try { cr.delete(uri, null, null) } catch (_: Throwable) { /* 清理路径刻意吞 CE（闸门豁免） */ }
             null
         }
     }

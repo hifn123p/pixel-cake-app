@@ -47,6 +47,9 @@ object EditEngine {
     /** 小于这个像素数的带直接串行，避免线程切换开销盖过收益。 */
     private const val PARALLEL_THRESHOLD = 4096
 
+    /** D5：分片等待的总时限（纳秒）。正常毫秒级；这是原生侧卡死时的逃生门。 */
+    private const val SLICE_WAIT_TIMEOUT_NS = 30_000_000_000L
+
     /**
      * 预览单帧超过这个毫秒数才打一条 WARN 日志。
      *
@@ -168,7 +171,7 @@ object EditEngine {
             return false
         }
         val t0 = System.nanoTime()
-        val program = PixelProgram(p, frameW = w, frameH = h)
+        val program = PixelProgram(p, frameW = w, frameH = h, dither = true)
         val ls = layers.layers
         val band = IntArray(BAND_ROWS * w)
         val invL = 1f / maxOf(w, h).toFloat()
@@ -227,10 +230,11 @@ object EditEngine {
             val w = src.width
             val h = src.height
             val target = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-            val t0 = System.nanoTime()
-            val program = PixelProgram(p, frameW = w, frameH = h)
-            val ls = layers.layers
-            val srcBand = ShortArray(BAND_ROWS * w * 3)
+        val t0 = System.nanoTime()
+        // 16-bit 线性 → 8-bit 量化：开 Bayer 抖动（M-3，见 PixelProgram.dither 的 KDoc）。
+        val program = PixelProgram(p, frameW = w, frameH = h, dither = true)
+        val ls = layers.layers
+        val srcBand = ShortArray(BAND_ROWS * w * 3)
             val dstBand = IntArray(BAND_ROWS * w)
             val invL = 1f / maxOf(w, h).toFloat()
             var y = 0
@@ -375,20 +379,19 @@ object EditEngine {
             })
         }
         // 等所有分片完成再落盘，保证 setPixels 看到完整结果。
-        jobs.forEach { it.get() }
-    }
-
-    fun render(
-        base: Bitmap,
-        p: EditParams,
-        recycleBase: Boolean = false,
-        layers: LayerStack = LayerStack.EMPTY
-    ): Bitmap {
-        val out = Bitmap.createBitmap(base.width, base.height, Bitmap.Config.ARGB_8888)
-        // ⚠️ 必须用具名参数传 `layers`：`renderIntoSrgb` 的第 4 个形参是 `retouch`，
-        // 位置传参会把 LayerStack 塞给 RetouchState?（编译期才发现，但白等一轮 CI）。
-        renderIntoSrgb(out, base, p, layers = layers)
-        if (recycleBase) base.recycle()
-        return out
+        // D5：等待加**总时限**并取消残留分片 —— 旧写法 `get()` 无超时不可取消，
+        // 原生侧/线程池一旦卡住就永远等（渲染线程挂死、导出协程永不返回）。
+        // 正常一整带是毫秒级，30s 是给 pathological 场景的逃生门而非常态路径；
+        // 超时按「本帧失败」抛 IllegalStateException，由调用方的 catch(Throwable) 兜住
+        //（预览 → 状态行报错；导出 → 失败返回，不产出半成品文件）。
+        val deadline = System.nanoTime() + SLICE_WAIT_TIMEOUT_NS
+        for (job in jobs) {
+            val remainingNs = deadline - System.nanoTime()
+            if (remainingNs <= 0) {
+                jobs.forEach { it.cancel(true) }
+                throw IllegalStateException("runBand: slice wait timeout")
+            }
+            job.get(remainingNs, java.util.concurrent.TimeUnit.NANOSECONDS)
+        }
     }
 }

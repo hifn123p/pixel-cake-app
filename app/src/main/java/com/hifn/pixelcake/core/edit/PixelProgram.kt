@@ -74,7 +74,18 @@ class PixelProgram(
      * **真实渲染三条路径（`EditEngine`）都必须传真尺寸**，否则暗角在 3:2 画幅上会算成正圆轮廓。
      */
     frameW: Int = 1,
-    frameH: Int = 1
+    frameH: Int = 1,
+    /**
+     * M-3：最终 8-bit 量化时叠加 **8×8 Bayer 有序抖动**（±0.5 LSB）。
+     *
+     * 只对 **16-bit 线性路径**开启（[EditEngine] 的 renderIntoLinear / renderLinearFile）：
+     * 大幅拉曲线/拉阴影后，天空与肤色的平滑渐变会出现色带 —— 16-bit 中间结果量化到
+     * 8-bit 时只有「+0.5 四舍五入」，同亮度带的像素全部落到同一个值。
+     * 抖动坐标由 `(u, v)` 反解出**确定性**像素位置 ⇒ 预览与导出逐位一致
+     * （不与确定性颗粒冲突：颗粒是亮度噪声，抖动只有 ±0.5 LSB）。
+     * sRGB 路径（applySrgb8）保持默认关闭：源已是 8-bit，再抖只会添噪、还会动既有测试的断言。
+     */
+    dither: Boolean = false
 ) {
     // ——————————————— 线性域 ———————————————
 
@@ -567,9 +578,27 @@ class PixelProgram(
             b += d
         }
 
-        val ri = (r.coerceIn(0f, 1f) * 255f + 0.5f).toInt().coerceIn(0, 255)
-        val gi = (g.coerceIn(0f, 1f) * 255f + 0.5f).toInt().coerceIn(0, 255)
-        val bi = (b.coerceIn(0f, 1f) * 255f + 0.5f).toInt().coerceIn(0, 255)
+        // ── 最终 8-bit 量化 ───────────────────────────────────────
+        // M-3：dither 开启时用 8×8 Bayer 有序抖动替换常数 0.5 的四舍五入 ——
+        // 每个像素的量化阈值在 ±0.5 LSB 内按确定性图案错开，渐变带不再「整条跳变」。
+        // 坐标从 (u, v) 反解：u·frameW 随像素单调推进且逐像素不同（mod 8 稳定），
+        // 不需要把 x/y 穿过整个管线签名 —— 三条入口的调用点零改动。
+        val ri: Int
+        val gi: Int
+        val bi: Int
+        if (dither) {
+            val px = (u * frameW).toInt()
+            val py = (v * frameH).toInt()
+            val t = BAYER_8[(py and 7) * 8 + (px and 7)]
+            val off = (t + 0.5f) / 64f   // 0..1，均值 0.5 ⇒ 与「+0.5 四舍五入」同均值
+            ri = (r.coerceIn(0f, 1f) * 255f + off).toInt().coerceIn(0, 255)
+            gi = (g.coerceIn(0f, 1f) * 255f + off).toInt().coerceIn(0, 255)
+            bi = (b.coerceIn(0f, 1f) * 255f + off).toInt().coerceIn(0, 255)
+        } else {
+            ri = (r.coerceIn(0f, 1f) * 255f + 0.5f).toInt().coerceIn(0, 255)
+            gi = (g.coerceIn(0f, 1f) * 255f + 0.5f).toInt().coerceIn(0, 255)
+            bi = (b.coerceIn(0f, 1f) * 255f + 0.5f).toInt().coerceIn(0, 255)
+        }
         return (0xff shl 24) or (ri shl 16) or (gi shl 8) or bi
     }
 
@@ -590,6 +619,21 @@ class PixelProgram(
 
         /** 同上，浮点形式：索引 = `round(d² · VIG_LAST)`。 */
         val VIG_LAST = VIG_LAST_I.toFloat()
+
+        /**
+         * M-3：标准 8×8 Bayer 矩阵（0..63）。量化阈值 = (值+0.5)/64 ∈ (0,1)，
+         * 均值恰为 0.5 —— 与无抖动的「+0.5 四舍五入」期望一致，只把**阈值的空间分布**打散。
+         */
+        val BAYER_8 = intArrayOf(
+            0, 32, 8, 40, 2, 34, 10, 42,
+            48, 16, 56, 24, 50, 18, 58, 26,
+            12, 44, 4, 36, 14, 46, 6, 38,
+            60, 28, 52, 20, 62, 30, 54, 22,
+            3, 35, 11, 43, 1, 33, 9, 41,
+            51, 19, 59, 27, 49, 17, 57, 25,
+            15, 47, 7, 39, 13, 45, 5, 37,
+            63, 31, 55, 23, 61, 29, 53, 21
+        )
     }
 }
 

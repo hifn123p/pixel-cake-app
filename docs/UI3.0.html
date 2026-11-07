@@ -509,7 +509,7 @@ footer{ margin-top:96px; padding-top:28px; border-top:1px solid var(--line); col
   <table>
     <tr><th style="width:150px">来源</th><th style="width:330px">提取的交互/优点</th><th>落点</th></tr>
     <tr><td><b>Snapseed</b></td><td>参数绑定在照片上：横拖调值、上下滑换参数——照片本身就是滑块；栈式历史</td><td>双通道调节（§3 概念 03）· 巨大读数 HUD（§4）· 历史丝带</td></tr>
-    <tr><td><b>iOS 照片 App</b></td><td>极致的一表面：工具条 + 单滑块区，全 App 零面板、零层级跳转</td><td>One-Surface 架构（控制台固定高，永不滚动、永不遮屏）</td></tr>
+    <tr><td><b>iOS 照片 App</b></td><td>极致的一表面：工具条 + 单滑块区，全 App 零面板、零层级跳转</td><td>One-Surface 架构（控制台固定高、永不遮屏；内容区滚动兜底是许可实现——高度按内容预算取）</td></tr>
     <tr><td><b>Darkroom</b></td><td>工具横向 carousel 一屏到底；版本（Versions）作为一等公民</td><td>控制台内容即 carousel（chip 组切换）· 历史丝带</td></tr>
     <tr><td><b>Google 相机 / Magic Editor</b></td><td>点选画面中的对象来限定编辑范围——空间选择取代文字选择</td><td><b>点哪修哪</b>：分割蒙版命中测试 + 蒙版轮廓可视化</td></tr>
     <tr><td><b>Lightroom</b></td><td>精确读数、直方图常驻、预设强度（Amount）</td><td>控制台等宽数值 · 顶部直方图条 · <b>强度环</b>（引擎 lerp 小改）</td></tr>
@@ -669,7 +669,7 @@ footer{ margin-top:96px; padding-top:28px; border-top:1px solid var(--line); col
       <p class="note" style="margin-top:16px;">悬浮胶囊，高 58dp，六工具。与上一版的 dock 语义相同，但它不再是「面板的开关」——它切换的是控制台内容，屏幕上没有任何东西会展开或收起。</p>
     </div>
     <div class="comp">
-      <h4>控制台 Deck · 固定高 · 永不滚动</h4>
+      <h4>控制台 Deck · 固定高 · 内容区滚动兜底（「永不滚动」为意图而非约束，见 ENGINEERING_NOTES §9.3-A 的账）</h4>
       <div class="deck" style="max-width:352px;">
         <div class="deck-top">
           <div class="grp"><span class="g on">明暗</span><span class="g">白平衡</span><span class="g">氛围</span></div>

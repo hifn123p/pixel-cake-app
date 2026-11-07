@@ -96,9 +96,57 @@ class RawLinearSource private constructor(
         /** [readAll] 的上限（字节）：代理长边 2048 约 25MB，留足余量；33MP 全幅约 196MB 直接拒绝。 */
         private const val MAX_READ_ALL_BYTES = 64L * 1024 * 1024
 
+        /**
+         * B4：native 线性会话的内存预算。审计口径 33MP 的 native 侧下界 ≈ 458MB
+         * （LibRaw 解码中间态 + 16-bit 线性结果），× 1.2 安全系数。
+         * `MemAvailable` 低于预算时**拒绝打开**——宁可让用户拿到「RAW 解码失败」，
+         * 也不能让 lowmemorykiller 在 native 分配中途把整个 App 杀掉。
+         */
+        const val NATIVE_FLOOR_FULL_BYTES = 560L * 1024 * 1024
+
+        /** 代理快速解（halfSize=true）时 native 结果只有全幅的 1/4，预算同步收敛。 */
+        const val NATIVE_FLOOR_HALF_BYTES = 170L * 1024 * 1024
+
+        /**
+         * 从 `/proc/meminfo` 文本解析 MemAvailable（字节）。**纯函数，JVM 可测**。
+         * @return 找不到该行 / 格式异常时返回 null（调用方按「无法判断」放行）。
+         */
+        internal fun memAvailableBytes(procMeminfo: String): Long? {
+            for (line in procMeminfo.lineSequence()) {
+                if (!line.startsWith("MemAvailable")) continue
+                val kb = line.substringAfter(':').trim().split(Regex("\\s+")).firstOrNull()
+                    ?.toLongOrNull() ?: return null
+                return kb * 1024L
+            }
+            return null
+        }
+
+        private fun nativeBudgetBytes(halfSize: Boolean): Long =
+            if (halfSize) NATIVE_FLOOR_HALF_BYTES else NATIVE_FLOOR_FULL_BYTES
+
         /** 打开解码会话；失败返回 null（已打日志）。
          * @param halfSize 透传给 [RawNative.openLinear]：true=代理快速解，false=全质量（默认）。 */
         fun open(path: String, maxLongSide: Int, halfSize: Boolean = false): RawLinearSource? {
+            // B4：开 native 会话**之前**查可用内存。native 分配不吃 Java 堆预算，
+            // Java 侧的 OOM 兜底管不到它 —— lowmemorykiller 直接杀进程，连报错的机会都没有。
+            val avail = try {
+                memAvailableBytes(java.io.File("/proc/meminfo").readText())
+            } catch (_: Throwable) {
+                // 非 suspend：读不到就按「无法判断」放行（旧行为），不拦正常设备
+                null
+            }
+            val budget = nativeBudgetBytes(halfSize)
+            if (avail != null && avail < budget) {
+                DebugLog.w(
+                    DebugLog.TAG_DECODE, "raw openLinear refused: mem budget",
+                    mapOf(
+                        "availMB" to avail / 1024 / 1024,
+                        "budgetMB" to budget / 1024 / 1024,
+                        "halfSize" to halfSize
+                    )
+                )
+                return null
+            }
             val handle = try {
                 RawNative.openLinear(path, maxLongSide, halfSize)
             } catch (t: Throwable) {

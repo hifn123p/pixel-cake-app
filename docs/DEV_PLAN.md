@@ -30,7 +30,7 @@ description: 像素蛋糕（AI 人像精修）安卓应用的唯一开发计划�
 
 ## 0. 当前进度（2026-11-07）
 
-> **已发布到 `v0.6.4`**（`versionCode = 19`；`v0.1.0` → `v0.6.4` tag 齐全，5 个 CI job 含 `Publish GitHub Release`；
+> **已发布到 `v0.6.5`**（`versionCode = 20`；`v0.1.0` → `v0.6.5` tag 齐全，5 个 CI job 含 `Publish GitHub Release`；
 > 最新 run 全绿报告见 `docs/Github_CI.md`）。逐版本明细见根 `README.md` 的「版本历史」表。
 >
 > | 阶段 | 状态 | 说明 |
@@ -38,7 +38,8 @@ description: 像素蛋糕（AI 人像精修）安卓应用的唯一开发计划�
 > | M0a / M0b / P1a / P1b / P1+ / P2 | ✅ | 全部落地（P1a 最小链路 → P1b LibRaw 全量 + 人像算子 → P1+ LiteRT 双模型 → P2 USB PTP 直连与批量）。真机验收持续进行，清单见 §10 |
 > | 调色批次 1~5 | ✅ | 参数体系 **81 项** + 对象作用域图层（8 作用域）。设计见 `TONING_DESIGN.md` / `OBJECT_TONE_DESIGN.md` |
 > | **UI 3.0「Aperture」** | ✅（v0.6.2） | **One-Surface** 全屏画布 / 双通道调节 / 点哪修哪 / 强度环 / 自动增强 / 历史丝带 / 分割对比 / 导出回执 / 曲线本体 / 系留出片 v2 / 暖石墨琥珀主题 / 自适应图标。设计见 `UI3.0.html`（唯一真值） |
-> | **外部审计整改** | ✅（v0.6.3~v0.6.4） | 双模型审计（qwen3.8 + hy4）→ 3 个 P0（系留 ARW 必失败 / EXIF 层缺失 / 陈旧直方图）+ P1 批次（导出可取消 / 直方图进锁按带 / 系留基线播种 / 空作用域禁用 / 滤镜强度空转 / 悬空缓存路径 / Hint 矛盾）+ **T1 参数栈 JSON 序列化**。台账见 `ENGINEERING_NOTES.md` §13；判级以 hy4 报告为权威（已归档） |
+> | **审计剩余项清账** | ✅（v0.6.5） | hy4 阶段 2/3 全量落定：E1 属性码/datatype、A4-A7、D1-D5、B1/B2/B4、M-3/M-4、U2/U3/U6、T2 BackHandler+生命周期可测化、**T3 横屏最小可用**、**T4 无障碍语义**、TetherProcessor 可测化（K1/K2/K3 回归测试）、CE 静态闸门；Q1/Q2/Q3/Q6 决策落地。台账见 `ENGINEERING_NOTES.md` §14 |
+| **外部审计整改** | ✅（v0.6.3~v0.6.4） | 双模型审计（qwen3.8 + hy4）→ 3 个 P0（系留 ARW 必失败 / EXIF 层缺失 / 陈旧直方图）+ P1 批次（导出可取消 / 直方图进锁按带 / 系留基线播种 / 空作用域禁用 / 滤镜强度空转 / 悬空缓存路径 / Hint 矛盾）+ **T1 参数栈 JSON 序列化**。台账见 `ENGINEERING_NOTES.md` §13；判级以 hy4 报告为权威（已归档） |
 > | P3 | 🔜 | NAS Docker 化 Rust 引擎 —— 未启动 |
 > | 端侧模型 P6/P7 | 🔜 | 见 `ONDEVICE_MODEL_PLAN.md`（M1 交互分割 / M2 关键点 / M4 超分 / M5 深度…） |
 
@@ -298,7 +299,7 @@ NDK pin `30.0.16248370`；LibRaw 子模块静态链接。
 | targetSdk / compileSdk | **36（Android 16；CI runner 镜像尚未发布 `platforms;android-37`，待官方发布后升 37，代码已预留非致命安装尝试）** |
 | Kotlin / AGP | 2.2.21 / 8.13.2（随 API 36 对齐） |
 | 构建 | JDK 17，AGSL 需 31+（已满足） |
-| 分发注意 | minSdk 36 是硬门槛（仅 Android 16+ 可装）；将来扩用户面可下调（无 API>31 强依赖） |
+| 分发注意 | minSdk 36 是硬门槛（仅 Android 16+ 可装）。**Q6 决策**：12 个月内不对公开渠道发布，保留 36 为自用档（调试机一加15 = Android 16+）；将来扩用户面可下调到 33/34（无 API>31 强依赖），下调成本低 |
 
 ### 6.2 真机与硬件档位
 - **主力调试机**：一加15（Android 16+，骁龙 8 Elite，NPU 充足，RAM ≥12GB）。
@@ -380,7 +381,7 @@ NDK pin `30.0.16248370`；LibRaw 子模块静态链接。
 
 ## 10. 当前版本与待验收
 
-- **当前版本**：`v0.6.4`（`versionCode = 19`）。**发版四者必须同时改**：`build.gradle.kts` 的
+- **当前版本**：`v0.6.5`（`versionCode = 20`）。**发版四者必须同时改**：`build.gradle.kts` 的
   `versionCode`/`versionName` → git tag → `AboutSheet` 显示 → CI 报告记录。
   ⚠️ 任何「记忆里的版本号 / 尺寸」用前先 `git grep` 复核（`ENGINEERING_NOTES.md` §5.5）。
 - **待真机验收（至今未闭环）**：A2 涂抹落点 / A1 导出内存日志 / 自动蒙版（P1p-1c）/ 人脸锚点（P1p-2c）/

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  USB 设备过滤表（P3 发布合规项，hy4 审计「device_filter.xml / USB 插拔广播」）。
+  MainActivity 声明了 USB_DEVICE_ATTACHED intent-filter 后，系统据此判断
+  「插入该类设备时是否建议打开本 App」。
+
+  vendor-id：Sony Corporation = 0x054C（十进制 1356）。
+  审慎起见**不**按 product-id 收窄：A7C II 之外的其他 Sony 机型走同一 PTP 协议，
+  枚举/握手会如实报告兼容性（CameraProbe.isSonyCamera + 体检报告）。
+-->
+<resources>
+    <usb-device vendor-id="1356" />
+</resources>

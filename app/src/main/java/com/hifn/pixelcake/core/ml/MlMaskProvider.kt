@@ -251,22 +251,9 @@ object MlMaskProvider {
         cacheSkin = null
         cacheObjects = null
         // 换图 = 新会话：把「本次会话禁用」与 OOM 计数都复位。
-        // 以前 `disabled` 从不复位 ⇒ 一次瞬时 OOM 会在整个进程生命周期里静默阉割自动蒙版；
-        // 而唯一的复位入口 `reset()` 在生产代码里**没有调用点**。
+        // 以前 `disabled` 从不复位 ⇒ 一次瞬时 OOM 会在整个进程生命周期里静默阉割自动蒙版。
         disabled = false
         oomCount = 0
-    }
-
-    /** 完全重置（含模型与失败标记）；供调试/测试用。 */
-    @Synchronized
-    fun reset() {
-        runCatching { model?.close() }
-        model = null
-        modelResolved = false
-        disabled = false
-        oomCount = 0
-        permanentlyDisabled = false
-        invalidate()
     }
 
     /** 连续 OOM 多少次后永久关闭自动蒙版。两次是「偶发」与「必然」的分界。 */

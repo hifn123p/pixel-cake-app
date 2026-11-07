@@ -110,9 +110,12 @@ fun CameraPanel(
     var defaultPresetId by remember { mutableStateOf("portra") }
     var tetherParams by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var arrivalLog by remember { mutableStateOf(emptyList<String>()) }
-    var knownHandles by remember { mutableStateOf(setOf<Int>()) }
+    // 批 5 可测化：轮询的「谁是新片 / 坏对象记账 / 基线播种」决策抽进 TetherProcessor
+    //（纯 JVM 可测，K1/K2/K3 各有一条会红的回归测试）；本组件只保留下载/渲染/导出。
+    val tether = remember {
+        TetherProcessor { m -> arrivalLog = (arrivalLog + m).takeLast(30) }
+    }
     val batchCancel = remember { AtomicBoolean(false) }
-    val tetherScope = rememberCoroutineScope()
 
     // 系留仪表盘快照：连接后拉一次（电量/ISO/光圈）
     LaunchedEffect(session) {
@@ -143,7 +146,7 @@ fun CameraPanel(
         //    当成新片，比「不工作」糟糕得多 —— 提示用户重开开关重试。
         try {
             val base = sn.objectHandles(storageId).handles.toSet()
-            knownHandles = knownHandles + base
+            tether.seedBaseline(base)
             log("系留已就绪：卡上已有 ${base.size} 个对象（不计入新片）")
         } catch (c: kotlinx.coroutines.CancellationException) {
             throw c
@@ -159,54 +162,42 @@ fun CameraPanel(
             delay(3000)
             try {
                 val query = sn.objectHandles(storageId)
-                val newH = query.handles.filter { it !in knownHandles }
-                for (h in newH.take(3)) {
-                    // ② 坏对象记账：两处 continue 前**先**把 handle 记进 knownHandles。
-                    val info = sn.objectInfo(h)
-                    if (info == null) {
-                        knownHandles = knownHandles + h
-                        log("跳过无法读取信息的对象 #$h")
-                        continue
-                    }
-                    if (!CameraPhotoFilter.isPhoto(info)) {
-                        knownHandles = knownHandles + h
-                        continue
-                    }
-                    val photo = CameraPhoto(h, info)
-                    knownHandles = knownHandles + h
-                    log(info.filename + " · 传输中...")
+                // ②/K3：新片收集与坏对象记账都在 TetherProcessor 里（有单测钉住）。
+                val newPhotos = tether.collectNewPhotos(query.handles) { h -> sn.objectInfo(h) }
+                for (photo in newPhotos) {
+                    log(photo.photo.info.filename + " · 传输中...")
                     val target = CameraBatch.newSingleTarget(context, photo)
                     try {
-                        val outcome = sn.download(h, target) { _, _ -> }
+                        val outcome = sn.download(photo.handle, target) { _, _ -> }
                         if (!outcome.ok) {
-                            log(info.filename + " · 传输失败")
+                            log(photo.info.filename + " · 传输失败")
                             continue
                         }
-                        log(info.filename + " · 套「" + preset.name + "」")
+                        log(photo.info.filename + " · 套「" + preset.name + "」")
                         // P0-1 修复：ARW 走 LibRaw 线性管线（decodeFullRes 对 .arw 设计上返回 null）
                         if (photo.isRaw) {
-                            val (tw, th) = RetouchScale.fitLongEdge(info.imageWidth, info.imageHeight, 2048)
+                            val (tw, th) = RetouchScale.fitLongEdge(photo.info.imageWidth, photo.info.imageHeight, longEdge)
                             val lr = preset.retouch.lerped(1f)
                             val rawBmp = EditEngine.renderLinearFile(
-                                target.absolutePath, 2048,
+                                target.absolutePath, longEdge,
                                 preset.params.lerped(1f),
                                 RetouchScale.toRenderState(lr, tw, th),
                             )
                             if (rawBmp == null) {
-                                log(info.filename + " · RAW 渲染失败")
+                                log(photo.info.filename + " · RAW 渲染失败")
                                 continue
                             }
                             // ③ 回收进 finally：compress 是 OOM 高发点，抛出去就泄漏一整块
                             try {
                                 val expUri = Exporter.export(context, rawBmp, ExportFormat.JPEG, 92)
-                                log(info.filename + if (expUri != null) " · 已导出 ✓" else " · 导出失败")
+                                log(photo.info.filename + if (expUri != null) " · 已导出 ✓" else " · 导出失败")
                             } finally {
                                 rawBmp.recycle()
                             }
                         } else {
-                            val decoded = Decoder.decodeFullRes(context, Uri.fromFile(target), 2048)
+                            val decoded = Decoder.decodeFullRes(context, Uri.fromFile(target), longEdge)
                             if (decoded == null) {
-                                log(info.filename + " · 解码失败")
+                                log(photo.info.filename + " · 解码失败")
                                 continue
                             }
                             try {
@@ -221,11 +212,11 @@ fun CameraPanel(
                                         RetouchScale.toRenderState(lr, bmp.width, bmp.height)
                                     )
                                     if (!okRender) {
-                                        log(info.filename + " · 渲染尺寸不匹配")
+                                        log(photo.info.filename + " · 渲染尺寸不匹配")
                                         continue
                                     }
                                     val expUri = Exporter.export(context, bmp, ExportFormat.JPEG, 92)
-                                    log(info.filename + if (expUri != null) " · 已导出 ✓" else " · 导出失败")
+                                    log(photo.info.filename + if (expUri != null) " · 已导出 ✓" else " · 导出失败")
                                 } finally {
                                     // 单一出口覆盖全部路径：渲染失败 continue / 渲染或导出抛异常 / 成功
                                     bmp.recycle()
@@ -255,17 +246,32 @@ fun CameraPanel(
     }
 
     // 会话常驻 → 离开面板必须兜底释放 USB（HomeScreen 的 LazyColumn 滑出也会触发）。
+    // D1 修复：`close()` 内部是 `synchronized(ioLock)`，而 ioLock 被 256KB 分块传输短暂持有
+    //（最坏一次 DATA_TIMEOUT=10s）——绝不能在主线程同步抢这把锁（ENGINEERING_NOTES §2 同一条
+    // 纪律）。改为 daemon 线程后台释放；面板销毁后 UI 状态无所谓，只要 USB 最终被释放。
     DisposableEffect(Unit) {
         onDispose {
             val s = session
-            s?.close()
+            if (s != null) {
+                Thread {
+                    runCatching { s.close() }.onFailure {
+                        DebugLog.w(
+                            DebugLog.TAG_CAMERA, "camera close on dispose failed",
+                            mapOf("err" to (it.message ?: it.javaClass.simpleName))
+                        )
+                    }
+                }.apply { isDaemon = true; name = "pxcake-cam-close" }.start()
+            }
             DebugLog.i(DebugLog.TAG_CAMERA, "camera panel disposed", mapOf("connected" to (s != null)))
         }
     }
 
     GlassCard(modifier = Modifier.fillMaxWidth()) {
         Text(
-            "相机直连（P2 · 拉图 + 批量套预设）",
+            // Q2（hy4 §6）：对外措辞从「相机直连（P2）」改为「从相机导入」——
+            // 真系留（liveview 边拍边看）需要 CRSDK/ScalarWebAPI，是另一个项目；
+            // 当前能力是「USB 传输照片 + 批量处理」，措辞按实际能力走。
+            "从相机导入（Sony USB · 拉图 + 批量套预设）",
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold
         )
@@ -366,40 +372,45 @@ fun CameraPanel(
                 batchLines = emptyList()
                 DebugLog.i(DebugLog.TAG_CAMERA, "ptp connect start", mapOf("device" to name))
                 scope.launch {
-                    val steps = ArrayList<String>()
-                    when (val opened = CameraSession.open(context, device) { steps.add(it) }) {
-                        is CameraSessionResult.Failed -> {
-                            lines = steps + "✗ 失败：${opened.reason}"
-                            DebugLog.w(
-                                DebugLog.TAG_CAMERA, "ptp connect failed",
-                                mapOf("reason" to opened.reason)
-                            )
-                        }
-                        is CameraSessionResult.Ok -> {
-                            val s = opened.session
-                            session = s
-                            phase = "读取照片列表 + 协议体检…"
-                            // 连上即做一次体检（PoC-2/3 报告：各存储对象数 + 末尾样本）
-                            // 并读一次列表，省去用户再点一下。
-                            val report = CameraConnection.inspect(s, steps)
-                            lines = report.summaryLines()
-                            val list = s.listPhotos()
-                            photoList = list
-                            selected = list.photos.map { it.handle }.toSet()
-                            DebugLog.i(
-                                DebugLog.TAG_CAMERA, "ptp connect ok",
-                                mapOf(
-                                    "device" to s.deviceLabel,
-                                    "storages" to s.storageIds.size,
-                                    "objects" to report.handleCounts.values.sum(),
-                                    "photos" to list.photos.size,
-                                    "inspectMs" to report.elapsedMs
+                    // D2：无论内部怎么失败/被取消，busy/phase 都必须复位 ——
+                    // 否则界面永久停在「连接并握手…」，所有按钮不可用。
+                    try {
+                        val steps = ArrayList<String>()
+                        when (val opened = CameraSession.open(context, device) { steps.add(it) }) {
+                            is CameraSessionResult.Failed -> {
+                                lines = steps + "✗ 失败：${opened.reason}"
+                                DebugLog.w(
+                                    DebugLog.TAG_CAMERA, "ptp connect failed",
+                                    mapOf("reason" to opened.reason)
                                 )
-                            )
+                            }
+                            is CameraSessionResult.Ok -> {
+                                val s = opened.session
+                                session = s
+                                phase = "读取照片列表 + 协议体检…"
+                                // 连上即做一次体检（PoC-2/3 报告：各存储对象数 + 末尾样本）
+                                // 并读一次列表，省去用户再点一下。
+                                val report = CameraConnection.inspect(s, steps)
+                                lines = report.summaryLines()
+                                val list = s.listPhotos()
+                                photoList = list
+                                selected = list.photos.map { it.handle }.toSet()
+                                DebugLog.i(
+                                    DebugLog.TAG_CAMERA, "ptp connect ok",
+                                    mapOf(
+                                        "device" to s.deviceLabel,
+                                        "storages" to s.storageIds.size,
+                                        "objects" to report.handleCounts.values.sum(),
+                                        "photos" to list.photos.size,
+                                        "inspectMs" to report.elapsedMs
+                                    )
+                                )
+                            }
                         }
+                    } finally {
+                        busy = false
+                        phase = ""
                     }
-                    busy = false
-                    phase = ""
                 }
             },
             enabled = !busy && selectedName != null && session == null,
@@ -482,11 +493,14 @@ fun CameraPanel(
                         busy = true
                         phase = "读取照片列表…"
                         scope.launch {
-                            val list = s.listPhotos()
-                            photoList = list
-                            selected = list.photos.map { it.handle }.toSet()
-                            busy = false
-                            phase = ""
+                            try {
+                                val list = s.listPhotos()
+                                photoList = list
+                                selected = list.photos.map { it.handle }.toSet()
+                            } finally {
+                                busy = false
+                                phase = ""
+                            }
                         }
                     },
                     enabled = !busy,
@@ -499,15 +513,18 @@ fun CameraPanel(
                         busy = true
                         phase = "正在断开…"
                         scope.launch {
-                            runCatching { s.closeGracefully() }
-                            s.close()
-                            session = null
-                            photoList = null
-                            selected = emptySet()
-                            progress = null
-                            busy = false
-                            phase = ""
-                            lines = lines + "已断开连接"
+                            try {
+                                runCatching { s.closeGracefully() }
+                                s.close()
+                                session = null
+                                photoList = null
+                                selected = emptySet()
+                                progress = null
+                                lines = lines + "已断开连接"
+                            } finally {
+                                busy = false
+                                phase = ""
+                            }
                         }
                     },
                     enabled = !busy,
@@ -583,29 +600,38 @@ fun CameraPanel(
                                     busy = true
                                     phase = "正在拉取 ${photo.filename}…"
                                     scope.launch {
-                                        val target = CameraBatch.newSingleTarget(context, photo)
-                                        val outcome = s.download(photo.handle, target) { done, total ->
-                                            progress = CameraBatch.Progress(
-                                                1, 1, photo.filename, "拉取中", done, total
-                                            )
-                                        }
-                                        progress = null
-                                        busy = false
-                                        phase = ""
-                                        if (outcome.ok) {
-                                            lines = lines +
-                                                "已拉取 ${photo.filename}（${outcome.bytes / 1024 / 1024}MB）→ 打开编辑器"
-                                            DebugLog.i(
-                                                DebugLog.TAG_CAMERA, "single pull ok",
-                                                mapOf("file" to target.name, "bytes" to outcome.bytes)
-                                            )
-                                            onOpenLocalFile(target)
-                                        } else {
-                                            lines = lines + "拉取 ${photo.filename} 失败：${outcome.message}"
-                                            DebugLog.w(
-                                                DebugLog.TAG_CAMERA, "single pull failed",
-                                                mapOf("handle" to photo.handle, "msg" to outcome.message)
-                                            )
+                                        // D2（审计：第 4 处）：下载失败/取消都不能把 busy 卡死。
+                                        try {
+                                            val target = CameraBatch.newSingleTarget(context, photo)
+                                            // A5：download 的进度回调从 Dispatchers.IO 里触发，
+                                            // 直接写 Compose 状态是跨线程写快照 —— 经 scope（Main）转一手。
+                                            val outcome = s.download(photo.handle, target) { done, total ->
+                                                scope.launch {
+                                                    progress = CameraBatch.Progress(
+                                                        1, 1, photo.filename, "拉取中", done, total
+                                                    )
+                                                }
+                                            }
+                                            progress = null
+                                            if (outcome.ok) {
+                                                lines = lines +
+                                                    "已拉取 ${photo.filename}（${outcome.bytes / 1024 / 1024}MB）→ 打开编辑器"
+                                                DebugLog.i(
+                                                    DebugLog.TAG_CAMERA, "single pull ok",
+                                                    mapOf("file" to target.name, "bytes" to outcome.bytes)
+                                                )
+                                                onOpenLocalFile(target)
+                                            } else {
+                                                lines = lines + "拉取 ${photo.filename} 失败：${outcome.message}"
+                                                DebugLog.w(
+                                                    DebugLog.TAG_CAMERA, "single pull failed",
+                                                    mapOf("handle" to photo.handle, "msg" to outcome.message)
+                                                )
+                                            }
+                                        } finally {
+                                            progress = null
+                                            busy = false
+                                            phase = ""
                                         }
                                     }
                                 },
@@ -670,7 +696,8 @@ fun CameraPanel(
                                         photos = chosen,
                                         preset = preset,
                                         longEdge = longEdge,
-                                        onProgress = { progress = it },
+                                        // A5：批量进度从 Dispatchers.IO 回调，经 scope（Main）转一手再写状态
+                                        onProgress = { p -> scope.launch { progress = p } },
                                         isCancelled = { batchCancel.get() }
                                     )
                                     batchLines = summary.summaryLines()

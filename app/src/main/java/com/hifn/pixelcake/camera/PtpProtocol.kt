@@ -54,12 +54,33 @@ object PtpProtocol {
     const val OP_GET_OBJECT_INFO = 0x1008
     const val OP_GET_OBJECT = 0x1009
 
-    // ── DevicePropCode（Sony A7C II 常用）──
-    const val DP_BATTERY_LEVEL = 0x5001
-    const val DP_EXPOSURE_INDEX = 0x5007 // ISO
-    const val DP_F_NUMBER = 0x500D       // 光圈
-    const val DP_EXPOSURE_TIME = 0x500D  // 快门（秒 × 10⁴）
+    // ── DevicePropCode（按 ISO 15740 标准码；E1 修复：旧表 0x5007 当 ISO、0x500D 撞码当「光圈/快门」）──
+    // 标准段：0x5007=FNumber，0x5008=ExposureTime，0x5009=ExposureIndex(ISO)。
+    // 真机上 Sony 是否支持读取以日志为准；码表先与标准对齐，撞码会让两个属性读同一个值。
+    const val DP_BATTERY_LEVEL = 0x5001  // UINT8
+    const val DP_F_NUMBER = 0x5007       // UINT16（光圈 f 值 ×100）
+    const val DP_EXPOSURE_TIME = 0x5008  // UINT32（快门，单位 0.0001s）
+    const val DP_EXPOSURE_INDEX = 0x5009 // UINT16（ISO）
     const val OP_GET_DEVICE_PROP_VALUE = 0x1015
+
+    /**
+     * GetDevicePropValue 返回值的数据类型（PTP DataTypeCode；E1 修复的另一半）。
+     *
+     * 旧实现把任何属性都当 u16 读前两字节 —— 对 UINT8 的电量（值+下一字节被拼进低位）
+     * 和 UINT32 的快门（高 16 位直接丢掉）都是错的。解析必须按属性声明的类型来。
+     */
+    enum class PtpPropDatatype(val code: Int, val byteSize: Int) {
+        U8(0x0002, 1),
+        U16(0x0004, 2),
+        U32(0x0006, 4);
+
+        /** 从 GetDevicePropValue 的 data 负载解析值；长度不足时返回 null。 */
+        fun parse(data: ByteArray): Int? = when (this) {
+            U8 -> if (data.size < 1) null else data[0].toInt() and 0xFF
+            U16 -> if (data.size < 2) null else readU16(data, 0)
+            U32 -> if (data.size < 4) null else readU32(data, 0)
+        }
+    }
 
     // ---------------- ResponseCode ----------------
     const val RC_OK = 0x2001

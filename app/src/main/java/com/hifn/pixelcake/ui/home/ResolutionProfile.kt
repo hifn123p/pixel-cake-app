@@ -7,7 +7,7 @@ package com.hifn.pixelcake.ui.home
  * 全分辨率 RGBA_8888 ≈ 131MB（A7C II 33MP）：
  *   - 旗舰 ≥12GB：全分辨率，代理 2048
  *   - 中高 8–12GB：全分辨率，代理 2048
- *   - 中端 6–8GB：全分辨率，代理 1536
+ *   - 中端 6–8GB：**导出长边封顶 4096**（B1：双全幅峰值 262MB → ≈90MB），代理 1536
  *   - 低 <6GB：长边封顶 4096，代理 1024
  *
  * 注：此前这里带一个 `bitmapConfig` 字段（旗舰档写 "RGBA_F16"），
@@ -25,7 +25,9 @@ fun DeviceCapabilities.resolutionProfile(): ResolutionProfile {
     return when {
         memGb >= 12 -> ResolutionProfile("flagship", 7008, 2048)
         memGb >= 8  -> ResolutionProfile("high", 7008, 2048)
-        memGb >= 6  -> ResolutionProfile("mid", 7008, 1536)
+        // B1 档位缓解：sRGB 导出要同时持有「解码底图 + 渲染目标」两张全幅（33MP ≈ 262MB），
+        // 6–8GB 档把导出长边收敛到 4096（双份 ≈ 90MB）。
+        memGb >= 6  -> ResolutionProfile("mid", 4096, 1536)
         else        -> ResolutionProfile("low", 4096, 1024)
     }
 }

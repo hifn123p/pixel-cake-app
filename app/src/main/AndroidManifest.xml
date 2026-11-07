@@ -41,6 +41,15 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+
+            <!-- P3 发布合规：USB 相机插入时系统可建议打开本 App（device_filter 只按厂商
+                 Sony 0x054C 过滤）。configChanges 已覆盖场景切换，activity 不重建。 -->
+            <intent-filter>
+                <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
+            </intent-filter>
+            <meta-data
+                android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"
+                android:resource="@xml/device_filter" />
         </activity>
 
         <!-- 调试日志导出：把 files/debug 下的日志通过系统分享发出去 -->

@@ -34,6 +34,9 @@ class CameraSession private constructor(
     val deviceLabel: String,
     val deviceInfo: PtpDeviceInfo?,
     val openSessionCode: Int,
+    // E2：OpenSession 响应里的 SessionID（旧实现解析后被丢弃）。相机自报的会话号
+    // 可能与请求的 SESSION_ID_DEFAULT 不同 —— 保存它供日志诊断与将来的会话级操作。
+    val sessionId: Int,
     val storageIds: List<Int>,
     val storages: List<PtpStorageInfo>
 ) : AutoCloseable {
@@ -59,21 +62,69 @@ class CameraSession private constructor(
 
     suspend fun objectHandles(storageId: Int): HandleQuery = io.withLock { queryHandles(storageId) }
 
-    /** 查询设备属性（电量 / ISO / 光圈等）。返回 u16 值（模型端解析），失败 null。 */
-    suspend fun getDeviceProp(propCode: Int): Int? = io.withLock {
+    /**
+     * 设备属性读取结果（E3(b)：失败原因要能上屏，不能只落日志返回 null）。
+     */
+    sealed class PropValue {
+        data class Ok(val value: Int) : PropValue()
+        class Failed(val reason: String) : PropValue()
+
+        val asDisplay: String
+            get() = when (this) {
+                is Ok -> value.toString()
+                is Failed -> "不可用（$reason）"
+            }
+    }
+
+    /**
+     * 查询设备属性（电量 / ISO / 光圈 / 快门等）。
+     *
+     * E1 修复：调用方必须声明 [type]（PTP DataTypeCode），按类型解析 —— 旧实现一律把
+     * 负载当 u16 读，对 UINT8 的电量和 UINT32 的快门都是错的；且旧码表 0x500D 撞码。
+     * 失败（响应非 OK / 负载缺失 / 长度不足）返回 [PropValue.Failed]，原因取自响应码。
+     */
+    suspend fun getDeviceProp(propCode: Int, type: PtpProtocol.PtpPropDatatype): PropValue = io.withLock {
         withContext(Dispatchers.IO) {
             val r = transport.execute(PtpProtocol.OP_GET_DEVICE_PROP_VALUE, propCode)
-            if (!r.ok || r.data == null || r.data.size < 2) return@withContext null
-            (r.data[0].toInt() and 0xFF) or ((r.data[1].toInt() and 0xFF) shl 8)
+            if (!r.ok) {
+                return@withContext PropValue.Failed(r.responseName())
+            }
+            val data = r.data
+                ?: return@withContext PropValue.Failed("无数据负载")
+            type.parse(data)
+                ?.let { PropValue.Ok(it) }
+                ?: PropValue.Failed("负载 ${data.size}B 不足 ${type.byteSize}B（${type.name}）")
         }
     }
 
-    /** 系留仪表盘的快照：电量 + 存储 + 曝光参数（一次调用，不逐个查询）。 */
+    /**
+     * 系留仪表盘的快照：电量 / ISO / 光圈 / 快门（一次调用，不逐个查询）。
+     *
+     * E1：属性码与数据类型按 PTP 标准成对给出；E3(b)：每个属性失败时把原因直接
+     * 放进返回的 Map（界面显示「ISO: 不可用（OperationNotSupported）」而不是悄悄缺一块）。
+     */
     suspend fun tetherSnapshot(): Map<String, String> {
-        val props = mapOf("battery" to 0x5001, "iso" to 0x5007, "fNumber" to 0x500D)
+        val props = listOf(
+            "电量" to (PtpProtocol.DP_BATTERY_LEVEL to PtpProtocol.PtpPropDatatype.U8),
+            "ISO" to (PtpProtocol.DP_EXPOSURE_INDEX to PtpProtocol.PtpPropDatatype.U16),
+            "光圈" to (PtpProtocol.DP_F_NUMBER to PtpProtocol.PtpPropDatatype.U16),
+            "快门" to (PtpProtocol.DP_EXPOSURE_TIME to PtpProtocol.PtpPropDatatype.U32)
+        )
         val out = mutableMapOf<String, String>()
-        for ((name, code) in props) {
-            try { getDeviceProp(code)?.let { out[name] = it.toString() } } catch (_: Exception) {}
+        for ((name, spec) in props) {
+            val (code, type) = spec
+            try {
+                out[name] = getDeviceProp(code, type).asDisplay
+            } catch (c: kotlinx.coroutines.CancellationException) {
+                throw c
+            } catch (t: Throwable) {
+                // 清理之外的业务异常：写日志 + 界面可见（吞 CE 是静态闸门红线）
+                DebugLog.w(
+                    DebugLog.TAG_CAMERA, "tether snapshot prop failed",
+                    mapOf("prop" to name, "err" to (t.message ?: t.javaClass.simpleName))
+                )
+                out[name] = "查询异常(${t.javaClass.simpleName})"
+            }
         }
         return out
     }
@@ -322,7 +373,9 @@ class CameraSession private constructor(
                     transport.close()
                     return@withContext CameraSessionResult.Failed("OpenSession 未成功：${open.describe()}")
                 }
-                step("OpenSession → ${open.responseName()}")
+                // E2：相机自报的 SessionID（响应参数 0）；与请求值不同也如实记录。
+                val sessionId = open.responseParams.firstOrNull() ?: PtpProtocol.SESSION_ID_DEFAULT
+                step("OpenSession → ${open.responseName()}，SessionID=$sessionId")
 
                 val deviceInfo = transport.execute(PtpProtocol.OP_GET_DEVICE_INFO).data
                     ?.let { parseDeviceInfo(it) }
@@ -353,6 +406,7 @@ class CameraSession private constructor(
                     deviceLabel = describeDevice(device),
                     deviceInfo = deviceInfo,
                     openSessionCode = open.responseCode,
+                    sessionId = sessionId,
                     storageIds = storageIds,
                     storages = storages
                 )

@@ -18,11 +18,12 @@ android {
         targetSdk = libs.versions.targetSdk.get().toInt()
         // 与 GitHub Release tag 一一对应：打 v0.4.3 时同步抬这里，
         // 否则「关于」页(AboutSheet 显示 v${versionName} (${versionCode}))会与 Release 页对不上。
-        // v0.6.4：外部审计（qwen3.8 + hy4）整改批次 —— P0-2 EXIF 方向烘焙与最小集回写、
-        // P1-2 直方图按带累加进锁、P1-3 导出取消不留幽灵文件、P1-5 系留基线播种与坏对象记账、
-        // U4 空作用域禁用、U1 滤镜强度空转修复、T1 参数栈 JSON 序列化。
-        versionCode = 19
-        versionName = "0.6.4"
+        // v0.6.5：审计剩余项全量清账 —— E1 属性码撞码/datatype 校验、B4 openLinear 内存预算、
+        // B1 导出双全幅档位缓解、B2 笔刷蒙版网格化、M-3 Bayer 抖动、M-4 热观测、
+        // D1-D5 无响应五项、A4/A5/A6 并发三项、U2/U3/U6 诚实界面、T2 BackHandler+生命周期可测化、
+        // T3 横屏最小可用、T4 无障碍语义、TetherProcessor 可测化 + CE 静态闸门上线。
+        versionCode = 20
+        versionName = "0.6.5"
 
         // 刻意**不声明** testInstrumentationRunner（审计 M8）：本项目没有 androidTest 源集、
         // 也没有 androidx.test 依赖，裸声明是死配置 —— 一旦有人加仪器测试会因缺依赖直接红；
@@ -160,6 +161,8 @@ implementation(libs.androidx.activity.compose)
 
     // M0b：纯 Kotlin ARW 预览解析的 JVM 单测
     testImplementation("junit:junit:4.13.2")
+    // 批 5：suspend 决策逻辑（TetherProcessor / EditorSessionLifecycle）的 JVM 单测
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
 }
 
 // 本项目「本地无编译器」⇒ CI 是唯一的编译器，测试失败必须能**从 CI 日志直接读到断言差值**。

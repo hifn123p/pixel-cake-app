@@ -110,6 +110,10 @@ object Decoder {
         var cacheReleased = false
         val linear = try {
             ArwFullDecoder.decodeLinearProxy(cache.absolutePath, longEdge)
+        } catch (c: CancellationException) {
+            // decodeLinearProxy 本身非挂起、无 CE 可抛；此处显式重抛是为对齐
+            // 「catch(Throwable) 必须显式说明 CE 去向」的静态闸门（A7 纪律）。
+            throw c
         } catch (t: Throwable) {
             ArwFullDecoder.releaseCache(cache.absolutePath)
             cacheReleased = true

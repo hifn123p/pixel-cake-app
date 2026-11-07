@@ -88,6 +88,9 @@ object UsbPermission {
                     result
                 }
             } ?: false
+        } catch (c: kotlinx.coroutines.CancellationException) {
+            // 等待授权的协程被取消不是「授权失败」，原样上抛（吞 CE 是静态闸门红线）。
+            throw c
         } catch (e: Exception) {
             DebugLog.e(
                 DebugLog.TAG_CAMERA, "usb permission request failed",
