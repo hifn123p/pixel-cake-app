@@ -52,7 +52,18 @@ jobs:
         run: chmod +x gradlew
 
       - name: Assemble debug APK
-        run: ./gradlew assembleDebug --stacktrace
+        # 2026-11-07：tee 落日志 + pipefail 保退出码 —— 失败时上传完整编译日志工件，
+        # 远端排障不再靠猜（无本地构建环境，日志是唯一证据）。
+        run: |
+          set -o pipefail
+          ./gradlew assembleDebug --stacktrace 2>&1 | tee assemble-debug.log
+
+      - name: Upload assemble log (failure evidence)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: assemble-debug-log-${{ github.run_id }}
+          path: assemble-debug.log
 
       # F11：CI 质量闸门——本地 JVM 单测（ColorMathTest / ArwPreviewExtractorTest）必过
       - name: Run unit tests
@@ -132,7 +143,16 @@ jobs:
         run: chmod +x gradlew
 
       - name: Run lint
-        run: ./gradlew lintDebug
+        run: |
+          set -o pipefail
+          ./gradlew lintDebug 2>&1 | tee lint-debug.log
+
+      - name: Upload lint log (failure evidence)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lint-debug-log-${{ github.run_id }}
+          path: lint-debug.log
 
       - name: Upload lint report
         if: always()
