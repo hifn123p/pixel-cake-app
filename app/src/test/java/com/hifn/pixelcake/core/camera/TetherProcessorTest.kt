@@ -46,7 +46,8 @@ class TetherProcessorTest {
         // 名额上限（maxPerRound=3）在**原始 fresh 列表**上截断（与旧口径一致：take(3) 先行），
         // 所以本轮 = 1(坏，记账跳过) / 2 / 3；关键性质在第二轮：
         val info = fakeInfoOf(
-            2 to info("DSC00002.JPG"), 3 to info("DSC00003.JPG"), 4 to info("DSC00004.ARW")
+            2 to info("DSC00002.JPG"), 3 to info("DSC00003.JPG"),
+            4 to info("DSC00004.ARW"), 5 to info("DSC00005.ARW")
         )
         val round1 = p.collectNewPhotos(listOf(1, 2, 3, 4), info)
         assertEquals(listOf(2, 3), round1.map { it.handle })
