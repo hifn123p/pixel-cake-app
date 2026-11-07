@@ -167,7 +167,7 @@ fun CameraPanel(
                 // ②/K3：新片收集与坏对象记账都在 TetherProcessor 里（有单测钉住）。
                 val newPhotos = tether.collectNewPhotos(query.handles) { h -> sn.objectInfo(h) }
                 for (photo in newPhotos) {
-                    log(photo.photo.info.filename + " · 传输中...")
+                    log(photo.info.filename + " · 传输中...")
                     val target = CameraBatch.newSingleTarget(context, photo)
                     try {
                         val outcome = sn.download(photo.handle, target) { _, _ -> }
