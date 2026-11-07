@@ -439,6 +439,8 @@ fun EditorScreen(
     // —— 直方图数据：随每次渲染完成在后台重算（采样步长按像素数分档），
     // 顶部直方图条消费；读取失败（位图竞态兜底）时条不占位。
     val histogram by produceState<Triple<FloatArray, FloatArray, FloatArray>?>(null, renderVersion, rendered) {
+        // P0-3 A8：换图 / 每帧先清旧值 —— 防止陈旧直方图被 onAutoEnhance 消费
+        value = null
         val bmp = rendered ?: return@produceState
         value = withContext(Dispatchers.Default) {
             runCatching {

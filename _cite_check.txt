@@ -1,0 +1,87 @@
+app\src\main\cpp\raw_bridge.cpp:118 | libraw_processed_image_t* image = rp->dcraw_make_mem_image(&err);
+app\src\main\java\com\hifn\pixelcake\MainActivity.kt:129 | var editorOpen by remember { mutableStateOf(false) }
+app\src\main\java\com\hifn\pixelcake\MainActivity.kt:251 | LaunchedEffect(imported) {
+app\src\main\java\com\hifn\pixelcake\MainActivity.kt:253 | // ⚠️ 与主渲染协程**共用同一把 `renderMutex`**：两者都在读 `src.bitmap` 的像素，
+app\src\main\java\com\hifn\pixelcake\MainActivity.kt:382 | val mask = buildSkinMask(w, h, strokes, radius, mlMask)
+app\src\main\java\com\hifn\pixelcake\MainActivity.kt:478 | //   **绝不回收** —— 它还要当下一次渲染的写入目标，回收它等于把双缓冲拆成单缓冲。
+app\src\main\java\com\hifn\pixelcake\MainActivity.kt:490 | // 双缓冲交换就在这一行：刚算好的那块换到前台，旧的**前台**块降级为下一批的写入目标。
+app\src\main\java\com\hifn\pixelcake\MainActivity.kt:500 | rendered = target
+app\src\main\java\com\hifn\pixelcake\MainActivity.kt:512 | //
+app\src\main\java\com\hifn\pixelcake\MainActivity.kt:526 | renderStamp++
+app\src\main\java\com\hifn\pixelcake\MainActivity.kt:531 | DebugLog.d(
+app\src\main\java\com\hifn\pixelcake\MainActivity.kt:855 | scope.launch(Dispatchers.Main) {
+app\src\main\java\com\hifn\pixelcake\MainActivity.kt:879 | fullBase = srcUri?.let {
+app\src\main\java\com\hifn\pixelcake\MainActivity.kt:968 | val (exportedUri, label) = result
+app\src\main\java\com\hifn\pixelcake\MainActivity.kt:990 | onAutoEnhance = { h ->
+app\src\main\java\com\hifn\pixelcake\MainActivity.kt:1015 | // ⚠️ 退出编辑器是这个文件里最危险的一段回收，请按下面的顺序读。
+app\src\main\java\com\hifn\pixelcake\MainActivity.kt:1046 | if (retired.isNotEmpty()) {
+app\src\main\java\com\hifn\pixelcake\camera\CameraBatch.kt:163 | } finally {
+app\src\main\java\com\hifn\pixelcake\camera\CameraPhoto.kt:69 | val PHOTO_EXTENSIONS = setOf("arw", "dng", "jpg", "jpeg", "heic", "hif", "tif", "tiff", "png")
+app\src\main\java\com\hifn\pixelcake\camera\CameraSession.kt:72 | suspend fun tetherSnapshot(): Map<String, String> {
+app\src\main\java\com\hifn\pixelcake\camera\CameraSession.kt:76 | try { getDeviceProp(code)?.let { out[name] = it.toString() } } catch (_: Exception) {}
+app\src\main\java\com\hifn\pixelcake\camera\CameraSession.kt:181 | // 句柄通常按时间递增 → 取尾部（最新）后倒序，UI 第 0 个即最新一张
+app\src\main\java\com\hifn\pixelcake\camera\PtpProtocol.kt:59 | const val DP_EXPOSURE_INDEX = 0x5007 // ISO
+app\src\main\java\com\hifn\pixelcake\camera\PtpTransport.kt:170 | // ⚠️ 必须校验事务号：`Header.transactionId` 被解析出来却从未与 txId 比对过。
+app\src\main\java\com\hifn\pixelcake\camera\PtpTransport.kt:174 | if (response.first.transactionId != txId) {
+app\src\main\java\com\hifn\pixelcake\camera\PtpTransport.kt:369 | }
+app\src\main\java\com\hifn\pixelcake\camera\PtpTransport.kt:370 | if (payloadLength == 0) return header to ByteArray(0)
+app\src\main\java\com\hifn\pixelcake\camera\PtpTransport.kt:543 | /** 选 PTP/MTP 接口：优先「静像设备」类（6），退而求其次厂商特定类（0xFF）。 */
+app\src\main\java\com\hifn\pixelcake\camera\UsbPermission.kt:91 | } catch (e: Exception) {
+app\src\main\java\com\hifn\pixelcake\core\decode\Decoder.kt:48 | val isArw = mime.contains("arw") || uri.toString().endsWith(".arw", ignoreCase = true)
+app\src\main\java\com\hifn\pixelcake\core\decode\Decoder.kt:50 | } catch (c: CancellationException) {
+app\src\main\java\com\hifn\pixelcake\core\decode\Decoder.kt:100 | // 于是**这份 65MB 的缓存文件路径从未交给任何人** ⇒ 彻底泄漏。
+app\src\main\java\com\hifn\pixelcake\core\decode\Decoder.kt:104 | } catch (t: Throwable) {
+app\src\main\java\com\hifn\pixelcake\core\decode\Decoder.kt:131 | val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+app\src\main\java\com\hifn\pixelcake\core\decode\Exporter.kt:62 | } catch (t: Throwable) {
+app\src\main\java\com\hifn\pixelcake\core\decode\RawLinearSource.kt:87 | override fun close() = synchronized(ioLock) {
+app\src\main\java\com\hifn\pixelcake\core\decode\RawLinearSource.kt:97 | private const val MAX_READ_ALL_BYTES = 64L * 1024 * 1024
+app\src\main\java\com\hifn\pixelcake\core\edit\DetailPass.kt:110 | 
+app\src\main\java\com\hifn\pixelcake\core\edit\DetailPass.kt:324 | val nrLum = p.nrLuminance.coerceIn(0f, 1f)
+app\src\main\java\com\hifn\pixelcake\core\edit\EditEngine.kt:110 | val program = PixelProgram(p, frameW = w, frameH = h)
+app\src\main\java\com\hifn\pixelcake\core\edit\EditEngine.kt:373 | jobs.forEach { it.get() }
+app\src\main\java\com\hifn\pixelcake\core\edit\EditEngine.kt:376 | fun render(
+app\src\main\java\com\hifn\pixelcake\core\edit\EditLerp.kt:18 | * 死字段（teethWhiten 等）不参与（§9 纪律 6：不接线的不假装生效）。
+app\src\main\java\com\hifn\pixelcake\core\edit\EditModel.kt:70 | ) {
+app\src\main\java\com\hifn\pixelcake\core\edit\EditModel.kt:186 | val lutId: String = "none",
+app\src\main\java\com\hifn\pixelcake\core\edit\Mask.kt:62 | val data = FloatArray(w * h)
+app\src\main\java\com\hifn\pixelcake\core\edit\ObjectLayers.kt:144 | * `resampleTo(w, h)` 对它们只换目标尺寸、零大分配。**绝不要**把画笔栅格（`RasterMask`）接进来 ——
+app\src\main\java\com\hifn\pixelcake\core\edit\ObjectLayers.kt:205 | val p = l.params.withoutWholeImageStages()
+app\src\main\java\com\hifn\pixelcake\core\edit\ObjectLayers.kt:207 | val mask = maskOf(l.scope)?.resampleTo(w, h) ?: continue
+app\src\main\java\com\hifn\pixelcake\core\edit\ObjectLayers.kt:293 | internal fun EditParams.withoutWholeImageStages(): EditParams = copy(
+app\src\main\java\com\hifn\pixelcake\core\edit\PixelProgram.kt:123 | /**
+app\src\main\java\com\hifn\pixelcake\core\edit\PixelProgram.kt:130 | private val lutOp: Int = when {
+app\src\main\java\com\hifn\pixelcake\core\edit\PixelProgram.kt:170 | init {
+app\src\main\java\com\hifn\pixelcake\core\edit\RetouchScale.kt:56 | fun brushMask(
+app\src\main\java\com\hifn\pixelcake\core\edit\retouch\Beauty.kt:78 | for (x in 0 until w) {
+app\src\main\java\com\hifn\pixelcake\core\edit\retouch\Beauty.kt:91 | val out = IntArray(bw * bh)
+app\src\main\java\com\hifn\pixelcake\core\edit\retouch\NeutralGray.kt:129 | var buf = IntArray(0)
+app\src\main\java\com\hifn\pixelcake\core\edit\retouch\NeutralGray.kt:194 | val tmp = IntArray(src.size)
+app\src\main\java\com\hifn\pixelcake\core\edit\retouch\RetouchLayer.kt:266 | val lo = (loComputed - 1).coerceIn(0, h - 1)
+app\src\main\java\com\hifn\pixelcake\core\edit\retouch\RetouchLayer.kt:282 | private fun maskRowSpan(mask: RetouchMask, w: Int, h: Int): IntArray? {
+app\src\main\java\com\hifn\pixelcake\diag\DebugLog.kt:63 | @Synchronized
+app\src\main\java\com\hifn\pixelcake\ui\components\ParamSlider.kt:148 | //
+app\src\main\java\com\hifn\pixelcake\ui\components\ParamSlider.kt:153 | //
+app\src\main\java\com\hifn\pixelcake\ui\editor\EditorScreen.kt:316 | // 强度环（UI 3.0 §F）：当前预设的强度（0..1）；切预设时重置为 1。
+app\src\main\java\com\hifn\pixelcake\ui\editor\EditorScreen.kt:375 | val display: ImageBitmap? = remember(renderVersion, showOriginal, compareSource, rendered) {
+app\src\main\java\com\hifn\pixelcake\ui\editor\EditorScreen.kt:441 | val histogram by produceState<Triple<FloatArray, FloatArray, FloatArray>?>(null, renderVersion, rendered) {
+app\src\main\java\com\hifn\pixelcake\ui\editor\EditorScreen.kt:568 | val hit = masksNow.value?.scopeAt(norm.first, norm.second)
+app\src\main\java\com\hifn\pixelcake\ui\editor\EditorScreen.kt:765 | onAutoEnhance = { onAutoEnhance(histogram) },
+app\src\main\java\com\hifn\pixelcake\ui\editor\ParamPanel.kt:479 | GlassChipRow(
+app\src\main\java\com\hifn\pixelcake\ui\editor\ParamPanel.kt:486 | onSelect = onSelect,
+app\src\main\java\com\hifn\pixelcake\ui\editor\ParamPanel.kt:589 | Hint("「细节」（锐化/降噪/清晰度/纹理）与「效果」（暗角/颗粒）作用在整幅画面上 —— 按「${scope.label}」施加讲不通。把上面的作用域切回「整图」即可调整这两组参数。")
+app\src\main\java\com\hifn\pixelcake\ui\editor\ParamPanel.kt:1196 | // 强度环（UI 3.0 §F）：只在套了预设时显示。改量 = 参数栈从基座等比回退。
+app\src\main\java\com\hifn\pixelcake\ui\editor\Rail.kt:254 | val items = remember {
+app\src\main\java\com\hifn\pixelcake\ui\home\CameraPanel.kt:115 | val tetherScope = rememberCoroutineScope()
+app\src\main\java\com\hifn\pixelcake\ui\home\CameraPanel.kt:120 | tetherParams = s.tetherSnapshot()
+app\src\main\java\com\hifn\pixelcake\ui\home\CameraPanel.kt:130 | while (tetherOn) {
+app\src\main\java\com\hifn\pixelcake\ui\home\CameraPanel.kt:140 | arrivalLog = arrivalLog + (info.filename + " · 传输中...")
+app\src\main\java\com\hifn\pixelcake\ui\home\CameraPanel.kt:148 | val decoded = Decoder.decodeFullRes(context, Uri.fromFile(target), 2048)
+app\src\main\java\com\hifn\pixelcake\ui\home\CameraPanel.kt:170 | s?.close()
+app\src\main\java\com\hifn\pixelcake\ui\home\CameraPanel.kt:182 | "把 A7C2 用 USB 连上手机，机身「USB 连接」设为 MTP。握手后可浏览卡内照片：" +
+app\src\main\java\com\hifn\pixelcake\ui\home\CameraPanel.kt:603 | } finally {
+app\src\main\java\com\hifn\pixelcake\ui\home\CameraSheet.kt:69 | CameraPanel(longEdge = longEdge, onOpenLocalFile = onOpenLocalFile)
+app\src\main\java\com\hifn\pixelcake\ui\home\HomeScreen.kt:64 | * 相机直连仍走 [CameraSheet]（模态：会话必须随面板关闭而释放，理由见其 KDoc）。
+app\src\main\java\com\hifn\pixelcake\ui\settings\AppSettings.kt:128 | * 用假 `SharedPreferences` 覆盖三条：「跳版本升级」「重复调用不二次转换」「老用户落默认值」）。
+app\src\main\java\com\hifn\pixelcake\ui\settings\SettingsScreen.kt:274 | context.cacheDir.clearChildren()
+app\src\main\java\com\hifn\pixelcake\ui\settings\SettingsScreen.kt:427 | threshold = MlMaskProvider.oomThreshold,
+app\src\main\java\com\hifn\pixelcake\ui\shell\AppShell.kt:150 | BoxWithConstraints(modifier = Modifier.fillMaxHeight().weight(1f)) {

@@ -145,21 +145,41 @@ fun CameraPanel(
                         continue
                     }
                     arrivalLog = arrivalLog + (info.filename + " · 套「" + preset.name + "」")
-                    val decoded = Decoder.decodeFullRes(context, Uri.fromFile(target), 2048)
-                    if (decoded == null) {
-                        arrivalLog = arrivalLog + (info.filename + " · 解码失败")
-                        continue
+                    // P0-1 修复：ARW 走 LibRaw 线性管线（decodeFullRes 对 .arw 设计上返回 null）
+                    if (photo.isRaw) {
+                        val (tw, th) = RetouchScale.fitLongEdge(info.imageWidth, info.imageHeight, 2048)
+                        val lr = preset.retouch.lerped(1f)
+                        val rawBmp = EditEngine.renderLinearFile(
+                            target.absolutePath, 2048,
+                            preset.params.lerped(1f),
+                            RetouchScale.toRenderState(lr, tw, th),
+                        )
+                        if (rawBmp == null) {
+                            arrivalLog = arrivalLog + (info.filename + " · RAW 渲染失败")
+                            continue
+                        }
+                        val expUri = Exporter.export(context, rawBmp, ExportFormat.JPEG, 92)
+                        rawBmp.recycle()
+                        arrivalLog = arrivalLog + (info.filename + if (expUri != null) " · 已导出 ✓" else " · 导出失败")
+                    } else {
+                        val decoded = Decoder.decodeFullRes(context, Uri.fromFile(target), 2048)
+                        if (decoded == null) {
+                            arrivalLog = arrivalLog + (info.filename + " · 解码失败")
+                            continue
+                        }
+                        val lp = preset.params.lerped(1f)
+                        val lr = preset.retouch.lerped(1f)
+                        val bmp = Bitmap.createBitmap(decoded.bitmap.width, decoded.bitmap.height, Bitmap.Config.ARGB_8888)
+                        EditEngine.renderIntoSrgb(bmp, decoded.bitmap, lp, RetouchScale.toRenderState(lr, bmp.width, bmp.height))
+                        val expUri = Exporter.export(context, bmp, ExportFormat.JPEG, 92)
+                        bmp.recycle()
+                        decoded.bitmap.recycle()
+                        arrivalLog = arrivalLog + (info.filename + if (expUri != null) " · 已导出 ✓" else " · 导出失败")
                     }
-                    val lp = preset.params.lerped(1f)
-                    val lr = preset.retouch.lerped(1f)
-                    val bmp = Bitmap.createBitmap(decoded.bitmap.width, decoded.bitmap.height, Bitmap.Config.ARGB_8888)
-                    EditEngine.renderIntoSrgb(bmp, decoded.bitmap, lp, RetouchScale.toRenderState(lr, bmp.width, bmp.height))
-                    val expUri = Exporter.export(context, bmp, ExportFormat.JPEG, 92)
-                    bmp.recycle()
-                    decoded.bitmap.recycle()
-                    arrivalLog = arrivalLog + (info.filename + if (expUri != null) " · 已导出 ✓" else " · 导出失败")
                 }
-            } catch (_: Exception) { }
+            } catch (e: Exception) {
+                arrivalLog = arrivalLog + ("轮询异常: " + (e.message ?: e.javaClass.simpleName))
+            }
         }
     }
 
