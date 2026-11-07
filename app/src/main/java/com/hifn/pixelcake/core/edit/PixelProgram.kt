@@ -73,8 +73,8 @@ class PixelProgram(
      * 默认 1×1（正方形）⇒ 单测不传也能得到自洽的几何（中心 = (0.5, 0.5)、四角 = 4 个对称点）。
      * **真实渲染三条路径（`EditEngine`）都必须传真尺寸**，否则暗角在 3:2 画幅上会算成正圆轮廓。
      */
-    frameW: Int = 1,
-    frameH: Int = 1,
+    private val frameW: Int = 1,
+    private val frameH: Int = 1,
     /**
      * M-3：最终 8-bit 量化时叠加 **8×8 Bayer 有序抖动**（±0.5 LSB）。
      *
@@ -85,7 +85,7 @@ class PixelProgram(
      * （不与确定性颗粒冲突：颗粒是亮度噪声，抖动只有 ±0.5 LSB）。
      * sRGB 路径（applySrgb8）保持默认关闭：源已是 8-bit，再抖只会添噪、还会动既有测试的断言。
      */
-    dither: Boolean = false
+    private val dither: Boolean = false
 ) {
     // ——————————————— 线性域 ———————————————
 
