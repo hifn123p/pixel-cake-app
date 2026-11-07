@@ -25,7 +25,6 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -39,7 +38,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -539,7 +537,7 @@ fun EditorScreen(
     }
 
     CompositionLocalProvider(LocalHudReporter provides hudSetter) {
-        BoxWithConstraints(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .onSizeChanged { ownerHeightPx = it.height; screenW = it.width }
@@ -555,11 +553,6 @@ fun EditorScreen(
                     }
                 }
         ) {
-
-            // T3 横屏最小可用（UI3.0 §L′）：宽 ≥600dp 且宽 > 高 ⇒ Deck 变**右侧栏**（400dp 满高），
-            // 直方图条与 Rail 收进左侧列；竖屏布局保持原样。判据：横握看 3:2 横构图时，
-            // 直方图 + 3 条滑块同屏全可见。Deck 调高手柄是竖屏专用（侧栏恒满高）。
-            val landscape = maxWidth >= 600.dp && maxWidth > maxHeight
             // ———— 1. 照片层（全屏画布）————
             //
             // 手势挂在这一整层：deck / rail / 顶栏在其上（后声明的兄弟在 z 轴之上），
@@ -619,11 +612,6 @@ fun EditorScreen(
                     .padding(top = photoTopPad, bottom = photoBottomPad)
                     .onSizeChanged { photoBoxSize = it }
                     .clipToBounds()
-                    // T4 无障碍：画布手势是自绘交互，读屏用户需要知道这块能做什么。
-                    .semantics {
-                        contentDescription =
-                            "照片画布：双指缩放与平移，双击放大；横拖调节当前选中的参数"
-                    }
                     .previewGestures(
                         retouchTool = retouchTool,
                         boxPx = photoBoxSize,
@@ -776,10 +764,99 @@ fun EditorScreen(
             }
 
             // ———— 2. Chrome 层（顶栏 + 直方图条 + Deck + Rail）————
-            //
-            // Deck 内容两态共用这一份（两处各写一遍必然漂移，同 GlassChipRow 的教训）。
-            val deckInner: @Composable () -> Unit = {
-                Column(modifier = Modifier.fillMaxSize()) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                // 顶栏：只降 alpha、不收高度（收高度会改照片 fit，画面跳两下）。
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .inertUnless(enabled = !dragging)
+                        .alpha(chromeAlpha)
+                ) {
+                    EditorTopBar(
+                        showOriginal = showOriginal,
+                        canUndo = canUndo,
+                        canRedo = canRedo,
+                        onOpenHistory = { showHistory = true },
+                        exporting = exporting,
+                        lightChrome = lightChrome,
+                        onBack = onBack,
+                        onUndo = onUndo,
+                        onRedo = onRedo,
+                        onToggleCompare = { showOriginal = !showOriginal },
+                        splitCompare = splitCompare,
+                        // 进入分割对比时收起「看原图」：两者都改 display，同时开着会让
+                        // 「之前」那张变成整屏（分割线左右看起来一样），用户会以为功能没生效。
+                        onToggleSplit = {
+                            splitCompare = !splitCompare
+                            if (splitCompare) showOriginal = false
+                        },
+                        onAutoEnhance = { onAutoEnhance(histogram) },
+                        histogramReady = histogram != null,
+                        onExport = { showExport = true }
+                    )
+                }
+
+                // 直方图条：随 chrome 淡出；点击收起 / 展开（用户主动行为，允许布局变化）。
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .inertUnless(enabled = !dragging)
+                        .alpha(chromeAlpha)
+                ) {
+                    HistogramStrip(
+                        data = histogram,
+                        expanded = histExpanded,
+                        lightChrome = lightChrome,
+                        onToggle = { histExpanded = !histExpanded }
+                    )
+                }
+
+                // 照片区：weight 吃掉剩余高度（照片本体在上面第一层，全屏铺底）。
+                Spacer(Modifier.weight(1f))
+
+                // ———— Deck 拖拽调高手柄（用户可自由调整 Deck 高度）————
+                // 上拖 = Deck 变高（更多参数可见），下拖 = 变矮（更多照片可见）。
+                // 拖拽只改 deckHOverride，不触发动画（跟手）。
+                var deckHOverride by remember { mutableStateOf<Dp?>(null) }
+                val deckDragHandle = Modifier
+                    .fillMaxWidth()
+                    .height(20.dp)
+                    .pointerInput(Unit) {
+                        detectVerticalDragGestures { change, dragAmount ->
+                            change.consume()
+                            val current = deckHOverride ?: deckH
+                            deckHOverride = (current - dragAmount.toDp())
+                                .coerceIn(160.dp, 520.dp)
+                        }
+                    }
+                Box(
+                    modifier = deckDragHandle,
+                    contentAlignment = Alignment.Center
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .width(36.dp)
+                            .height(4.dp)
+                            .clip(Radius.pill)
+                            .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f))
+                    )
+                }
+
+                // ———— Deck 控制台（高度可调）————
+                //
+                // 实心容器（零 blur），顶部 20dp 圆角。高度由拖拽手柄或分类切换决定。
+                // 作用域行 / 分组 chips 钉在滚动之外；内容区滚动兜底（4 滑块的组）。
+                // ⚠️ 这里是参数的一部分（决定「改谁 / 改什么」），**不**随 chrome 淡出。
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(deckHOverride ?: deckH)
+                        .background(
+                            MaterialTheme.colorScheme.surface,
+                            RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
+                        )
+                ) {
+                    Column(modifier = Modifier.fillMaxSize()) {
                         if (category.scopeMode.showsScopeBar) {
                             ParamScopeBar(
                                 current = scope,
@@ -869,155 +946,7 @@ fun EditorScreen(
                         }
                     }
                 }
-            Column(modifier = Modifier.fillMaxSize()) {
-                // 顶栏：只降 alpha、不收高度（收高度会改照片 fit，画面跳两下）。
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .inertUnless(enabled = !dragging)
-                        .alpha(chromeAlpha)
-                ) {
-                    EditorTopBar(
-                        showOriginal = showOriginal,
-                        canUndo = canUndo,
-                        canRedo = canRedo,
-                        onOpenHistory = { showHistory = true },
-                        exporting = exporting,
-                        lightChrome = lightChrome,
-                        onBack = onBack,
-                        onUndo = onUndo,
-                        onRedo = onRedo,
-                        onToggleCompare = { showOriginal = !showOriginal },
-                        splitCompare = splitCompare,
-                        // 进入分割对比时收起「看原图」：两者都改 display，同时开着会让
-                        // 「之前」那张变成整屏（分割线左右看起来一样），用户会以为功能没生效。
-                        onToggleSplit = {
-                            splitCompare = !splitCompare
-                            if (splitCompare) showOriginal = false
-                        },
-                        onAutoEnhance = { onAutoEnhance(histogram) },
-                        histogramReady = histogram != null,
-                        onExport = { showExport = true }
-                    )
-                }
 
-                if (landscape) {
-                    Row(modifier = Modifier.fillMaxWidth().weight(1f)) {
-                        Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
-                        // 直方图条：随 chrome 淡出；点击收起 / 展开（用户主动行为，允许布局变化）。
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .inertUnless(enabled = !dragging)
-                                .alpha(chromeAlpha)
-                        ) {
-                            HistogramStrip(
-                                data = histogram,
-                                expanded = histExpanded,
-                                lightChrome = lightChrome,
-                                onToggle = { histExpanded = !histExpanded }
-                            )
-                        }
-                            Spacer(Modifier.weight(1f))
-                        // ———— Rail 工具栏（六工具，图标 + 文字）————
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .inertUnless(enabled = !dragging)
-                                .alpha(chromeAlpha)
-                                .navigationBarsPadding()
-                                .padding(horizontal = 10.dp, vertical = 8.dp)
-                        ) {
-                            EditorRail(
-                                selected = category,
-                                onSelect = { category = it },
-                                modifier = Modifier.heightIn(min = RAIL_HEIGHT)
-                            )
-                        }
-                        }
-                        Box(
-                            modifier = Modifier
-                                .fillMaxHeight()
-                                .width(400.dp)
-                                .background(
-                                    MaterialTheme.colorScheme.surface,
-                                    RoundedCornerShape(topStart = 20.dp)
-                                )
-                        ) {
-                            deckInner()
-                        }
-                    }
-                } else {
-                // 直方图条：随 chrome 淡出；点击收起 / 展开（用户主动行为，允许布局变化）。
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .inertUnless(enabled = !dragging)
-                        .alpha(chromeAlpha)
-                ) {
-                    HistogramStrip(
-                        data = histogram,
-                        expanded = histExpanded,
-                        lightChrome = lightChrome,
-                        onToggle = { histExpanded = !histExpanded }
-                    )
-                }
-                Spacer(Modifier.weight(1f))
-                // ———— Deck 拖拽调高手柄（用户可自由调整 Deck 高度）————
-                // 上拖 = Deck 变高（更多参数可见），下拖 = 变矮（更多照片可见）。
-                // 拖拽只改 deckHOverride，不触发动画（跟手）。
-                var deckHOverride by remember { mutableStateOf<Dp?>(null) }
-                val deckDragHandle = Modifier
-                    .fillMaxWidth()
-                    .height(20.dp)
-                    .pointerInput(Unit) {
-                        detectVerticalDragGestures { change, dragAmount ->
-                            change.consume()
-                            val current = deckHOverride ?: deckH
-                            deckHOverride = (current - dragAmount.toDp())
-                                .coerceIn(160.dp, 520.dp)
-                        }
-                    }
-                Box(
-                    modifier = deckDragHandle
-                        // T4 无障碍：拖拽手柄对读屏不可用 —— 给名称 + 一个等价的点击动作
-                        //（在默认高度与最大高度间切换，双击/单击由读屏用户决定）。
-                        .semantics {
-                            contentDescription = "调整参数面板高度，点按可在默认与最大高度间切换"
-                        }
-                        .clickable(
-                            interactionSource = null,
-                            indication = null
-                        ) {
-                            deckHOverride = if (deckHOverride != null) null else DECK_HEIGHT_L * deckScale
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .width(36.dp)
-                            .height(4.dp)
-                            .clip(Radius.pill)
-                            .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f))
-                    )
-                }
-
-                // ———— Deck 控制台（高度可调）————
-                //
-                // 实心容器（零 blur），顶部 20dp 圆角。高度由拖拽手柄或分类切换决定。
-                // 作用域行 / 分组 chips 钉在滚动之外；内容区滚动兜底（4 滑块的组）。
-                // ⚠️ 这里是参数的一部分（决定「改谁 / 改什么」），**不**随 chrome 淡出。
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(deckHOverride ?: deckH)
-                        .background(
-                            MaterialTheme.colorScheme.surface,
-                            RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
-                        )
-                ) {
-                    deckInner()
-                }
                 // ———— Rail 工具栏（六工具，图标 + 文字）————
                 Box(
                     modifier = Modifier
@@ -1033,8 +962,10 @@ fun EditorScreen(
                         modifier = Modifier.heightIn(min = RAIL_HEIGHT)
                     )
                 }
-                }
             }
+
+            // ———— 3. 浮层（放大复位胶囊 / 中央 HUD / 胶囊提示）————
+            //
             // 必须在 chrome 之后声明（z 轴更高），否则会被 Deck 盖住。
             Box(modifier = Modifier.fillMaxSize()) {
                 if (previewZoom > 1.01f) {
@@ -1138,11 +1069,6 @@ fun EditorScreen(
     //
     // 只依赖 `exportReceipt != null`：上面 `MainActivity` 已排除「openOutputStream 返回 null」
     // 与「IS_PENDING 清不掉」两条静默失败（否则相册里会有 0 字节图、界面还报成功）。
-    // T2：弹层打开时系统返回**先关弹层**而不是退出编辑器。预测性返回手势下
-    // 没有 BackHandler 的弹层等于「一按返回 App 没了」—— 导出单与历史面板都一样。
-    BackHandler(enabled = showExport) { showExport = false }
-    BackHandler(enabled = showHistory) { showHistory = false }
-
     // ———— 5. 历史丝带（`UI3.0.html` §09 顶栏「历史」）————
     //
     // 只显示「第 N 步」，**不给每一步起名字**：那需要给 `EditHistory.push()` 加标签，
@@ -1230,18 +1156,6 @@ fun EditorScreen(
                             }
                         }
                     }
-                }
-                // U6：`onReset` 重新接线。顶栏按钮移走后它一直悬空（实现体零调用点），
-                // 与「起始（未编辑）」**不等价** —— 后者只跳栈，不清运行时的画笔蒙版 /
-                // 瑕疵描迹 / 预设选中态。两个入口并存：想反悔用列表跳步，想彻底重来用这里。
-                TextButton(
-                    onClick = {
-                        onReset()
-                        showHistory = false
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("重置全部（参数 + 蒙版 + 图层）")
                 }
             }
         }
@@ -1572,8 +1486,6 @@ private fun HistogramStrip(
                 .clip(Radius.card)
                 .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.92f))
                 .clickable(interactionSource = null, indication = null, onClick = onToggle)
-                // T4 无障碍：直方图是纯 Canvas 自绘，不给语义就是哑块。
-                .semantics { contentDescription = "RGB 直方图，点按可收起或展开" }
                 .padding(horizontal = 12.dp, vertical = 6.dp)
         ) {
             Canvas(modifier = Modifier.fillMaxWidth().height(26.dp)) {

@@ -7,7 +7,6 @@ import android.graphics.Rect
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.enableEdgeToEdge
@@ -25,7 +24,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import com.hifn.pixelcake.arw.ArwFullDecoder
@@ -56,7 +54,6 @@ import com.hifn.pixelcake.core.ml.MlMaskProvider
 import com.hifn.pixelcake.core.ml.ObjectMasks
 import com.hifn.pixelcake.diag.DebugLog
 import com.hifn.pixelcake.ui.editor.EditorScreen
-import com.hifn.pixelcake.ui.editor.EditorSessionLifecycle
 import com.hifn.pixelcake.ui.editor.EditorStatus
 import com.hifn.pixelcake.ui.editor.StatusKind
 import com.hifn.pixelcake.ui.home.HomeScreen
@@ -272,12 +269,17 @@ private fun AppRoot(settings: AppSettings) {
     // 放在 IO/Default 线程：10 张 192×192 的渲染约几十毫秒，放主线程会卡一次首帧。
     LaunchedEffect(imported) {
         val src = imported ?: return@LaunchedEffect
-        // A6 修复：**不再持 `renderMutex`**。旧写法让首帧预览在锁外排队等 10 张缩略图
-        //（打开大图的首帧被无谓推迟）。缩略图只读 `src.bitmap` —— 而 `src.bitmap` 按
-        // `onBack` 的约定**从不手动回收**（读者不唯一，交 GC），所以它没有需要互斥的
-        // 写者，也没有「回收竞态」可言。逐张渲染间检查 `isActive`：换图/退出立即让位。
-        presetThumbs = withContext(Dispatchers.Default) {
-            buildPresetThumbs(src.bitmap, Presets.ALL) { !isActive }
+        // ⚠️ 与主渲染协程**共用同一把 `renderMutex`**：两者都在读 `src.bitmap` 的像素，
+        // 而退出编辑器时会有一方在同一把锁内回收 `rendered`/`compareBase`（`src.bitmap` 本身
+        // 已改为交 GC，见 `onBack`）。把「所有位图像素读写的持有者」都收进一把锁，
+        // 是为了让「回收时没有读者」这件事**可以证明**，而不是靠「窗口很小」来赌。
+        //
+        // 代价是首屏「预设缩略图」与「首帧预览」不再重叠（缩略图约几十毫秒），
+        // 换来的是一条能在代码里被验证的性质 —— 这个交换在崩溃风险面前是划算的。
+        presetThumbs = renderMutex.withLock {
+            withContext(Dispatchers.Default) {
+                buildPresetThumbs(src.bitmap, Presets.ALL)
+            }
         }
         DebugLog.i(
             DebugLog.TAG_EDIT, "preset thumbs ready",
@@ -647,94 +649,6 @@ private fun AppRoot(settings: AppSettings) {
         uri?.let(openInEditor)
     }
 
-    // T2：编辑器的退出流程提升为函数级 lambda —— 系统返回键（BackHandler）与
-    // 顶栏「返回」按钮共用**同一条**安全回收路径。此前只有按钮走 onBack，
-    // 系统返回没有任何处理（预测性返回手势下会直接退出 Activity）。
-    val editorOnBack: () -> Unit = {
-                        // ⚠️ 退出编辑器是这个文件里最危险的一段回收，请按下面的顺序读。
-                        //
-                        // 触发场景非常常见：拖完滑块**立刻**点返回。此刻渲染协程正在
-                        // `Dispatchers.Default` 上往 `rendered` 里写像素，而 `recycle()` 释放的
-                        // 正是那块 native 像素内存 —— 两者并发就是 use-after-free：
-                        // 表现为 native 崩溃，Java 层的 try/catch 兜不住，也留不下可读的堆栈。
-                        //
-                        // 三道保护，缺一不可：
-                        // ① 推进代次 —— 在途渲染即使算完也不会写回（否则用户退出后再进来，
-                        //    先看到的会是上一张照片）；
-                        // ② 先摘引用、后回收 —— 主线程同步置 null，UI 立刻不再绘制它们；
-                        //    回收延后到锁被授予时，返回键不会被在途渲染堵住几百毫秒；
-                        // ③ 回收动作进 `renderMutex` —— 与所有像素写入串行化。
-                        //    这是唯一能**证明**「回收那一刻没有写者」的办法，而「窗口很小」
-                        //    不是理由：这个回收每次退出都会跑。
-                        imageEpoch.incrementAndGet()
-                        // 导出期间 `rendered` 还可能被编码路径读（拿不到全分辨率时的降级分支
-                        // 会直接拿它去编码）—— 那段时间它的归属权是**共享的**，手动回收必须等导出结束。
-                        // 用「导出中就不手动回收」而不是「给导出加锁」：导出要跑几秒，
-                        // 让预览渲染去等它会把编辑器卡成幻灯片；这几张图交给 GC 是更划算的交换。
-                        // ⚠️ `renderSpare` 必须与 `rendered` **同口径**一起退役：它同样是
-                        // 「渲染协程写、生命周期由这一把锁管」的缓冲（见双缓冲那一段）。
-                        // 漏掉它的后果有两层：每退出一次编辑器漏一块 11MB；而且那块缓冲里
-                        // 还留着上一张照片的像素，下一次导入会把它当作写入目标，画面先脏一拍。
-                        // T2：回收**决策**收进 EditorSessionLifecycle（纯函数，有单测）——
-                        // 「导出期间不手动回收」不再是 1300 行里的一段注释，而是一个有名字的判据。
-                        val retired: List<Bitmap> = EditorSessionLifecycle.planRetirement(
-                            exporting, listOfNotNull(rendered, compareBase, renderSpare)
-                        )
-                        rendered = null
-                        compareBase = null
-                        renderSpare = null
-                        baselinePending = false
-                        if (retired.isNotEmpty()) {
-                            scope.launch {
-                                // A4 修复：先等**当前帧**结束再回收。旧写法在无锁竞争时
-                                // `withLock` 不挂起 ⇒ 可能在 `editorOpen=false` 那次重组
-                                // 应用之前就同步回收，而 `asImageBitmap` 包装还在组合里
-                                //（低概率绘制已回收位图）。`withFrameNanos` 保证回收发生在
-                                // 退出帧之后 —— 与「先摘引用、后回收」的顺序互补。
-                                withFrameNanos { }
-                                EditorSessionLifecycle.retireInLock(renderMutex, retired) { it.recycle() }
-                            }
-                        }
-                        // 磁盘删除与导入路径（openInEditor 里 staleRaw 的释放）同口径：走 IO
-                        // 调度器，别在主线程给返回手势加一拍磁盘 I/O。
-                        val rawPathToRelease = imported?.rawCachePath
-                        if (rawPathToRelease != null) {
-                            scope.launch(Dispatchers.IO) {
-                                ArwFullDecoder.releaseCache(rawPathToRelease)
-                            }
-                        }
-                        // 退出编辑器：清掉 ML 缓存（下次打开重新推理，避免用错图）。
-                        scope.launch(Dispatchers.Default) {
-                            MlMaskProvider.invalidate()
-                            MlFaceProvider.invalidate()
-                        }
-                        // ⚠️ 刻意**不**回收 `src.bitmap`（导入代理图）。它与上面两张的关键区别是
-                        // **读者不唯一**：预览渲染、预设缩略图、导出、ML 推理都要读它。
-                        // 手动回收就得穷举全部读者并逐个串行化，漏掉任何一个都换来一次 native 崩溃；
-                        // 而它只有约 11MB（2048×1366 ARGB_8888），与 33MP 全幅的 131MB
-                        // 根本不是一个量级。交给 GC 是正确性明显更高的选择 —— GC 只在这张图
-                        // 确实无人引用时才释放，不会误伤在途的读者。
-                        //
-                        // 上面的 `rendered` / `compareBase` 之所以仍走手动回收，正是因为它们的
-                        // 读写者**只有渲染协程自己**：生命周期明确，一把锁就能管住。
-                        imported = null
-                        srcUri = null
-                        retouch = RetouchState()
-                        // 对象层与 retouch 同口径一起清（下一次导入本来也会清，这里是为了不让
-                        // 「退出编辑器后仍留着一批上一张图的层」这种状态存在哪怕一帧的机会）。
-                        layers = emptyList()
-                        brushStrokes = emptyList()
-                        retouchTool = "none"
-                        inpaintStrokes = emptyList()
-                        inpaintRadius = 0.01f
-                        activePresetId = "none"
-                        autoMaskNote = ""
-                        liquifyNote = ""
-                        renderStamp = 0
-                        editorOpen = false
-    }
-    BackHandler(enabled = editorOpen) { editorOnBack() }
-
     if (editorOpen) {
         val src = imported
         // `val src = imported` 后必须再判一次 null：`imported` 是被多个 lambda 捕获并修改的
@@ -919,7 +833,7 @@ private fun AppRoot(settings: AppSettings) {
                             // 用户拿到的是错的图且毫不知情 —— 这比直接报错危险得多。
                             val proxyFallback = rendered
                             // A1 取证：导出起点（此刻蒙版/包围盒缓冲都还没分配）
-                            DebugLog.i(DebugLog.TAG_EDIT, "export begin", memorySnapshot(context))
+                            DebugLog.i(DebugLog.TAG_EDIT, "export begin", memorySnapshot())
                             var failure: String? = null
                             val result: Pair<Uri?, String> = try {
                                 withContext(Dispatchers.Default) {
@@ -953,7 +867,7 @@ private fun AppRoot(settings: AppSettings) {
                                             }
                                         } else null
                                         // A1 取证：耗峰前一刻（画笔栅格已建，液化条带与包围盒尚未分配）
-                                        DebugLog.i(DebugLog.TAG_EDIT, "raw export pre-render", memorySnapshot(context))
+                                        DebugLog.i(DebugLog.TAG_EDIT, "raw export pre-render", memorySnapshot())
                                         val full = EditEngine.renderLinearFile(
                                             path = rawPath,
                                             maxLongSide = profile.fullResLongEdge,
@@ -1026,7 +940,7 @@ private fun AppRoot(settings: AppSettings) {
                                                 } else null
                                                 // A1 取证：整幅 retouch 前一刻（目标 Bitmap + 画笔栅格都在堆上，
                                                 // 紧接着 beautyPhase 还会再开两份整幅级缓冲 ⇒ 这里是最可能的爆点）
-                                                DebugLog.i(DebugLog.TAG_EDIT, "srgb export pre-retouch", memorySnapshot(context))
+                                                DebugLog.i(DebugLog.TAG_EDIT, "srgb export pre-retouch", memorySnapshot())
                                                 // 局部名刻意**不叫** rendered：外层已有一个 Compose 状态 `rendered`，
                                                 // 同名会被遮蔽，将来读代码的人极易误判自己在读哪个。
                                                 val okFull = EditEngine.renderIntoSrgb(
@@ -1040,11 +954,6 @@ private fun AppRoot(settings: AppSettings) {
                                                 )
                                                 if (!okFull) null to "全分辨率渲染尺寸不匹配"
                                                 else {
-                                                    // B1「导出即回收」：compress 只需要渲染目标 ——
-                                                    // 解码底图在此刻已经完成使命，先回收它，
-                                                    // 编码期不再双持两张全幅（旗舰档 33MP：131MB×2 → 131MB）。
-                                                    // 渲染期的双持是管线的固有代价，档位缓解见 ResolutionProfile。
-                                                    fullBase.bitmap.recycle()
                                                     val out = withContext(Dispatchers.IO) {
                                                         Exporter.export(
                                                             context, fullTarget, fmt, quality,
@@ -1096,7 +1005,7 @@ private fun AppRoot(settings: AppSettings) {
                                 // 无论成功、失败还是抛异常，`exporting` 都必须复位 ——
                                 // 它同时是「导出期间不回收位图」的保护条件，漏复位等于把渲染判死。
                                 exporting = false
-                                DebugLog.i(DebugLog.TAG_EDIT, "export end", memorySnapshot(context))
+                                DebugLog.i(DebugLog.TAG_EDIT, "export end", memorySnapshot())
                             }
                             val (exportedUri, label) = result
                             // 回执只在**真成功**时弹：`exportedUri != null` 已经排除了
@@ -1116,7 +1025,7 @@ private fun AppRoot(settings: AppSettings) {
                             }
                             DebugLog.i(
                                 DebugLog.TAG_EDIT, "export",
-                                mapOf("ok" to (exportedUri != null), "tier" to label) + memorySnapshot(context)
+                                mapOf("ok" to (exportedUri != null), "tier" to label) + memorySnapshot()
                             )
                         }
                     },
@@ -1144,7 +1053,81 @@ private fun AppRoot(settings: AppSettings) {
                         exportCancelled.set(true)
                         status = EditorStatus(StatusKind.Info, "正在取消…")
                     },
-                    onBack = editorOnBack,
+                    onBack = {
+                        // ⚠️ 退出编辑器是这个文件里最危险的一段回收，请按下面的顺序读。
+                        //
+                        // 触发场景非常常见：拖完滑块**立刻**点返回。此刻渲染协程正在
+                        // `Dispatchers.Default` 上往 `rendered` 里写像素，而 `recycle()` 释放的
+                        // 正是那块 native 像素内存 —— 两者并发就是 use-after-free：
+                        // 表现为 native 崩溃，Java 层的 try/catch 兜不住，也留不下可读的堆栈。
+                        //
+                        // 三道保护，缺一不可：
+                        // ① 推进代次 —— 在途渲染即使算完也不会写回（否则用户退出后再进来，
+                        //    先看到的会是上一张照片）；
+                        // ② 先摘引用、后回收 —— 主线程同步置 null，UI 立刻不再绘制它们；
+                        //    回收延后到锁被授予时，返回键不会被在途渲染堵住几百毫秒；
+                        // ③ 回收动作进 `renderMutex` —— 与所有像素写入串行化。
+                        //    这是唯一能**证明**「回收那一刻没有写者」的办法，而「窗口很小」
+                        //    不是理由：这个回收每次退出都会跑。
+                        imageEpoch.incrementAndGet()
+                        // 导出期间 `rendered` 还可能被编码路径读（拿不到全分辨率时的降级分支
+                        // 会直接拿它去编码）—— 那段时间它的归属权是**共享的**，手动回收必须等导出结束。
+                        // 用「导出中就不手动回收」而不是「给导出加锁」：导出要跑几秒，
+                        // 让预览渲染去等它会把编辑器卡成幻灯片；这几张图交给 GC 是更划算的交换。
+                        // ⚠️ `renderSpare` 必须与 `rendered` **同口径**一起退役：它同样是
+                        // 「渲染协程写、生命周期由这一把锁管」的缓冲（见双缓冲那一段）。
+                        // 漏掉它的后果有两层：每退出一次编辑器漏一块 11MB；而且那块缓冲里
+                        // 还留着上一张照片的像素，下一次导入会把它当作写入目标，画面先脏一拍。
+                        val retired: List<Bitmap> =
+                            if (exporting) emptyList()
+                            else listOfNotNull(rendered, compareBase, renderSpare)
+                        rendered = null
+                        compareBase = null
+                        renderSpare = null
+                        baselinePending = false
+                        if (retired.isNotEmpty()) {
+                            scope.launch {
+                                renderMutex.withLock { retired.forEach { it.recycle() } }
+                            }
+                        }
+                        // 磁盘删除与导入路径（openInEditor 里 staleRaw 的释放）同口径：走 IO
+                        // 调度器，别在主线程给返回手势加一拍磁盘 I/O。
+                        val rawPathToRelease = src.rawCachePath
+                        if (rawPathToRelease != null) {
+                            scope.launch(Dispatchers.IO) {
+                                ArwFullDecoder.releaseCache(rawPathToRelease)
+                            }
+                        }
+                        // 退出编辑器：清掉 ML 缓存（下次打开重新推理，避免用错图）。
+                        scope.launch(Dispatchers.Default) {
+                            MlMaskProvider.invalidate()
+                            MlFaceProvider.invalidate()
+                        }
+                        // ⚠️ 刻意**不**回收 `src.bitmap`（导入代理图）。它与上面两张的关键区别是
+                        // **读者不唯一**：预览渲染、预设缩略图、导出、ML 推理都要读它。
+                        // 手动回收就得穷举全部读者并逐个串行化，漏掉任何一个都换来一次 native 崩溃；
+                        // 而它只有约 11MB（2048×1366 ARGB_8888），与 33MP 全幅的 131MB
+                        // 根本不是一个量级。交给 GC 是正确性明显更高的选择 —— GC 只在这张图
+                        // 确实无人引用时才释放，不会误伤在途的读者。
+                        //
+                        // 上面的 `rendered` / `compareBase` 之所以仍走手动回收，正是因为它们的
+                        // 读写者**只有渲染协程自己**：生命周期明确，一把锁就能管住。
+                        imported = null
+                        srcUri = null
+                        retouch = RetouchState()
+                        // 对象层与 retouch 同口径一起清（下一次导入本来也会清，这里是为了不让
+                        // 「退出编辑器后仍留着一批上一张图的层」这种状态存在哪怕一帧的机会）。
+                        layers = emptyList()
+                        brushStrokes = emptyList()
+                        retouchTool = "none"
+                        inpaintStrokes = emptyList()
+                        inpaintRadius = 0.01f
+                        activePresetId = "none"
+                        autoMaskNote = ""
+                        liquifyNote = ""
+                        renderStamp = 0
+                        editorOpen = false
+                    }
                 )
             }
         }
@@ -1248,31 +1231,16 @@ private data class RenderBatch(
  *
  * `maxMB` 即堆上限（`largeHeap` 未开启时约等于 dalvik.vm.heapgrowthlimit）。
  */
-private fun memorySnapshot(context: Context? = null): Map<String, Any> {
+private fun memorySnapshot(): Map<String, Any> {
     val r = Runtime.getRuntime()
     val max = (r.maxMemory() / 1_048_576).coerceAtLeast(1)
     val used = (r.totalMemory() - r.freeMemory()) / 1_048_576
-    val snap = LinkedHashMap<String, Any>(
-        mapOf(
-            "usedMB" to used,
-            "totalMB" to r.totalMemory() / 1_048_576,
-            "maxMB" to max,
-            "heapPct" to (used * 100 / max)
-        )
+    return mapOf(
+        "usedMB" to used,
+        "totalMB" to r.totalMemory() / 1_048_576,
+        "maxMB" to max,
+        "heapPct" to (used * 100 / max)
     )
-    // M-4：热状态观测。「拖滑块越用越卡」此前既没有观测手段也没有降档策略 ——
-    // 至少先把 thermal headroom 记进日志，真机复现时有数据可对。
-    if (context != null) {
-        try {
-            val pm = context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
-            if (pm != null && android.os.Build.VERSION.SDK_INT >= 31) {
-                snap["thermalHeadroom"] = "%.2f".format(pm.getThermalHeadroom(2))
-            }
-        } catch (_: Throwable) {
-            // 非 suspend：观测失败不影响主流程（无 CE 可吞）
-        }
-    }
-    return snap
 }
 
 /**
@@ -1338,13 +1306,8 @@ private fun buildRenderRetouch(
  * （`ui/theme/Backdrop.kt` 踩过同一个坑，见那里的注释）。
  *
  * @return 预设 id → 缩略图；某一条渲染失败会被跳过（调用方按「缺缩略图」占位处理）。
- *   [isCancelled] 逐张检查（A6）：换图 / 退出编辑器时立即让位，返回已完成的部分。
  */
-private fun buildPresetThumbs(
-    base: Bitmap,
-    presets: List<Preset>,
-    isCancelled: () -> Boolean = { false }
-): Map<String, Bitmap> {
+private fun buildPresetThumbs(base: Bitmap, presets: List<Preset>): Map<String, Bitmap> {
     if (base.width <= 0 || base.height <= 0) return emptyMap()
     val side = PRESET_THUMB_PX
     val square = Bitmap.createBitmap(side, side, Bitmap.Config.ARGB_8888)
@@ -1360,10 +1323,6 @@ private fun buildPresetThumbs(
 
     val out = LinkedHashMap<String, Bitmap>(presets.size)
     for (preset in presets) {
-        if (isCancelled()) {
-            square.recycle()
-            return out
-        }
         val target = square.copy(Bitmap.Config.ARGB_8888, true) ?: continue
         // retouch：缩略图上作用域取**整幅**（FullMask）—— 预设的磨皮/追色必须可见，
         // 不能因为「没画蒙版」就整段跳过（那正是 mask = null 的语义）。
