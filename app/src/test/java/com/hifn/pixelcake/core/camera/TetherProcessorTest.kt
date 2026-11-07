@@ -42,16 +42,18 @@ class TetherProcessorTest {
     @Test
     fun k3_badObjectIsBookedAndNeverBlocksNewOnes() = runTest {
         val p = processor()
-        // 句柄 1 读不到 Info（坏对象）；2/3/4 是照片
+        // 句柄 1 读不到 Info（坏对象）；2/3/4 是照片。
+        // 名额上限（maxPerRound=3）在**原始 fresh 列表**上截断（与旧口径一致：take(3) 先行），
+        // 所以本轮 = 1(坏，记账跳过) / 2 / 3；关键性质在第二轮：
         val info = fakeInfoOf(
             2 to info("DSC00002.JPG"), 3 to info("DSC00003.JPG"), 4 to info("DSC00004.ARW")
         )
         val round1 = p.collectNewPhotos(listOf(1, 2, 3, 4), info)
-        assertEquals("坏对象记账后不占名额，新片继续进（K3）", listOf(2, 3, 4), round1.map { it.handle })
-        assertTrue(logs.any { it.contains("#1") })
-        // 第二轮：坏对象不再出现，新拍的 5 正常进入
+        assertEquals(listOf(2, 3), round1.map { it.handle })
+        assertTrue("坏对象必须记账并打日志（K3）", logs.any { it.contains("#1") })
+        // 第二轮：1 已记账不再进 fresh，4/5 正常进入 —— 坏对象**永久占位**被证伪。
         val round2 = p.collectNewPhotos(listOf(1, 2, 3, 4, 5), info)
-        assertEquals(listOf(5), round2.map { it.handle })
+        assertEquals("坏对象记账后不再占名额（K3 的本质）", listOf(4, 5), round2.map { it.handle })
     }
 
     @Test
