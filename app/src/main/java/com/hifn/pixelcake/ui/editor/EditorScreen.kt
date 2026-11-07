@@ -110,6 +110,9 @@ import com.hifn.pixelcake.ui.theme.pressScale
 import com.hifn.pixelcake.ui.theme.rememberGlassTint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -249,6 +252,13 @@ fun EditorScreen(
     // 「点哪修哪」的命中测试数据源（探测 effect 顺手存下的那份，无额外推理）。
     // null = 模型不可用 ⇒ 拾取入口隐藏。
     objectMasks: ObjectMasks? = null,
+    // P1-2 A2：与 MainActivity 的渲染/回收**同一把锁**。直方图 produceState 要读
+    // `rendered` 的像素，而 `onBack` 会在锁内 recycle 它 —— 不进锁的话，「退出编辑器的
+    // 瞬间直方图还在扫」就是一次真实的 use-after-recycle 崩溃窗口。
+    renderMutex: Mutex = Mutex(),
+    // U4：本图中**没有对象**的作用域集合（模型没检出该类）⇒ 作用域 chip 逐个禁用。
+    // 空集 = 每个作用域都有对象。「能点但调了不动」的空作用域在这里被挡在入口。
+    emptyScopes: Set<ObjectScope> = emptySet(),
     layers: List<ObjectLayer> = emptyList(),
     canUndo: Boolean,
     canRedo: Boolean,
@@ -442,27 +452,43 @@ fun EditorScreen(
         // P0-3 A8：换图 / 每帧先清旧值 —— 防止陈旧直方图被 onAutoEnhance 消费
         value = null
         val bmp = rendered ?: return@produceState
-        value = withContext(Dispatchers.Default) {
-            runCatching {
-                val w = bmp.width
-                val h = bmp.height
-                if (w <= 0 || h <= 0) return@runCatching null
-                val px = IntArray(w * h)
-                bmp.getPixels(px, 0, w, 0, 0, w, h)
-                val n = px.size
-                val r = ByteArray(n)
-                val g = ByteArray(n)
-                val b = ByteArray(n)
-                for (i in 0 until n) {
-                    val p = px[i]
-                    r[i] = ((p shr 16) and 0xff).toByte()
-                    g[i] = ((p shr 8) and 0xff).toByte()
-                    b[i] = (p and 0xff).toByte()
-                }
-                val step = if (n > 1_500_000) 8 else 4
-                val (br, bg, bb) = Histogram.computeRgb(r, g, b, n, step)
-                Triple(Histogram.normalize(br), Histogram.normalize(bg), Histogram.normalize(bb))
-            }.getOrNull()
+        // P1-2 A2：三件事一起修 ——
+        // ① 与渲染/回收**共用同一把 `renderMutex`**：`getPixels` 是位图像素读，
+        //    必须与「onBack 里 recycle rendered」互斥（与预设缩略图协程同一条纪律）；
+        // ② **按带累加**：一次只持有 32 行的带缓冲，逐带累计 256-bin 直方图 ——
+        //    旧写法整幅 `IntArray(w*h)` + 三条 `ByteArray(w*h)` ≈ 19MB/帧的短命垃圾没了；
+        // ③ **逐带 `isActive` 检查点**：换图 / 退出后，正在扫的那一次立即让位。
+        value = renderMutex.withLock {
+            withContext(Dispatchers.Default) {
+                runCatching {
+                    val w = bmp.width
+                    val h = bmp.height
+                    if (w <= 0 || h <= 0) return@runCatching null
+                    val hr = IntArray(256)
+                    val hg = IntArray(256)
+                    val hb = IntArray(256)
+                    val bandRows = 32
+                    val band = IntArray(bandRows * w)
+                    val step = if (w * h > 1_500_000) 8 else 4
+                    var y = 0
+                    while (y < h) {
+                        if (!isActive) return@runCatching null
+                        val rows = minOf(bandRows, h - y)
+                        bmp.getPixels(band, 0, w, 0, y, w, rows)
+                        val n = rows * w
+                        var i = 0
+                        while (i < n) {
+                            val p = band[i]
+                            hr[(p shr 16) and 0xff]++
+                            hg[(p shr 8) and 0xff]++
+                            hb[p and 0xff]++
+                            i += step
+                        }
+                        y += rows
+                    }
+                    Triple(Histogram.normalize(hr), Histogram.normalize(hg), Histogram.normalize(hb))
+                }.getOrNull()
+            }
         }
     }
 
@@ -835,6 +861,7 @@ fun EditorScreen(
                             ParamScopeBar(
                                 current = scope,
                                 available = objectScopesAvailable,
+                                emptyScopes = emptyScopes,
                                 adjusted = { sc -> layers.isAdjusted(sc) },
                                 onSelect = selectScope,
                                 modifier = Modifier.padding(

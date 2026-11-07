@@ -20,6 +20,10 @@ minSdk = "36"
 targetSdk = "36"
 jvmTarget = "17"
 
+# T1（审计 P1-11）：参数栈 ⇄ JSON。另存预设 / 项目文件 / P3 契约的共同前提。
+# 1.7.x 稳定线与 Kotlin 2.2 插件兼容；版本升级时先在 JVM 单测里过一遍 round-trip。
+kotlinxSerialization = "1.7.3"
+
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" }
@@ -27,6 +31,9 @@ androidx-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecyc
 
 # P1+ 端侧推理（含 Interpreter 与 CompiledModel；v2 上 GPU 加速器已并入本包）
 litert = { group = "com.google.ai.edge.litert", name = "litert", version.ref = "litert" }
+
+# T1：EditSnapshot（params/retouch/layers）⇄ JSON 的编解码运行时
+kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerialization" }
 
 # 版本全部交由 Compose BOM 管理，不在此处写死
 compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }
@@ -45,3 +52,5 @@ compose-animation = { group = "androidx.compose.animation", name = "animation" }
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+# T1：serialization 编译器插件（版本必须与 kotlin 主插件同源 —— 用同一个 version.ref）
+kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }

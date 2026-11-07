@@ -41,6 +41,7 @@ import com.hifn.pixelcake.core.edit.FullMask
 import com.hifn.pixelcake.core.edit.InpaintStroke
 import com.hifn.pixelcake.core.edit.NeutralGrayParams
 import com.hifn.pixelcake.core.edit.ObjectLayer
+import com.hifn.pixelcake.core.edit.ObjectScope
 import com.hifn.pixelcake.core.edit.RetouchMask
 import com.hifn.pixelcake.core.edit.RetouchScale
 import com.hifn.pixelcake.core.edit.RetouchState
@@ -181,17 +182,35 @@ private fun AppRoot(settings: AppSettings) {
     // 不多花一次推理）。换图 / 探测失败时置 null，拾取入口随之隐藏。
     var objectMasks by remember { mutableStateOf<ObjectMasks?>(null) }
 
+    // U4：本图「没有对象」的作用域集合（探测 effect 顺手算出，一次概率扫描 ≈ 毫秒级）。
+    // 模型可用 ≠ 每个作用域都有东西：风景照里「衣服/面部」全是空蒙版，让用户点进去
+    // 调半天一个像素都不动，就是「能操作但无效果」的最坏交互 —— 禁用 + 一句说明。
+    var emptyScopes by remember { mutableStateOf(emptySet<ObjectScope>()) }
+
     LaunchedEffect(imported) {
         val src = imported ?: return@LaunchedEffect
         objectScopesAvailable = false
         objectMasks = null
+        emptyScopes = emptySet()
         val key = mlCacheKey(srcUri, src.bitmap.width, src.bitmap.height, imageEpoch.get())
         val masks = withContext(Dispatchers.Default) {
             MlMaskProvider.objectMasksFor(context, src.bitmap, key)
         }
         objectScopesAvailable = masks != null
         objectMasks = masks
-        DebugLog.i(DebugLog.TAG_ML, "object scopes probed", mapOf("available" to (masks != null)))
+        // 只读缓存的原始概率（与网格构建共享同一份），不需要 `Grids` 的同步 —— 一次纯扫描。
+        emptyScopes = if (masks != null) {
+            withContext(Dispatchers.Default) { ObjectScope.entries.toSet() - masks.coveredScopes() }
+        } else {
+            emptySet()
+        }
+        DebugLog.i(
+            DebugLog.TAG_ML, "object scopes probed",
+            mapOf(
+                "available" to (masks != null),
+                "empty" to emptyScopes.map { it.label }.joinToString(",")
+            )
+        )
     }
 
     var rendered by remember { mutableStateOf<Bitmap?>(null) }
@@ -670,6 +689,10 @@ private fun AppRoot(settings: AppSettings) {
                     // 对象作用域（批次 5）：可用性来自上面的预热探测；层列表是编辑状态的一部分。
                     objectScopesAvailable = objectScopesAvailable,
                     objectMasks = objectMasks,
+                    // P1-2 A2：直方图扫描与渲染/回收共用同一把锁（use-after-recycle 护栏）。
+                    renderMutex = renderMutex,
+                    // U4：图里没有对象的作用域在 chip 行逐个禁用。
+                    emptyScopes = emptyScopes,
                     layers = layers,
                     canUndo = history.canUndo,
                     canRedo = history.canRedo,
@@ -797,6 +820,9 @@ private fun AppRoot(settings: AppSettings) {
                             // 在主线程把格式/质量/缓存键取出来：Dispatchers.Default 里不应读 Compose 快照状态
                             val fmt = settings.exportFormat
                             val quality = settings.jpegQuality.value
+                            // P0-2 M-1：EXIF 回写的来源。在主线程捕获（Default 线程不读快照状态，
+                            // 与 fmt/quality 同一条纪律）。
+                            val exportSrcUri = srcUri
                             val mlKey = mlCacheKey(srcUri, img.bitmap.width, img.bitmap.height, imageEpoch.get())
                             // 降级导出（拿不到全分辨率时用当前预览）的兜底位图**必须在主线程、
                             // 进入 withContext 之前**取好，两个理由：
@@ -865,7 +891,11 @@ private fun AppRoot(settings: AppSettings) {
                                                                             // 下面 `Exporter.export`（compress）是 OOM 高发点，抛出去就泄漏一整块。
                                                                             try {
                                                                                 val out = withContext(Dispatchers.IO) {
-                                                                                    Exporter.export(context, full, fmt, quality)
+                                                                                    Exporter.export(
+                                                                                        context, full, fmt, quality,
+                                                                                        isCancelled = { exportCancelled.get() },
+                                                                                        exifFrom = exportSrcUri
+                                                                                    )
                                                                                 }
                                                                                 out to "全分辨率 RAW"
                                                                             } finally {
@@ -916,12 +946,20 @@ private fun AppRoot(settings: AppSettings) {
                                                 val okFull = EditEngine.renderIntoSrgb(
                                                     fullTarget, fullBase.bitmap, tonalParams,
                                                     fretouch, fmask,
-                                                    faceAnchor = fAnchor, layers = flayerStack
+                                                    faceAnchor = fAnchor, layers = flayerStack,
+                                                    // P1-3 A3：sRGB 导出同样可取消（逐带检查）。
+                                                    // 以前只有 RAW 路径能取消，JPEG/HEIF 的全分辨率渲染
+                                                    // 是「点了取消也要跑完再压缩」的不可打断操作。
+                                                    isCancelled = { exportCancelled.get() }
                                                 )
                                                 if (!okFull) null to "全分辨率渲染尺寸不匹配"
                                                 else {
                                                     val out = withContext(Dispatchers.IO) {
-                                                        Exporter.export(context, fullTarget, fmt, quality)
+                                                        Exporter.export(
+                                                            context, fullTarget, fmt, quality,
+                                                            isCancelled = { exportCancelled.get() },
+                                                            exifFrom = exportSrcUri
+                                                        )
                                                     }
                                                     out to "全分辨率"
                                                 }
@@ -930,7 +968,11 @@ private fun AppRoot(settings: AppSettings) {
                                                 // `proxyFallback` 在主线程取好，这里只读局部 val，
                                                 // 所以「导出期间用户点返回」不可能把它换成未编辑的图。
                                                 val out = withContext(Dispatchers.IO) {
-                                                    Exporter.export(context, proxyFallback, fmt, quality)
+                                                    Exporter.export(
+                                                        context, proxyFallback, fmt, quality,
+                                                        isCancelled = { exportCancelled.get() },
+                                                        exifFrom = exportSrcUri
+                                                    )
                                                 }
                                                 out to "代理分辨率（按当前预览）"
                                             } else {

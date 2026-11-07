@@ -1016,3 +1016,35 @@ UI 层不需要再判断一次。
 | F 强度环 | 需要「按强度对整套参数栈插值」——81 项参数的 lerp，是新算法不是 UI |
 | F 另存预设 | 需要预设持久化层（当前预设是内置常量） |
 | D 点哪修哪 / N 模型中心 / K·L 相机批量 / J′·L′ 横屏 | 各自是独立子系统 |
+
+## §13 外部审计整改批次（v0.6.4，2026-11-07）
+
+> 两份外部模型审计入库：`docs/qwen3.8审计.md`（广度）与 `docs/hy4审计.md`（校准，**判级以它为准**）。
+> 本节是「修了什么 / 判据是什么 / 还剩什么」的台账；判据全部来自 hy4 §5，编号沿用两份审计。
+
+### 13.1 已修（本批全部带判据）
+
+| 审计编号 | 修复 | 判据 |
+|---|---|---|
+| P0-2 M-1 | 解码侧 `Decoder.applyExifOrientation` 烘焙方向（5/7 镜像类方向用矩阵**先镜像后旋转**的顺序，单测 `ExifOrientationTest` 钉住）；导出侧 `Exporter.writeMinimalExif` 回写最小集（Orientation 恒 1 + 机身/拍摄参数复制，GPS 刻意不复制）；EXIF 写失败只 WARN 不影响成片 | Orientation=6 的竖拍片进 App 是正的、导出也是正的；同名 ARW/JPEG 方向一致 |
+| P1-3 A3 | `renderIntoSrgb` 加逐带 `isCancelled`（与 RAW 侧 lambda 同口径）；`Exporter.export` 插入前 + 压缩后各查一次取消，取消即删 IS_PENDING 记录；catch 块 CE 重抛 | 取消后相册**没有**该文件 |
+| P1-2 A2 | 直方图 produceState：进 `renderMutex`（与渲染/回收互斥）、**按带累加** 256-bin（整幅 19MB/帧短命垃圾清零）、逐带 `isActive` 检查点 | 拖滑块时直方图与画面同代、GC 抖动消失 |
+| P1-5 K2/K3 | 系留开开关先**播种基线**（旧片不重处理）；坏对象（读不到 Info / 非照片）`continue` 前**先记账**；位图回收进 `finally`；消费 `renderIntoSrgb` 返回值；临时文件导完即删；`arrivalLog` 上界 30 条 | 卡上有旧片时打开系留**不产生任何下载**；混有目录对象时仍能推进 |
+| U4 | `ObjectMasks.coveredScopes()`（单遍扫原始概率，派生类按求和口径，`CoveredScopesTest` 钉住）→ `emptyScopes` 进 `ParamScopeBar`，空作用域 chip 禁用 + 一句说明 | 图里没有的对象不可选 |
+| U1 | `lutId == "none"` 时隐藏滤镜强度滑块（`PixelProgram` 对 none 整级跳过，滑块是空转） | 无滤镜时面板无强度滑块 |
+| P1-15 | Decoder 悬空 `rawCachePath`（缓存已释放时不再外泄路径）；`ParamPanel:392` NotApplicable Hint 按类改写（Portrait 全图 / Preset 分组写入路径说真话）；`WholeImageStageNotice` 删「已删除的效果分类」引用 | `git grep` 无「效果」分类残留文案 |
+| T1 | `EditSnapshotJson`：`EditDocument(version, params, retouch, layers)` ⇄ JSON，`@Serializable` 只加注解（键名 = 字段名），`encodeDefaults = true`（version 必须显式在档，否则升版本迁移失效），迁移骨架与 `AppSettings.migrateSettings` 同构；`EditSnapshotJsonTest` 六条断言 | round-trip 逐字段相等 / 未知键容忍 / 坏串返 null |
+
+### 13.2 本批新增的三条纪律（§2/§3 的延续）
+
+1. **「导出链路的取消检查点」成对出现**：`isCancelled` 必须在「插记录前」与「压缩完成后」各查一次 —— 只查前者，取消发生在压缩期就留幽灵文件；只查后者，MediaStore 里先多出一条 IS_PENDING 记录。
+2. **持久化格式的 `version` 必须全量编码**：`encodeDefaults = false` 时等于默认值的 version 不会写出，升版本后旧文档被静默解码成新版本号，迁移从根上失效。这个坑在 T1 落地当天就被单测设计阶段抓到。
+3. **「空作用域」是可用性判据不是渲染判据**：渲染侧全 0 蒙版是合法恒等层；只有 UI 入口（chip 禁用）用它。`coveredScopes` 读的是**原始概率**，与网格构建（求和→羽化→平滑）共用同一份缓存但口径独立。
+
+### 13.3 明确**没做**（后续批次，勿当作已完成）
+
+- B1/B2/B5/B6 内存项（`DEV_PLAN §6.2` 档位缓解实装、笔刷 FloatGrid 化）—— 需真机 memorySnapshot 基线；
+- E1 属性码撞码 / PTP 诊断上屏；
+- T2 导航层 / T3 横屏 / T4 无障碍 —— hy4 §6 Q3/Q4 待决策；
+- release 变体真机跑一遍抄性能数据（M-2/T5）；
+- `catch(Throwable)` CE 重抛静态闸门（本轮已人工核对全部 4 处 `catch (t: Throwable)`：Export 弹窗、CameraPanel 轮询、基线播种、EditSnapshotJson.decode（非挂起无 CE）—— 均不吞 CE 或不可能有 CE）。

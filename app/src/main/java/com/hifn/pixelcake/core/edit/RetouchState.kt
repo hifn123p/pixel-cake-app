@@ -1,10 +1,13 @@
 package com.hifn.pixelcake.core.edit
 
+import kotlinx.serialization.Serializable
+
 /**
  * P1b-4 人像算子参数（独立于 tonal 的 [EditParams]，作为 retouch 附加层）。
  * 见 `docs/PHASE_DESIGN_HISTORY.md`（P1b 部分） §3：扁平 [EditParams] 保持不动，retouch 走这里，
  * 撤销/重做与 tonal 同生命周期管理。
  */
+@Serializable
 data class NeutralGrayParams(
     val strength: Float = 0f,
     val radiusPx: Int = 4,
@@ -26,6 +29,7 @@ data class NeutralGrayParams(
  *
  * 每个部位独立的强度，让用户可以「只修皮肤，不动轮廓」或「只放大眼睛」。
  */
+@Serializable
 data class BodyPartBeautyParams(
     /** 头部/脸型缩放 −1..1（负 = 缩）。 */
     val head: Float = 0f,
@@ -71,6 +75,7 @@ data class BodyPartBeautyParams(
  * 其余四个开关对应的部位级算子尚未实现，UI 已不再暴露它们（见 [BodyPartBeautyParams]
  * 的「接线状态」一节）—— 暴露一个不生效的开关比不暴露更糟：用户会以为功能坏了。
  */
+@Serializable
 data class RetouchSwitches(
     val enableHead: Boolean = true,
     val enableEyes: Boolean = true,
@@ -81,6 +86,7 @@ data class RetouchSwitches(
     val enableHands: Boolean = false,
 )
 
+@Serializable
 data class BeautyParams(
     val slimFace: Float = 0f,
     val slimJaw: Float = 0f,
@@ -125,6 +131,7 @@ data class BeautyParams(
         get() = slimFace > 0f || slimJaw > 0f || wiredEyeEnlarge > 0f
 }
 
+@Serializable
 data class InpaintStroke(
     val x: Int,
     val y: Int,
@@ -132,11 +139,13 @@ data class InpaintStroke(
     val seed: Long = 0L
 )
 
+@Serializable
 data class ColorTransferParams(
     val refId: String = "none",
     val intensity: Float = 0.6f
 )
 
+@Serializable
 data class RetouchState(
     val neutralGray: NeutralGrayParams = NeutralGrayParams(),
     val beauty: BeautyParams = BeautyParams(),

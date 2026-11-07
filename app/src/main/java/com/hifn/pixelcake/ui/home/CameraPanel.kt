@@ -122,63 +122,134 @@ fun CameraPanel(
     }
 
     // —— 系留轮询（UI3.0 §J/K/L）：检测新拍摄 → 下载 → 套预设 → 导出 ——
+    //
+    // P1-5 K2/K3 校准版，四件事一起修：
+    // ① **开系留先播种基线**：卡上已有对象全部记为已知 —— 否则把开关合上之前拍的旧片
+    //    全部当成「新片」重新下载导出一遍；
+    // ② **坏对象记账**：读不到 Info / 不是照片的对象也进 knownHandles —— 否则它会永远
+    //    占住 take(3) 的名额，新片排在它后面永远进不来；
+    // ③ **位图回收进 finally**：Exporter 抛出时位图不能泄漏（导出是 OOM 高发点）；
+    // ④ **消费 renderIntoSrgb 返回值**：false = 尺寸不匹配，绝不能把一块从未被写过的
+    //    黑位图当成品导出。
     LaunchedEffect(session, tetherOn, defaultPresetId) {
         val sn = session ?: return@LaunchedEffect
         if (!tetherOn) return@LaunchedEffect
         val preset = Presets.byId(defaultPresetId) ?: return@LaunchedEffect
         val storageId = sn.storageIds.firstOrNull() ?: return@LaunchedEffect
+        // 到达流日志上界：P2 债里「arrivalLog 无上界」的最小修 —— 界面只显示最后 5 条，
+        // 内存里也只留最后 30 条，长会话不会无限增长。
+        val log: (String) -> Unit = { m -> arrivalLog = (arrivalLog + m).takeLast(30) }
+        // ① 基线播种。失败（PTP 失步 / 拔线）时**不进入轮询**：无基线的轮询会把全卡
+        //    当成新片，比「不工作」糟糕得多 —— 提示用户重开开关重试。
+        try {
+            val base = sn.objectHandles(storageId).handles.toSet()
+            knownHandles = knownHandles + base
+            log("系留已就绪：卡上已有 ${base.size} 个对象（不计入新片）")
+        } catch (c: kotlinx.coroutines.CancellationException) {
+            throw c
+        } catch (t: Throwable) {
+            DebugLog.w(
+                DebugLog.TAG_CAMERA, "tether baseline failed",
+                mapOf("err" to (t.message ?: t.javaClass.simpleName))
+            )
+            log("基线播种失败（${t.message ?: t.javaClass.simpleName}），请关闭再打开系留开关重试")
+            return@LaunchedEffect
+        }
         while (tetherOn) {
             delay(3000)
             try {
                 val query = sn.objectHandles(storageId)
                 val newH = query.handles.filter { it !in knownHandles }
                 for (h in newH.take(3)) {
-                    val info = sn.objectInfo(h) ?: continue
-                    if (!CameraPhotoFilter.isPhoto(info)) continue
-                    val photo = CameraPhoto(h, info)
-                    knownHandles = knownHandles + h
-                    arrivalLog = arrivalLog + (info.filename + " · 传输中...")
-                    val target = CameraBatch.newSingleTarget(context, photo)
-                    val outcome = sn.download(h, target) { _, _ -> }
-                    if (!outcome.ok) {
-                        arrivalLog = arrivalLog + (info.filename + " · 传输失败")
+                    // ② 坏对象记账：两处 continue 前**先**把 handle 记进 knownHandles。
+                    val info = sn.objectInfo(h)
+                    if (info == null) {
+                        knownHandles = knownHandles + h
+                        log("跳过无法读取信息的对象 #$h")
                         continue
                     }
-                    arrivalLog = arrivalLog + (info.filename + " · 套「" + preset.name + "」")
-                    // P0-1 修复：ARW 走 LibRaw 线性管线（decodeFullRes 对 .arw 设计上返回 null）
-                    if (photo.isRaw) {
-                        val (tw, th) = RetouchScale.fitLongEdge(info.imageWidth, info.imageHeight, 2048)
-                        val lr = preset.retouch.lerped(1f)
-                        val rawBmp = EditEngine.renderLinearFile(
-                            target.absolutePath, 2048,
-                            preset.params.lerped(1f),
-                            RetouchScale.toRenderState(lr, tw, th),
-                        )
-                        if (rawBmp == null) {
-                            arrivalLog = arrivalLog + (info.filename + " · RAW 渲染失败")
+                    if (!CameraPhotoFilter.isPhoto(info)) {
+                        knownHandles = knownHandles + h
+                        continue
+                    }
+                    val photo = CameraPhoto(h, info)
+                    knownHandles = knownHandles + h
+                    log(info.filename + " · 传输中...")
+                    val target = CameraBatch.newSingleTarget(context, photo)
+                    try {
+                        val outcome = sn.download(h, target) { _, _ -> }
+                        if (!outcome.ok) {
+                            log(info.filename + " · 传输失败")
                             continue
                         }
-                        val expUri = Exporter.export(context, rawBmp, ExportFormat.JPEG, 92)
-                        rawBmp.recycle()
-                        arrivalLog = arrivalLog + (info.filename + if (expUri != null) " · 已导出 ✓" else " · 导出失败")
-                    } else {
-                        val decoded = Decoder.decodeFullRes(context, Uri.fromFile(target), 2048)
-                        if (decoded == null) {
-                            arrivalLog = arrivalLog + (info.filename + " · 解码失败")
-                            continue
+                        log(info.filename + " · 套「" + preset.name + "」")
+                        // P0-1 修复：ARW 走 LibRaw 线性管线（decodeFullRes 对 .arw 设计上返回 null）
+                        if (photo.isRaw) {
+                            val (tw, th) = RetouchScale.fitLongEdge(info.imageWidth, info.imageHeight, 2048)
+                            val lr = preset.retouch.lerped(1f)
+                            val rawBmp = EditEngine.renderLinearFile(
+                                target.absolutePath, 2048,
+                                preset.params.lerped(1f),
+                                RetouchScale.toRenderState(lr, tw, th),
+                            )
+                            if (rawBmp == null) {
+                                log(info.filename + " · RAW 渲染失败")
+                                continue
+                            }
+                            // ③ 回收进 finally：compress 是 OOM 高发点，抛出去就泄漏一整块
+                            try {
+                                val expUri = Exporter.export(context, rawBmp, ExportFormat.JPEG, 92)
+                                log(info.filename + if (expUri != null) " · 已导出 ✓" else " · 导出失败")
+                            } finally {
+                                rawBmp.recycle()
+                            }
+                        } else {
+                            val decoded = Decoder.decodeFullRes(context, Uri.fromFile(target), 2048)
+                            if (decoded == null) {
+                                log(info.filename + " · 解码失败")
+                                continue
+                            }
+                            try {
+                                val lp = preset.params.lerped(1f)
+                                val lr = preset.retouch.lerped(1f)
+                                val bmp = Bitmap.createBitmap(decoded.bitmap.width, decoded.bitmap.height, Bitmap.Config.ARGB_8888)
+                                try {
+                                    // ④ 消费返回值（P1-15）：false = 尺寸不匹配 —— 旧代码无视它，
+                                    //    会把一块从未被写过的黑位图当成品导出进相册。
+                                    val okRender = EditEngine.renderIntoSrgb(
+                                        bmp, decoded.bitmap, lp,
+                                        RetouchScale.toRenderState(lr, bmp.width, bmp.height)
+                                    )
+                                    if (!okRender) {
+                                        log(info.filename + " · 渲染尺寸不匹配")
+                                        continue
+                                    }
+                                    val expUri = Exporter.export(context, bmp, ExportFormat.JPEG, 92)
+                                    log(info.filename + if (expUri != null) " · 已导出 ✓" else " · 导出失败")
+                                } finally {
+                                    // 单一出口覆盖全部路径：渲染失败 continue / 渲染或导出抛异常 / 成功
+                                    bmp.recycle()
+                                }
+                            } finally {
+                                decoded.bitmap.recycle()
+                            }
                         }
-                        val lp = preset.params.lerped(1f)
-                        val lr = preset.retouch.lerped(1f)
-                        val bmp = Bitmap.createBitmap(decoded.bitmap.width, decoded.bitmap.height, Bitmap.Config.ARGB_8888)
-                        EditEngine.renderIntoSrgb(bmp, decoded.bitmap, lp, RetouchScale.toRenderState(lr, bmp.width, bmp.height))
-                        val expUri = Exporter.export(context, bmp, ExportFormat.JPEG, 92)
-                        bmp.recycle()
-                        decoded.bitmap.recycle()
-                        arrivalLog = arrivalLog + (info.filename + if (expUri != null) " · 已导出 ✓" else " · 导出失败")
+                    } finally {
+                        // 临时文件导完即删（与批量链路同一纪律）：成功、失败、抛异常都不留半截文件占存储
+                        target.delete()
                     }
                 }
-            } catch (e: Exception) {
-                arrivalLog = arrivalLog + ("轮询异常: " + (e.message ?: e.javaClass.simpleName))
+            } catch (c: kotlinx.coroutines.CancellationException) {
+                // 关面板 / 切会话导致的取消不是「轮询异常」，原样上抛（吞 CE 是静态闸门红线）。
+                throw c
+            } catch (t: Throwable) {
+                // K3 校准版：曾经的空 catch —— 异常被无声吞掉，界面上表现为「轮询静默死亡」。
+                // 现在双写：DebugLog 供回传定位，arrivalLog 供现场直接看到是哪一步挂了。
+                DebugLog.w(
+                    DebugLog.TAG_CAMERA, "tether poll failed",
+                    mapOf("err" to (t.message ?: t.javaClass.simpleName))
+                )
+                log("轮询异常: " + (t.message ?: t.javaClass.simpleName))
             }
         }
     }

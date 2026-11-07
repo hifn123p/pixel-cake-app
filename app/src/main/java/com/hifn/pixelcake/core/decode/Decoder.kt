@@ -1,9 +1,12 @@
 package com.hifn.pixelcake.core.decode
 
+import android.content.ContentResolver
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Matrix
 import android.net.Uri
+import androidx.exifinterface.media.ExifInterface
 import com.hifn.pixelcake.arw.ArwFullDecoder
 import com.hifn.pixelcake.arw.ArwPreviewDecoder
 import com.hifn.pixelcake.diag.DebugLog
@@ -99,10 +102,17 @@ object Decoder {
         // 抛异常时 `decodeToProxy` 的 `catch (t: Throwable)` 会把异常吞掉并返回 null，
         // 于是**这份 65MB 的缓存文件路径从未交给任何人** ⇒ 彻底泄漏。
         // F21 修的是「拷贝失败时留半截文件」，没修「拷贝成功但后续失败时留完整文件」。
+        //
+        // P1-15：抛异常时缓存已被 `releaseCache` 释放，此时**绝不能**再把
+        // `rawCachePath` 交给调用方 —— 导出会拿着一个已删除的路径去 `RawLinearSource.open`，
+        // 静默得到「RAW 导出失败」。用 [cacheReleased] 区分「缓存已释放」与「缓存健在但
+        // 本次代理解不出线性母版（退回占位图管线，导出仍可全分辨率重解）」这两种 null。
+        var cacheReleased = false
         val linear = try {
             ArwFullDecoder.decodeLinearProxy(cache.absolutePath, longEdge)
         } catch (t: Throwable) {
             ArwFullDecoder.releaseCache(cache.absolutePath)
+            cacheReleased = true
             DebugLog.e(
                 DebugLog.TAG_DECODE, "arw: linear proxy threw",
                 mapOf("err" to (t.message ?: t.javaClass.simpleName))
@@ -120,7 +130,7 @@ object Decoder {
             height = linear?.height ?: placeholder.height,
             isRaw = true,
             linear = linear,
-            rawCachePath = cache.absolutePath
+            rawCachePath = if (cacheReleased) null else cache.absolutePath
         )
     }
 
@@ -134,13 +144,18 @@ object Decoder {
             val oh = bounds.outHeight
             if (ow <= 0 || oh <= 0) return null
             val sample = computeSample(ow, oh, longEdge)
+            // P0-2 M-1：方向必须**在解码前**单独读（上面的 bounds 流已被读尽）。
+            // RAW 走 LibRaw 会应用机身 flip，JPEG/HEIF 不会 ⇒ 同机同景方向可能不一致；
+            // 这里把旋转烘焙进像素，配合导出侧回写 Orientation=1（见 `Exporter`），两头都是正的。
+            val orientation = readExifOrientation(cr, uri)
             cr.openInputStream(uri)?.use { s2 ->
                 val opts = BitmapFactory.Options().apply {
                     inSampleSize = sample
                     inPreferredConfig = Bitmap.Config.ARGB_8888
                     inMutable = false
                 }
-                val bmp = BitmapFactory.decodeStream(s2, null, opts) ?: return null
+                val raw = BitmapFactory.decodeStream(s2, null, opts) ?: return null
+                val bmp = applyExifOrientation(raw, orientation)
                 return DecodedImage(
                     bmp,
                     mime.ifEmpty { "image/jpeg" },
@@ -151,6 +166,62 @@ object Decoder {
             }
         }
         return null
+    }
+
+    /** 读 EXIF 方向；任何失败（非图片 / IO / 解析）都按「无需旋转」处理，绝不因此拒绝解码。 */
+    private fun readExifOrientation(cr: ContentResolver, uri: Uri): Int = try {
+        cr.openInputStream(uri)?.use { s ->
+            ExifInterface(s).getAttributeInt(
+                ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL
+            )
+        } ?: ExifInterface.ORIENTATION_NORMAL
+    } catch (t: Throwable) {
+        DebugLog.w(
+            DebugLog.TAG_DECODE, "exif orientation read failed",
+            mapOf("uri" to uri.toString(), "err" to (t.message ?: t.javaClass.simpleName))
+        )
+        ExifInterface.ORIENTATION_NORMAL
+    }
+
+    /**
+     * EXIF 方向值 → 显示修正的旋转角（度）。翻转类方向（2/4/5/7）返回 -1，由
+     * [applyExifOrientation] 走镜像分支。**纯函数，JVM 单测覆盖**（`ExifOrientationTest`）。
+     */
+    internal fun orientationRotationDegrees(orientation: Int): Int = when (orientation) {
+        ExifInterface.ORIENTATION_ROTATE_90 -> 90
+        ExifInterface.ORIENTATION_ROTATE_180 -> 180
+        ExifInterface.ORIENTATION_ROTATE_270 -> 270
+        else -> -1
+    }
+
+    /**
+     * 把 EXIF 方向烘焙进像素（P0-2 M-1）。
+     *
+     * 矩阵口径（与「正 = 往亮推」一样，这里也只允许一种写法）：
+     * `postScale/postRotate` 是**后乘** —— 后 post 的变换先作用到输入向量。逐个推导过：
+     *  - TRANSPOSE(5) = 「先水平镜像、再顺转 90°」：`postScale(-1,1)` 先写、`postRotate(90)` 后写；
+     *  - TRANSVERSE(7) = 「先顺转 90°、再水平镜像」：`postRotate(90)` 先写、`postScale(-1,1)` 后写。
+     * 写反顺序会把 5/7 转成对方的镜像（竖拍带镜像的方向在真机上会左右翻）。
+     */
+    internal fun applyExifOrientation(src: Bitmap, orientation: Int): Bitmap {
+        val m = Matrix()
+        when (orientation) {
+            ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> m.postScale(-1f, 1f)
+            ExifInterface.ORIENTATION_ROTATE_180 -> m.postRotate(180f)
+            ExifInterface.ORIENTATION_FLIP_VERTICAL -> m.postScale(1f, -1f)
+            ExifInterface.ORIENTATION_TRANSPOSE -> {
+                m.postScale(-1f, 1f)
+                m.postRotate(90f)
+            }
+            ExifInterface.ORIENTATION_ROTATE_90 -> m.postRotate(90f)
+            ExifInterface.ORIENTATION_TRANSVERSE -> {
+                m.postRotate(90f)
+                m.postScale(-1f, 1f)
+            }
+            ExifInterface.ORIENTATION_ROTATE_270 -> m.postRotate(270f)
+            else -> return src
+        }
+        return Bitmap.createBitmap(src, 0, 0, src.width, src.height, m, true)
     }
 
     internal fun computeSample(ow: Int, oh: Int, longEdge: Int): Int {

@@ -109,6 +109,61 @@ class ObjectMasks private constructor(
     }
 
     /**
+     * 本图里**非空**的作用域集合（U4「空作用域禁用」的数据源）。
+     *
+     * ## 为什么不逐个构建网格再数像素
+     *
+     * `gridFor` 每个作用域要跑「求和 → 阈值羽化 → 3×3 平滑」全链路，8 个全建就是一次
+     * 可观的预热；而判定「有没有」根本不需要羽化和平滑 —— 直接扫**原始概率**：
+     * 单像素、单遍、零分配（除了返回的 Set），256×256 全图一遍就是约 6.5 万次循环，
+     * 毫秒级。派生作用域（[ObjectScope.Person] / [ObjectScope.Skin]）按「求和」口径判
+     * （与 `scopeProbability` 一致，只是不做阈值羽化），避免「两类各 0.4、求和 0.8」
+     * 被逐类计数漏判。
+     *
+     * ## 判空阈值 [minPixels]
+     *
+     * 默认 48 像素（256×256 网格的 0.07%）：能被肉眼看见的对象远大于它，而分割噪声
+     * （边缘抖出的零星几像素）小于它。**这是 UI 可用性判据，不是渲染判据** ——
+     * 渲染侧永远用 `maskFor`，全 0 蒙版本来也是合法的恒等层。
+     */
+    fun coveredScopes(minPixels: Int = 48): Set<ObjectScope> {
+        val side = grids.side
+        if (side <= 0) return emptySet()
+        val probs = grids.probs
+        val counts = IntArray(ObjectScope.entries.size)
+        val total = side * side
+        val classes = SkinMaskPostProcess.CLASSES
+        var px = 0
+        var base = 0
+        while (px < total) {
+            val bg = probs[base + SkinMaskPostProcess.CLASS_BACKGROUND]
+            val hair = probs[base + SkinMaskPostProcess.CLASS_HAIR]
+            val body = probs[base + SkinMaskPostProcess.CLASS_BODY_SKIN]
+            val face = probs[base + SkinMaskPostProcess.CLASS_FACE_SKIN]
+            val clothes = probs[base + SkinMaskPostProcess.CLASS_CLOTHES]
+            val others = probs[base + SkinMaskPostProcess.CLASS_OTHERS]
+            // 原生 6 类：逐类计数（与 scopeAt 的 argmax 不同口径 —— 这里问的是
+            // 「这个类在这张图里有没有可观的存在」，不是「这个像素属于谁」）。
+            if (bg > LO) counts[ObjectScope.Background.ordinal]++
+            if (hair > LO) counts[ObjectScope.Hair.ordinal]++
+            if (body > LO) counts[ObjectScope.BodySkin.ordinal]++
+            if (face > LO) counts[ObjectScope.FaceSkin.ordinal]++
+            if (clothes > LO) counts[ObjectScope.Clothes.ordinal]++
+            if (others > LO) counts[ObjectScope.Accessories.ordinal]++
+            // 派生 2 类：求和口径（见上面 KDoc）
+            if (face + body > LO) counts[ObjectScope.Skin.ordinal]++
+            if (hair + body + face + clothes + others > LO) counts[ObjectScope.Person.ordinal]++
+            base += classes
+            px++
+        }
+        val out = LinkedHashSet<ObjectScope>()
+        for (scope in ObjectScope.entries) {
+            if (counts[scope.ordinal] >= minPixels) out.add(scope)
+        }
+        return out
+    }
+
+    /**
      * 换目标尺寸：**共享同一份网格缓存**，不重建任何网格（见类 KDoc）。
      * 尺寸未变时返回自身。
      */

@@ -1,5 +1,7 @@
 package com.hifn.pixelcake.core.edit
 
+import kotlinx.serialization.Serializable
+
 /**
  * 对象作用域调色（批次 5）的数据模型与层构建，见 `docs/OBJECT_TONE_DESIGN.md`。
  *
@@ -105,6 +107,7 @@ enum class ObjectScope(val label: String, val parts: Set<ScopePart>) {
  *   [buildLayerStack] 里被剥掉（`docs/OBJECT_TONE_DESIGN.md` §7）。
  * @param strength 该层整体强度 0..1。逐像素只多一次乘法。
  */
+@Serializable
 data class ObjectLayer(
     val scope: ObjectScope,
     val params: EditParams = EditParams(),

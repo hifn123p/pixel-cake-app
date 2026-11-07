@@ -386,10 +386,19 @@ fun ParamPanel(
         if (activeScope != null && category.scopeMode == ScopeMode.WholeImageOnly) {
             WholeImageStageNotice(activeScope)
         } else {
-            // 人像 / 预设与作用域无关（画笔/美型有自己的蒙版，预设是一整套参数）。这里只留一句说明，
-            // 不让用户以为自己在一个「不生效的作用域」里调参数。
+            // 人像 / 预设与作用域的关系**不同**（P1-15：旧文案「不受当前作用域影响」否认了
+            // 预设的实际写入路径 —— `EditorScreen:874/895` 传的是 `shownParams` + `writeParams`，
+            // 在对象作用域下「滤镜」分组会写进当前层）。文案必须逐类说真话。
             if (activeScope != null && category.scopeMode == ScopeMode.NotApplicable) {
-                Hint("「${category.label}」是整幅操作，不受当前作用域影响。")
+                when (category) {
+                    EditorCategory.Portrait -> Hint(
+                        "「人像」的精修状态写在整图上，不受当前作用域影响；" +
+                            "对象作用域只管「明暗 / 颜色 / 曲线」这些逐像素参数。"
+                    )
+                    else -> Hint(
+                        "预设卡片与强度环作用于整图参数；「滤镜」分组（LUT / 强度）写进当前作用域图层。"
+                    )
+                }
             }
 
             when (category) {
@@ -460,6 +469,8 @@ private val SCOPE_ITEMS: List<ObjectScope?> = listOf(null) + ObjectScope.entries
  * @param available 对象识别是否可用（模型是否成功加载）。不可用时 8 个对象 chip **逐个禁用**，
  *   而「整图」保持可用 —— 用整行的 `enabled` 会把「整图」也灰掉，那等于告诉用户「功能坏了」。
  *   禁用是必须的：让用户点进一个注定不生效的作用域，他调半天的滑块一个像素都不会变。
+ * @param emptyScopes 本图中「没有对象」的作用域（U4）。模型可用但图里没有该类时
+ *   单独禁用该 chip —— 姿态是「禁用 + 一句说明」，绝不允许「能操作但无效果」。
  * @param adjusted 该作用域是否已有非中性参数（决定尾随圆点）
  */
 @Composable
@@ -469,6 +480,10 @@ fun ParamScopeBar(
     adjusted: (ObjectScope) -> Boolean,
     onSelect: (ObjectScope?) -> Unit,
     modifier: Modifier = Modifier,
+    // U4：本图「没有对象」的作用域集合（`ObjectMasks.coveredScopes` 算出）。
+    // 模型可用 ≠ 每个作用域都有东西 —— 风景照里「面部/衣服」是空蒙版，
+    // 让用户点进去调半天一个像素都不动，是「能操作但无效果」的最坏交互。
+    emptyScopes: Set<ObjectScope> = emptySet(),
     // 「点哪修哪」（UI 3.0 §D）：非 null 时在行尾渲染 36dp 准星按钮；pickActive = 拾取中。
     pickActive: Boolean = false,
     onTogglePick: (() -> Unit)? = null
@@ -484,7 +499,11 @@ fun ParamScopeBar(
                 if (sc != null && adjusted(sc)) "$base •" else base
             },
             onSelect = onSelect,
-            itemEnabled = { sc -> sc == null || available },
+            // 禁用口径（三层，从外到内）：
+            // ① `available = false`（模型没加载）→ 8 个对象 chip 全禁，整图保持可用；
+            // ② U4：该作用域在本图是**空蒙版** → 单独禁 —— 「图里没有这个对象」是物理事实，
+            //    禁用 + 一句说明比「能点但不动」诚实。
+            itemEnabled = { sc -> sc == null || (available && sc !in emptyScopes) },
             // ⚠️ 2026-10-30：必须单行 + 紧凑。9 个作用域按宽度换行会排成 3 排（约 190dp），
             // 而这一行钉在滚动之外 ⇒ 直接把参数内容压到只剩一屏装不下。
             // 单行后高度恒定一行，末尾几项靠横滑（低频决策，横滑比「先缩小预览」便宜）。
@@ -527,6 +546,13 @@ fun ParamScopeBar(
         if (!available) {
             Text(
                 "对象识别不可用，仅支持整图。",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = Spacing.xs)
+            )
+        } else if (emptyScopes.isNotEmpty()) {
+            Text(
+                "灰色作用域：本图未检出该对象（模型在这张图里没找到它）。",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = Spacing.xs)
@@ -586,7 +612,9 @@ private fun LayerHeader(
 @Composable
 private fun WholeImageStageNotice(scope: ObjectScope) {
     GroupLabel("整幅阶段")
-    Hint("「细节」（锐化/降噪/清晰度/纹理）与「效果」（暗角/颗粒）作用在整幅画面上 —— 按「${scope.label}」施加讲不通。把上面的作用域切回「整图」即可调整这两组参数。")
+    // ⚠️ 文案跟着 §4.0.10 的菜单重排走：原「效果」分类已并入「细节」（暗角/颗粒是其子页），
+    //   这里再提一个不存在的分类名就是「文档腐化漏进 UI」。
+    Hint("「细节」（锐化/降噪/清晰度/纹理）与「暗角 / 颗粒」作用在整幅画面上 —— 按「${scope.label}」施加讲不通。把上面的作用域切回「整图」即可调整。")
 }
 
 // ———————————————————————————————————————————————————————————————
@@ -944,8 +972,13 @@ private fun LutGroup(
             onCommit()
         }
     )
-    EditSlider("滤镜强度", params.lutIntensity, 0f, 1f, 0.05f, { p, v -> p.copy(lutIntensity = v) }, params, onParamChange, onCommit, onDraggingChange, format = PERCENT_U)
-    Hint("内置滤镜全部是 MIT / CC 授权，可随包分发。强度 0% 等同关闭，方便对照效果。")
+    // U1：「无滤镜」时强度滑块是**空转** —— `PixelProgram` 对 `lutId == "none"` 整级跳过，
+    // 滑块改 `lutIntensity` 一个像素都不会变。诚实的姿态是「没选滤镜就不出这个滑块」，
+    // 而不是让用户对着一条无效滑块怀疑 App 坏了。选回任意滤镜后滑块原样回来（值保留）。
+    if (params.lutId != "none") {
+        EditSlider("滤镜强度", params.lutIntensity, 0f, 1f, 0.05f, { p, v -> p.copy(lutIntensity = v) }, params, onParamChange, onCommit, onDraggingChange, format = PERCENT_U)
+        Hint("内置滤镜全部是 MIT / CC 授权，可随包分发。强度 0% 等同关闭，方便对照效果。")
+    }
 }
 
 /**

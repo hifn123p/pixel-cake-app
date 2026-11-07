@@ -9,7 +9,7 @@
 [![targetSdk](https://img.shields.io/badge/targetSdk-36-blue)](https://developer.android.com)
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.2.21-7F52FF?logo=kotlin)](https://kotlinlang.org)
 [![Compose](https://img.shields.io/badge/Jetpack%20Compose-Material3%204285F4?logo=jetpackcompose)](https://developer.android.com/jetpack/compose)
-[![Version](https://img.shields.io/badge/version-v0.6.3-success)](https://github.com/hifn123p/pixel-cake-app/releases)
+[![Version](https://img.shields.io/badge/version-v0.6.4-success)](https://github.com/hifn123p/pixel-cake-app/releases)
 [![Build](https://img.shields.io/badge/Build-GitHub%20Actions-2088FF?logo=githubactions)](https://github.com/features/actions)
 [![License](https://img.shields.io/badge/License-TBD-lightgrey)](#许可)
 
@@ -69,7 +69,7 @@ git clone --recurse-submodules https://github.com/hifn123p/pixel-cake-app.git
 
 | 模块 | 说明 |
 |---|---|
-| 🖼 导入与解码 | Photo Picker / SAF；JPEG、HEIF；Sony ARW 内嵌全分辨率预览（纯 Kotlin TIFF/IFD 链遍历）与 LibRaw 全量解码（16-bit 线性） |
+| 🖼 导入与解码 | Photo Picker / SAF；JPEG、HEIF；**EXIF 方向烘焙**（Orientation 矩阵逐像素正立，翻转类方向含镜像分量）；Sony ARW 内嵌全分辨率预览（纯 Kotlin TIFF/IFD 链遍历）与 LibRaw 全量解码（16-bit 线性） |
 | 🎚 非破坏编辑 | 白平衡、明暗（曝光/对比/高光/阴影/白点/黑点/高光恢复）、颜色（自然饱和/饱和/去雾/HSL 八通道/彩色分级）、曲线（亮度 + R/G/B 分通道）、细节与效果（锐化/降噪/清晰度/纹理/暗角/颗粒）、LUT；撤销/重做、长按对比 |
 | 🪄 **UI 3.0「Aperture」** | **One-Surface** 全屏画布（照片不被遮挡）；**双通道调节**（照片横拖调参 + deck 滑块同步，HUD 46sp 巨大读数）；**点哪修哪**（单击命中分割蒙版选作用域）；**强度环**（预设参数栈整体向中性回退）；**自动增强**（直方图启发式，零模型）；**历史丝带**（步骤跳转）；**分割对比**（逐列修前修后）；**导出回执**（尺寸/格式/预设名）；曲线本体（deck 内嵌可拖曲线+直方图底）；暖石墨+琥珀主题；自适应图标三层 |
 | 🔍 预览缩放 | 双指缩放（≤8×）与平移、双击 2.5×↔1×（以点击处为锚）、画笔模式下单指恒为涂抹、未放大时按住看原图；已放大时显示「已放大 N% · 复位」胶囊 |
@@ -79,7 +79,7 @@ git clone --recurse-submodules https://github.com/hifn123p/pixel-cake-app.git
 | 🤖 端侧 ML | LiteRT `CompiledModel`（GPU→CPU 级联、永不崩的降级链）：6 类人体分割染色蒙版 + 人脸框/关键点，模型随包内置 |
 | 📸 **系留出片 v2** | 连接 Sony A7C II → 仪表盘（电量/存储/曝光）→ **拍摄到达流**（轮询新对象→自动下载→套默认修图参数→导出相册，3s 轮询）→ 会话批量 |
 | 📷 相机直连 | Sony USB PTP 探测、浏览、下载（256KB 流式分块）；单张导入 + 批量套预设导出，导完即删 |
-| 💾 导出 | JPEG / PNG（可选画质）；RAW 全分辨率分带渲染，非 RAW 按设备档位选分辨率；导出成功后按钮切换形态 |
+| 💾 导出 | JPEG / PNG（可选画质）；**可取消**（逐带检查点，取消不留幽灵文件）；**最小 EXIF 回写**（机身/拍摄参数 + 方向恒正）；RAW 全分辨率分带渲染，非 RAW 按设备档位选分辨率；导出成功后按钮切换形态 |
 | 📊 工具 | 曲线编辑器（黑场/中间调/白场锚点）+ **RGB 三通道直方图**（明暗页，叠加显示） |
 | 🐞 调试日志 | 结构化端侧日志（`files/debug/log_<session>.txt`），可通过系统分享导出 |
 
@@ -170,6 +170,8 @@ com.hifn.pixelcake
 
 | 版本 | 内容 |
 |---|---|
+| `v0.6.4` | **外部审计整改批次**（qwen3.8 + hy4 双审）：P0-2 **EXIF/方向层落地**（解码烘焙 Orientation 矩阵、导出回写最小 EXIF 集）；P1-3 **导出可取消**（sRGB 逐带取消 + 幽灵文件删除 + CE 重抛）；P1-2 **直方图按带累加**（19MB/帧垃圾清零、进 renderMutex、isActive 检查点）；P1-5 **系留健壮化**（开系留播种基线、坏对象记账、位图回收进 finally、renderIntoSrgb 返回值消费）；U4 **空作用域禁用**（`coveredScopes` 判空 + chip 禁用 + 说明）；U1 滤镜强度空转修复；P1-15 悬空 rawCachePath / NotApplicable Hint 矛盾修正；**T1 参数栈 JSON 序列化**（`EditDocument` + 版本迁移骨架，解锁另存预设/项目/P3 契约）+ 3 组新单测 |
+| `v0.6.3` | P0 三项修复（系留 ARW 走 LibRaw 管线、陈旧直方图清位、exifinterface 依赖）+ 两份审计报告入库 |
 | `v0.6.2` | **UI 3.0「Aperture」全量改版**：One-Surface 编辑器 + 双通道调节 + 点哪修哪 + 强度环 + 自动增强 + 历史丝带 + 分割对比 + 导出回执 + 曲线本体 + 系留出片 v2 + 暖石墨琥珀主题 + 自适应图标 |
 | `v0.6.1` | PTP GetDevicePropValue 扩展（电量/ISO/光圈） |
 | `v0.6.0` | UI 3.0 架构 + 版本抬升 |
@@ -181,7 +183,7 @@ com.hifn.pixelcake
 | `v0.4.4` | UI Redesign v2.0 |
 | `v0.4.0` / `v0.4.1` | 调色批次 1~4（81 项）/ 批次 5 对象作用域 |
 
-（`v0.1.0` → `v0.6.3` tag 齐全，Release 页可下载签名 APK。）
+（`v0.1.0` → `v0.6.4` tag 齐全，Release 页可下载签名 APK。）
 
 ---
 

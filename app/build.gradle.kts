@@ -4,6 +4,8 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+    // T1（审计 P1-11）：@Serializable 编译器插件 —— EditSnapshot ⇄ JSON（EditSnapshotJson.kt）
+    alias(libs.plugins.kotlin.serialization)
 }
 
 android {
@@ -16,10 +18,11 @@ android {
         targetSdk = libs.versions.targetSdk.get().toInt()
         // 与 GitHub Release tag 一一对应：打 v0.4.3 时同步抬这里，
         // 否则「关于」页(AboutSheet 显示 v${versionName} (${versionCode}))会与 Release 页对不上。
-        // v0.5.1：真机反馈（一加15）—— 面板 chip 行改单行横滚 + 紧凑内边距、
-        // 预设缩略图按可用宽度反算边长、预览/参数分割比重算（默认 0.45→0.34，上下限 0.18/0.72）。
-        versionCode = 18
-        versionName = "0.6.3"
+        // v0.6.4：外部审计（qwen3.8 + hy4）整改批次 —— P0-2 EXIF 方向烘焙与最小集回写、
+        // P1-2 直方图按带累加进锁、P1-3 导出取消不留幽灵文件、P1-5 系留基线播种与坏对象记账、
+        // U4 空作用域禁用、U1 滤镜强度空转修复、T1 参数栈 JSON 序列化。
+        versionCode = 19
+        versionName = "0.6.4"
 
         // 刻意**不声明** testInstrumentationRunner（审计 M8）：本项目没有 androidTest 源集、
         // 也没有 androidx.test 依赖，裸声明是死配置 —— 一旦有人加仪器测试会因缺依赖直接红；
@@ -151,6 +154,9 @@ implementation(libs.androidx.activity.compose)
 
     // P1+：端侧推理（LiteRT / CompiledModel）。模型文件见 app/src/main/assets/models/
     implementation(libs.litert)
+
+    // T1：EditSnapshot ⇄ JSON（另存预设 / 项目文件 / P3 Rust 契约的共同前提）
+    implementation(libs.kotlinx.serialization.json)
 
     // M0b：纯 Kotlin ARW 预览解析的 JVM 单测
     testImplementation("junit:junit:4.13.2")

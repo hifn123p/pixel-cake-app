@@ -1,11 +1,14 @@
 package com.hifn.pixelcake.core.decode
 
+import android.content.ContentResolver
 import android.content.ContentValues
 import android.content.Context
 import android.graphics.Bitmap
 import android.net.Uri
 import android.provider.MediaStore
+import androidx.exifinterface.media.ExifInterface
 import com.hifn.pixelcake.diag.DebugLog
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
@@ -21,12 +24,41 @@ enum class ExportFormat { JPEG, PNG }
  * 此前那些 `if (Build.VERSION.SDK_INT >= Q)` 判断是死代码（PHASE_DESIGN_HISTORY.md（审查台账） F20），已移除。
  */
 object Exporter {
+
+    /**
+     * P0-2 M-1：从来源照片**复制**进导出文件的最小 EXIF 集（存在才写、缺了不补）。
+     * 拍摄参数（光圈/快门/ISO/焦距）与机身型号是修图 App 里用户真正还关心的元数据；
+     * GPS 与复杂标签刻意**不**复制 —— 位置是隐私，宁缺勿错。
+     */
+    private val EXIF_COPY_TAGS = arrayOf(
+        ExifInterface.TAG_MAKE,
+        ExifInterface.TAG_MODEL,
+        ExifInterface.TAG_DATETIME,
+        ExifInterface.TAG_DATETIME_ORIGINAL,
+        ExifInterface.TAG_F_NUMBER,
+        ExifInterface.TAG_EXPOSURE_TIME,
+        ExifInterface.TAG_ISO_SPEED_RATINGS,
+        ExifInterface.TAG_FOCAL_LENGTH
+    )
+
+    /**
+     * @param isCancelled 取消检查点（P1-3 A3）：插入记录前、压缩完成后各查一次。
+     *   「压缩途中取消」查不到 —— 但文件落地后由完成后的那次检查兜住并**删除**，
+     *   不留幽灵文件。判据：取消后相册里**没有**该文件。
+     * @param exifFrom 来源照片 uri（P0-2 M-1）：非 null 时回写最小 EXIF 集；
+     *   方向恒写 1（Orientation 已在 `Decoder.applyExifOrientation` 烘焙进像素）。
+     *   EXIF 写失败**绝不**让导出失败 —— 元数据是加分项，成片本体已经落盘。
+     */
     suspend fun export(
         context: Context,
         bitmap: Bitmap,
         format: ExportFormat = ExportFormat.JPEG,
-        quality: Int = 92
+        quality: Int = 92,
+        isCancelled: () -> Boolean = { false },
+        exifFrom: Uri? = null
     ): Uri? = withContext(Dispatchers.IO) {
+        // 插入记录**之前**就查一次：取消发生在排队等待期时，连 MediaStore 记录都不该出现。
+        if (isCancelled()) return@withContext null
         val cr = context.contentResolver
         val (mime, ext) = when (format) {
             ExportFormat.JPEG -> "image/jpeg" to "jpg"
@@ -46,9 +78,13 @@ object Exporter {
             //   ② `compress` 返回 false（位图已 recycle、编码器内部失败）。
             // 两者以前都被 `?.use` / 返回值丢弃吞掉，然后照样把 IS_PENDING 清 0 并返回 uri。
             val fmt = if (format == ExportFormat.JPEG) Bitmap.CompressFormat.JPEG else Bitmap.CompressFormat.PNG
-            val written = cr.openOutputStream(uri)?.use { os ->
-                bitmap.compress(fmt, quality.coerceIn(0, 100), os)
-            } ?: false
+            val written = if (isCancelled()) {
+                false
+            } else {
+                cr.openOutputStream(uri)?.use { os ->
+                    bitmap.compress(fmt, quality.coerceIn(0, 100), os)
+                } ?: false
+            }
             if (!written) throw IllegalStateException("bitmap.compress failed for $name")
             values.clear()
             values.put(MediaStore.Images.Media.IS_PENDING, 0)
@@ -58,7 +94,19 @@ object Exporter {
             if (cr.update(uri, values, null, null) == 0) {
                 throw IllegalStateException("IS_PENDING clear failed for $name")
             }
+            // 压缩**完成之后**才发现取消：文件已经存在于相册，必须删掉 ——
+            // 否则「取消导出」提示弹了、相册里却躺着一张用户没要的幽灵文件（A3 判据）。
+            if (isCancelled()) {
+                try { cr.delete(uri, null, null) } catch (_: Throwable) {}
+                return@withContext null
+            }
+            writeMinimalExif(cr, uri, exifFrom)
             uri
+        } catch (c: CancellationException) {
+            // 协程取消不是失败：清掉 IS_PENDING 记录后**原样上抛**（与 Decoder/CameraBatch
+            // 同一纪律 —— 吞掉它会把「取消」伪装成「导出失败」）。
+            try { cr.delete(uri, null, null) } catch (_: Throwable) {}
+            throw c
         } catch (t: Throwable) {
             // ⚠️ 必须 Throwable 而不是 Exception：33MP 的 compress 是 OOM 高发点，
             // OutOfMemoryError 逃出去会让 `IS_PENDING=1` 的记录永久隐藏 ——
@@ -69,6 +117,49 @@ object Exporter {
             )
             try { cr.delete(uri, null, null) } catch (_: Throwable) {}
             null
+        }
+    }
+
+    /**
+     * 导出侧回写最小 EXIF 集（P0-2 M-1）。
+     *
+     * 走 `openFileDescriptor("rw")` + `ExifInterface(fd)` **就地改写**：`saveAttributes()`
+     * 会重写整个文件，比起「读回内存再写」少一次全幅拷贝。任何失败只打 WARN ——
+     * 调用方语义是「EXIF 是加分项」：成片已落盘，元数据写不进去不该让导出报错。
+     */
+    private fun writeMinimalExif(cr: ContentResolver, out: Uri, from: Uri?) {
+        try {
+            val pfd = cr.openFileDescriptor(out, "rw") ?: return
+            pfd.use { fd ->
+                val exif = ExifInterface(fd.fileDescriptor)
+                // 旋转已在解码侧烘焙进像素 ⇒ 导出文件的方向恒为「正」。
+                // 不写这一条的话，某些相册 App 会按来源方向把已经正立的图再转一次。
+                exif.setAttribute(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL.toString())
+                if (from != null) {
+                    try {
+                        cr.openInputStream(from)?.use { s ->
+                            val src = ExifInterface(s)
+                            for (tag in EXIF_COPY_TAGS) {
+                                val v = src.getAttribute(tag)
+                                if (!v.isNullOrEmpty() && exif.getAttribute(tag).isNullOrEmpty()) {
+                                    exif.setAttribute(tag, v)
+                                }
+                            }
+                        }
+                    } catch (t: Throwable) {
+                        DebugLog.w(
+                            DebugLog.TAG_DECODE, "exif source read failed",
+                            mapOf("err" to (t.message ?: t.javaClass.simpleName))
+                        )
+                    }
+                }
+                exif.saveAttributes()
+            }
+        } catch (t: Throwable) {
+            DebugLog.w(
+                DebugLog.TAG_DECODE, "exif write failed",
+                mapOf("err" to (t.message ?: t.javaClass.simpleName))
+            )
         }
     }
 }

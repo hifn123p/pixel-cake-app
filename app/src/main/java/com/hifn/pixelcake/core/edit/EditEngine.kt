@@ -86,8 +86,10 @@ object EditEngine {
      * （`DetailPass` 的 KDoc 专门论证过「锐化必须晚于磨皮」）。同一张 JPEG 与同一张 RAW
      * 走同一套参数会得到不同的锐化观感。现在把 retouch 收进本函数，让三条入口同构。
      *
-     * @return `true` = 这一帧是完整帧；`false` = 尺寸不匹配（**调用方必须消费这个返回值**，
-     *   否则一张尺寸不对的旧位图会被当成品上屏）。
+     * @return `true` = 这一帧是完整帧；`false` = 尺寸不匹配**或被取消**（**调用方必须消费这个
+     *   返回值**，否则一张尺寸不对/半途而废的旧位图会被当成品上屏或导出成幽灵文件）。
+     *   取消与失败共用 `false`：调用方若需要区分，用自己的取消标志位判断（导出侧即
+     *   `exportCancelled`）。取消检查逐**带**进行 —— 33MP 下两条带之间就是一次协作让行的机会。
      */
     fun renderIntoSrgb(
         target: Bitmap,
@@ -96,7 +98,8 @@ object EditEngine {
         retouch: RetouchState? = null,
         mask: RetouchMask? = null,
         faceAnchor: RetouchLayer.FaceAnchor? = null,
-        layers: LayerStack = LayerStack.EMPTY
+        layers: LayerStack = LayerStack.EMPTY,
+        isCancelled: () -> Boolean = { false }
     ): Boolean {
         val w = base.width
         val h = base.height
@@ -114,6 +117,8 @@ object EditEngine {
         val invL = 1f / maxOf(w, h).toFloat()
         var y = 0
         while (y < h) {
+            // P1-3 A3：与 [renderIntoLinear] 同一取消口径 —— 逐带检查，半途而废不产出完整帧。
+            if (isCancelled()) return false
             val rows = minOf(BAND_ROWS, h - y)
             base.getPixels(band, 0, w, 0, y, w, rows)
             runBand(w, y, rows) { x, py, i ->

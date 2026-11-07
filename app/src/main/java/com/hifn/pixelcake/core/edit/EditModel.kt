@@ -1,5 +1,7 @@
 package com.hifn.pixelcake.core.edit
 
+import kotlinx.serialization.Serializable
+
 /**
  * HSL 混色的 8 个色相通道（`docs/TONING_DESIGN.md` §2.3.1）。
  *
@@ -35,6 +37,7 @@ object HslBands {
  * 允许外部（预设 / 将来的 JSON 存档）只给出部分通道，所以读取一律走 [hueOf] / [satOf] / [lumOf]
  * —— 越界返回中性值 0，绝不抛下标异常。写回走 [withHue] / [withSat] / [withLum]，会自动补齐长度。
  */
+@Serializable
 data class HslMix(
     val hue: List<Float> = List(HslBands.COUNT) { 0f },
     val sat: List<Float> = List(HslBands.COUNT) { 0f },
@@ -60,6 +63,7 @@ private fun List<Float>.patched(i: Int, v: Float): List<Float> {
 }
 
 /** 彩色分级里的一个分区（阴影 / 中间调 / 高光 / 全局）。 */
+@Serializable
 data class GradingBand(
     /** 色相，0..1 映射到 0..360°，与 HSV 同口径。 */
     val hue: Float = 0f,
@@ -78,6 +82,7 @@ data class GradingBand(
  * 这是「电影感」的主要来源（阴影压青、高光偏橙），也是成本最低的一档
  * —— 参数在渲染前塌缩成 3 条 256 项 LUT，逐像素只有 3 次查表 + 3 次加法。
  */
+@Serializable
 data class ColorGrading(
     val shadows: GradingBand = GradingBand(),
     val midtones: GradingBand = GradingBand(),
@@ -142,7 +147,16 @@ data class ColorGrading(
  * 批次 1 统一为「四区滑块正方向一致 = 提亮」，理由是心智模型：四个滑块方向一致时用户不需要
  * 每次判断「这个滑块的正方向是往哪边」。已逐个核对 10 个内置预设，**没有一个用到这两个字段**
  * ⇒ 翻转是安全的；一旦 JSON 参数栈落地（DEV_PLAN §3.3）就再也不能翻了。
+ *
+ * ## T1：本类已 `@Serializable`（`EditSnapshotJson` 是唯一入口）
+ *
+ * `EditParams` + [HslMix] + [ColorGrading] + [GradingBand] 全部可序列化 —— 这是「另存预设 /
+ * 项目文件 / P3 契约」的共同前提（DEV_PLAN §3.3：**没有格式就没有持久化**）。
+ * 序列化纪律：只加注解、不写字段级 `@SerialName`（JSON 键 = 字段名，与 KDoc 一一对应）；
+ * 新增字段**必须带默认值**（旧 JSON 读不到新键自然回落默认值，这就是向前兼容本身），
+ * 删除字段则交给 `EditSnapshotJson` 的迁移钩子。
  */
+@Serializable
 data class EditParams(
     // ———— 影调 ————
     val exposureEv: Float = 0f,
