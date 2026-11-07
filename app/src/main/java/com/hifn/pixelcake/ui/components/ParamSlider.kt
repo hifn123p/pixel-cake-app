@@ -31,6 +31,8 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -194,7 +196,12 @@ fun ParamSlider(
         Slider(
             value = value,
             enabled = enabled,
-            modifier = Modifier.fillMaxWidth().height(26.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(26.dp)
+                // T4 无障碍：标签与滑杆是两个节点，TalkBack 用户得划两次才能听见
+                // 「这是什么参数」。把名称并进滑杆语义 —— 一条播报「曝光值，百分之十二」。
+                .semantics { contentDescription = label },
             onValueChange = { raw ->
                 if (!dragging) {
                     dragging = true

@@ -39,12 +39,18 @@ object DebugLog {
     private const val MAX_BYTES = 2L * 1024 * 1024
     private const val AUTHORITY_SUFFIX = ".fileprovider"
 
+    /** D3：DEBUG/INFO 的攒批刷盘间隔。拖滑块时每帧一条 INFO，逐条 flush = 每帧一次磁盘写。 */
+    private const val FLUSH_EVERY = 16
+
     private val dateFmt = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US)
     private val sessionFmt = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US)
 
     private var logFile: File? = null
     private var writer: BufferedWriter? = null
     private val ready = AtomicBoolean(false)
+
+    /** 自上次 flush 以来未落盘的条数（仅 DEBUG/INFO 计数）。 */
+    private var unflushed = 0
 
     fun init(context: Context) {
         if (ready.get()) return
@@ -79,11 +85,29 @@ object DebugLog {
             val kvStr = kv?.entries?.joinToString(", ") { "${it.key}=${it.value}" }
                 ?.let { " {$it}" } ?: ""
             writer?.append("$ts [$level] $tag: $msg$kvStr\n")
-            writer?.flush()
+            // D3：ERROR/WARN 立即落盘（真机排障的关键几条不能丢在缓冲里）；
+            // DEBUG/INFO 攒 16 条刷一次 —— 逐条 flush 是「每帧一次磁盘写 + 监视器竞争」。
+            if (level == "ERROR" || level == "WARN") {
+                writer?.flush()
+                unflushed = 0
+            } else {
+                unflushed += 1
+                if (unflushed >= FLUSH_EVERY) {
+                    writer?.flush()
+                    unflushed = 0
+                }
+            }
             maybeRotate()
         } catch (_: Exception) {
-            // 日志失败绝不影响主流程
+            // 日志失败绝不影响主流程（非 suspend：无 CE 可吞，静态闸门豁免）
         }
+    }
+
+    /** 分享/导出前强制刷盘：保证拿到的日志包含攒批里的最后几条。 */
+    @Synchronized
+    fun flushNow() {
+        try { writer?.flush() } catch (_: Exception) {}
+        unflushed = 0
     }
 
     private fun maybeRotate() {
@@ -126,6 +150,7 @@ object DebugLog {
     fun export(context: Context): Boolean {
         val f = logFile ?: return false
         if (!f.exists()) return false
+        flushNow()
         return try {
             val uri: Uri = FileProvider.getUriForFile(
                 context.applicationContext,

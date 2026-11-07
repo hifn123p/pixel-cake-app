@@ -26,6 +26,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.hifn.pixelcake.core.edit.ColorGrading
 import com.hifn.pixelcake.core.edit.ColorMath
@@ -531,7 +533,12 @@ fun ParamScopeBar(
                             interactionSource = null,
                             indication = null,
                             onClick = onTogglePick
-                        ),
+                        )
+                        // T4 无障碍：准星是纯图标按钮，名称与选中态必须显式给出。
+                        .semantics {
+                            contentDescription =
+                                if (pickActive) "退出点选作用域" else "点选作用域（在照片上点一下要修的对象）"
+                        },
                     contentAlignment = Alignment.Center
                 ) {
                     PathIcon(
@@ -683,15 +690,29 @@ private fun PortraitParams(
                 onValueChangeFinished = onRetouchCommit,
                 onDraggingChange = onDraggingChange
             )
+            // U2 同口径：强度 0 = 磨皮整段跳过，阈值 / 半径是修饰量，禁用 + 说明。
+            val smoothingOn = retouch.neutralGray.strength > 0f
+            ParamSlider(
+                label = "磨皮阈值", value = retouch.neutralGray.threshold.toFloat(),
+                valueRange = 0f..64f, step = 1f, format = { "%.0f".format(it) },
+                enabled = smoothingOn,
+                onValueChange = {
+                    onRetouchChange(retouch.copy(neutralGray = retouch.neutralGray.copy(threshold = it.toInt())))
+                },
+                onValueChangeFinished = onRetouchCommit,
+                onDraggingChange = onDraggingChange
+            )
             ParamSlider(
                 label = "磨皮半径", value = retouch.neutralGray.radiusNorm,
                 valueRange = 0.002f..0.05f, step = 0.002f, format = { "%.3f".format(it) },
+                enabled = smoothingOn,
                 onValueChange = {
                     onRetouchChange(retouch.copy(neutralGray = retouch.neutralGray.copy(radiusNorm = it)))
                 },
                 onValueChangeFinished = onRetouchCommit,
                 onDraggingChange = onDraggingChange
             )
+            if (!smoothingOn) Hint("磨皮强度 0% = 整段跳过：阈值 / 半径暂不参与。阈值是「多平才算皮肤」的判定线：低 = 只磨很平的区域（保细节），高 = 更激进的整片磨平。")
             ParamSlider(
                 label = "笔刷大小", value = brushRadius,
                 valueRange = 0.005f..0.15f, step = 0.005f, format = { "%.3f".format(it) },
@@ -933,11 +954,15 @@ private fun GradingGroup(
         selected = nearestHueIndex(band.hue),
         label = { HslBands.LABELS[it] },
         swatch = { HUE_SWATCHES[it] },
+        // U3：着色强度 0 时该分区不参与渲染（`GradingBand.isNeutral` 只看 sat/lum），
+        // 色相 chip 改了也没画面变化 —— 禁用 + 说明，不给「能点但无效」留位置。
+        itemEnabled = { band.sat > 0f },
         onSelect = {
             onParamChange(params.copy(grading = g.withBand(z, band.copy(hue = HslBands.CENTERS[it] / 360f))))
             onCommit()
         }
     )
+    if (band.sat == 0f) Hint("先给一点着色强度，色相才会生效（强度 0 的分区不参与渲染）。")
     EditSlider("着色强度", band.sat, 0f, 1f, 0.05f, { p, v -> p.copy(grading = g.withBand(z, band.copy(sat = v))) }, params, onParamChange, onCommit, onDraggingChange, format = PERCENT_U)
     EditSlider("明度", band.lum, -1f, 1f, 0.05f, { p, v -> p.copy(grading = g.withBand(z, band.copy(lum = v))) }, params, onParamChange, onCommit, onDraggingChange, format = PERCENT)
 
@@ -1106,9 +1131,12 @@ private fun DetailParams(
                 }
             )
             EditSlider("强度", params.sharpenAmount, 0f, 1f, 0.05f, { p, v -> p.copy(sharpenAmount = v) }, params, onParamChange, onCommit, onDraggingChange, format = PERCENT_U)
-            EditSlider("半径", params.sharpenRadius, 0.5f, 3f, 0.1f, { p, v -> p.copy(sharpenRadius = v) }, params, onParamChange, onCommit, onDraggingChange)
-            EditSlider("细节", params.sharpenDetail, 0f, 1f, 0.05f, { p, v -> p.copy(sharpenDetail = v) }, params, onParamChange, onCommit, onDraggingChange, format = PERCENT_U)
-            EditSlider("蒙版", params.sharpenMasking, 0f, 1f, 0.05f, { p, v -> p.copy(sharpenMasking = v) }, params, onParamChange, onCommit, onDraggingChange, format = PERCENT_U)
+            // U2：强度 0% 时整个锐化段被跳过（DetailPass 的设计），下面三个修饰量改了也不生效
+            // —— 禁用 + 一句说明，不给「能操作但无效果」的滑块留位置。
+            EditSlider("半径", params.sharpenRadius, 0.5f, 3f, 0.1f, { p, v -> p.copy(sharpenRadius = v) }, params, onParamChange, onCommit, onDraggingChange, enabled = params.sharpenAmount > 0f)
+            EditSlider("细节", params.sharpenDetail, 0f, 1f, 0.05f, { p, v -> p.copy(sharpenDetail = v) }, params, onParamChange, onCommit, onDraggingChange, format = PERCENT_U, enabled = params.sharpenAmount > 0f)
+            EditSlider("蒙版", params.sharpenMasking, 0f, 1f, 0.05f, { p, v -> p.copy(sharpenMasking = v) }, params, onParamChange, onCommit, onDraggingChange, format = PERCENT_U, enabled = params.sharpenAmount > 0f)
+            if (params.sharpenAmount == 0f) Hint("强度 0% = 锐化整段跳过：半径 / 细节 / 蒙版暂不参与，先给一点强度再调它们。")
             Hint("半径按长边等比 ⇒ 预览与导出的锐度一致。蒙版拉高后只在有边缘处锐化（保住皮肤和天空）；「细节」把中频一并纳入，适合建筑与织物。")
         }
 
@@ -1128,9 +1156,10 @@ private fun DetailParams(
                 }
             )
             EditSlider("亮度", params.nrLuminance, 0f, 1f, 0.05f, { p, v -> p.copy(nrLuminance = v) }, params, onParamChange, onCommit, onDraggingChange, format = PERCENT_U)
-            EditSlider("亮度细节", params.nrLuminanceDetail, 0f, 1f, 0.05f, { p, v -> p.copy(nrLuminanceDetail = v) }, params, onParamChange, onCommit, onDraggingChange, format = PERCENT_U)
+            EditSlider("亮度细节", params.nrLuminanceDetail, 0f, 1f, 0.05f, { p, v -> p.copy(nrLuminanceDetail = v) }, params, onParamChange, onCommit, onDraggingChange, format = PERCENT_U, enabled = params.nrLuminance > 0f)
             EditSlider("色度", params.nrColor, 0f, 1f, 0.05f, { p, v -> p.copy(nrColor = v) }, params, onParamChange, onCommit, onDraggingChange, format = PERCENT_U)
-            EditSlider("色度细节", params.nrColorDetail, 0f, 1f, 0.05f, { p, v -> p.copy(nrColorDetail = v) }, params, onParamChange, onCommit, onDraggingChange, format = PERCENT_U)
+            EditSlider("色度细节", params.nrColorDetail, 0f, 1f, 0.05f, { p, v -> p.copy(nrColorDetail = v) }, params, onParamChange, onCommit, onDraggingChange, format = PERCENT_U, enabled = params.nrColor > 0f)
+            if (params.nrLuminance == 0f && params.nrColor == 0f) Hint("两路强度都是 0% = 降噪整段跳过：两档「细节」暂不参与，先给一点强度再调。")
             Hint("亮度降噪会把细节一起抹平，所以把「细节」拉到 100% 时它完全不生效 —— 想保住细节就别动亮度这一路，只提色度：色度噪声是大块彩斑，单压它几乎不伤画面。")
         }
 
@@ -1167,9 +1196,10 @@ private fun DetailParams(
                 }
             )
             EditSlider("强度", params.vignetteAmount, -1f, 1f, 0.05f, { p, v -> p.copy(vignetteAmount = v) }, params, onParamChange, onCommit, onDraggingChange, format = PERCENT)
-            EditSlider("起点", params.vignetteMidpoint, 0f, 1f, 0.05f, { p, v -> p.copy(vignetteMidpoint = v) }, params, onParamChange, onCommit, onDraggingChange, format = PERCENT_U)
-            EditSlider("过渡", params.vignetteFeather, 0f, 1f, 0.05f, { p, v -> p.copy(vignetteFeather = v) }, params, onParamChange, onCommit, onDraggingChange, format = PERCENT_U)
-            EditSlider("圆度", params.vignetteRoundness, -1f, 1f, 0.05f, { p, v -> p.copy(vignetteRoundness = v) }, params, onParamChange, onCommit, onDraggingChange, format = PERCENT)
+            EditSlider("起点", params.vignetteMidpoint, 0f, 1f, 0.05f, { p, v -> p.copy(vignetteMidpoint = v) }, params, onParamChange, onCommit, onDraggingChange, format = PERCENT_U, enabled = params.vignetteAmount != 0f)
+            EditSlider("过渡", params.vignetteFeather, 0f, 1f, 0.05f, { p, v -> p.copy(vignetteFeather = v) }, params, onParamChange, onCommit, onDraggingChange, format = PERCENT_U, enabled = params.vignetteAmount != 0f)
+            EditSlider("圆度", params.vignetteRoundness, -1f, 1f, 0.05f, { p, v -> p.copy(vignetteRoundness = v) }, params, onParamChange, onCommit, onDraggingChange, format = PERCENT, enabled = params.vignetteAmount != 0f)
+            if (params.vignetteAmount == 0f) Hint("强度 0% = 暗角整段跳过：起点 / 过渡 / 圆度暂不参与。")
             Hint("正 = 提亮四角（负 = 压暗），与四个影调滑块同一条符号约定。几何量按长边归一化 ⇒ 预览与导出的暗角范围完全一致；画面中心永远不动。")
         }
 
@@ -1187,8 +1217,9 @@ private fun DetailParams(
                 }
             )
             EditSlider("强度", params.grainAmount, 0f, 1f, 0.05f, { p, v -> p.copy(grainAmount = v) }, params, onParamChange, onCommit, onDraggingChange, format = PERCENT_U)
-            EditSlider("尺寸", params.grainSize, 0f, 1f, 0.05f, { p, v -> p.copy(grainSize = v) }, params, onParamChange, onCommit, onDraggingChange, format = PERCENT_U)
-            EditSlider("对比", params.grainRoughness, 0f, 1f, 0.05f, { p, v -> p.copy(grainRoughness = v) }, params, onParamChange, onCommit, onDraggingChange, format = PERCENT_U)
+            EditSlider("尺寸", params.grainSize, 0f, 1f, 0.05f, { p, v -> p.copy(grainSize = v) }, params, onParamChange, onCommit, onDraggingChange, format = PERCENT_U, enabled = params.grainAmount > 0f)
+            EditSlider("对比", params.grainRoughness, 0f, 1f, 0.05f, { p, v -> p.copy(grainRoughness = v) }, params, onParamChange, onCommit, onDraggingChange, format = PERCENT_U, enabled = params.grainAmount > 0f)
+            if (params.grainAmount == 0f) Hint("强度 0% = 颗粒整段跳过：尺寸 / 对比暂不参与。")
             Hint("亮度噪声（三通道同加），所以不会出现高 ISO 那种彩噪。尺寸按长边归一化 ⇒ 预览与导出的颗粒粗细一致；噪声是确定性哈希，拖动滑块时画面不会「沸腾」。")
         }
     }
@@ -1337,21 +1368,26 @@ private fun EditSlider(
     onParamChange: (EditParams) -> Unit,
     onCommit: () -> Unit,
     onDraggingChange: (Boolean) -> Unit,
-    format: (Float) -> String = DEFAULT_FORMAT
+    format: (Float) -> String = DEFAULT_FORMAT,
+    // U2（诚实界面）：修饰量在「强度 0% = 整段跳过」时禁用。禁用的滑块**不登记**
+    // 双通道 —— 否则照片横拖仍在改一个画面上不会生效的参数。
+    enabled: Boolean = true
 ) {
     // 双通道调节（UI 3.0）：把本滑块的规格登记进当前组的登记簿 ——
     // 照片上横拖即可调同一个参数（SideEffect 每次重组都会用最新 value 刷新）。
-    // 注册簿为 null 的场合（非编辑器 / 测试）直接跳过。
-    LocalParamAdjust.current?.register(
-        ParamAdjustSpec(
-            label = label,
-            range = min..max,
-            step = step,
-            format = format,
-            apply = apply,
-            value = value,
+    // 注册簿为 null 的场合（非编辑器 / 测试）直接跳过；禁用的滑块不登记（见上）。
+    if (enabled) {
+        LocalParamAdjust.current?.register(
+            ParamAdjustSpec(
+                label = label,
+                range = min..max,
+                step = step,
+                format = format,
+                apply = apply,
+                value = value,
+            )
         )
-    )
+    }
     ParamSlider(
         label = label,
         value = value,
@@ -1360,7 +1396,8 @@ private fun EditSlider(
         format = format,
         onValueChange = { onParamChange(apply(params, it)) },
         onValueChangeFinished = onCommit,
-        onDraggingChange = onDraggingChange
+        onDraggingChange = onDraggingChange,
+        enabled = enabled
     )
 }
 

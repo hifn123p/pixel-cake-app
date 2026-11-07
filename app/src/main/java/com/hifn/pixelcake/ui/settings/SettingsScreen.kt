@@ -22,6 +22,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -37,6 +38,7 @@ import com.hifn.pixelcake.ui.theme.WsOk
 import com.hifn.pixelcake.ui.theme.Radius
 import com.hifn.pixelcake.ui.theme.Spacing
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
@@ -78,6 +80,8 @@ fun SettingsScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    // D4：缓存清理等页面级磁盘 IO 的协程域（主线程派发，IO 动作显式切线程）
+    val cacheScope = rememberCoroutineScope()
     var showAbout by remember { mutableStateOf(false) }
     // 「端侧模型」状态的刷新计数：`MlMaskProvider` 没有可观察性，改它做 key 即可重读快照。
     var modelRefresh by remember { mutableStateOf(0) }
@@ -271,7 +275,9 @@ fun SettingsScreen(
                 Spacer(Modifier.height(Spacing.xs))
                 TextButton(
                     onClick = {
-                        context.cacheDir.clearChildren()
+                        // D4：递归删除是潜在几千个文件的磁盘 IO，绝不能在主线程做。
+                        // 立即清零显示值（删除完成后占用本来就归零），删除在 IO 线程跑完。
+                        cacheScope.launch(Dispatchers.IO) { context.cacheDir.clearChildren() }
                         cacheMiB = 0L
                     }
                 ) { Text("清理缓存") }

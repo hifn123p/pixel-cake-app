@@ -19,7 +19,12 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 import com.hifn.pixelcake.ui.theme.Radius
 import com.hifn.pixelcake.ui.theme.Spacing
 
@@ -117,10 +122,35 @@ fun <T> GlassChipRow(
     }
 
     if (singleRow) {
+        // 审计债「横滑 chips 无截断提示」：行尾叠一层渐隐遮罩 —— 被截断的选项淡出，
+        // 比只靠「半露的 chip」更明确地表达「右边还有」。仅当真的溢出时才画
+        //（`canScrollForward`），未溢出的短行（3~5 项的二级行）完全不受影响。
+        // ⚠️ 表面色必须在**组合期**捕获成局部量 —— `drawWithContent` 不是组合上下文，
+        // 在里面读 `MaterialTheme.colorScheme`（@Composable getter）编译不过。
+        val fadeBase = MaterialTheme.colorScheme.surface
+        val hScroll = rememberScrollState()
         Row(
             modifier = modifier
                 .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
+                .drawWithContent {
+                    drawContent()
+                    if (hScroll.canScrollForward) {
+                        val fadeW = 28.dp.toPx()
+                        drawRect(
+                            brush = Brush.horizontalGradient(
+                                0f to Color.Transparent,
+                                // 用主题表面色（而非写死画布色）：编辑器里是 Deck 深色，
+                                // 未来若在浅色容器复用单行模式也能正确融合。
+                                1f to fadeBase.copy(alpha = 0.92f),
+                                startX = size.width - fadeW,
+                                endX = size.width
+                            ),
+                            topLeft = Offset(size.width - fadeW, 0f),
+                            size = Size(fadeW, size.height)
+                        )
+                    }
+                }
+                .horizontalScroll(hScroll),
             horizontalArrangement = Arrangement.spacedBy(Spacing.s),
             verticalAlignment = Alignment.CenterVertically
         ) {

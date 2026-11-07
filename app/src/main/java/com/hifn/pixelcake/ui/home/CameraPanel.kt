@@ -113,7 +113,9 @@ fun CameraPanel(
     // 批 5 可测化：轮询的「谁是新片 / 坏对象记账 / 基线播种」决策抽进 TetherProcessor
     //（纯 JVM 可测，K1/K2/K3 各有一条会红的回归测试）；本组件只保留下载/渲染/导出。
     val tether = remember {
-        TetherProcessor { m -> arrivalLog = (arrivalLog + m).takeLast(30) }
+        // ⚠️ 必须具名传 `log`：TetherProcessor 的**最后一个**参数是 maxPerRound，
+        // 尾随 lambda 会绑到它身上（CI 两红才定位到的绑定规则）。
+        TetherProcessor(log = { m -> arrivalLog = (arrivalLog + m).takeLast(30) })
     }
     val batchCancel = remember { AtomicBoolean(false) }
 
