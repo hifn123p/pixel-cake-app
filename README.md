@@ -241,24 +241,24 @@ App 内置调试日志（`diag/DebugLog.kt`）：
 
 ## 📄 文档
 
+> **文档政策（2026-11-07）**：`docs/` 只保留**当前技术路线与设计**——被取代 / 阶段性 / 快照
+> 性质的文档一律移入本地 `docs/archive/`（见下）。
+
 | 文档 | 作用 |
 |---|---|
-| [`docs/DEV_PLAN.md`](docs/DEV_PLAN.md) | **开发计划（唯一有效）**：项目介绍 / 功能矩阵 / 核心原理 / 技术路线 / 代码架构 / 设备要求 / 风险 |
-| [`docs/ENGINEERING_NOTES.md`](docs/ENGINEERING_NOTES.md) | **工程笔记（改代码前必读）**：仓库与协作约定、Compose 布局陷阱、渲染/并发纪律、构建与发版。**每一条都是被真机 bug 逼出来的** |
-| [`docs/UI_DESIGN.md`](docs/UI_DESIGN.md) | UI 设计规范 + Token + **每轮真机反馈修正表（§4.0.x）** |
+| [`docs/DEV_PLAN.md`](docs/DEV_PLAN.md) | **开发计划（唯一有效）**：项目介绍 / 功能矩阵 / 核心原理 / 技术路线 / 代码架构 / 设备要求 / 风险 / 文档索引 |
+| [`docs/ENGINEERING_NOTES.md`](docs/ENGINEERING_NOTES.md) | **工程笔记（改代码前必读）**：仓库与协作约定、Compose 布局陷阱、渲染/并发纪律、构建与发版、历史审查整改台账（§7~§13）。**每一条都是被真机 bug 逼出来的** |
+| [`docs/UI3.0.html`](docs/UI3.0.html) | **UI 3.0「Aperture」设计稿（当前唯一真值）**：14 屏 + 2 横屏 + 动效系统 + 性能字号审计 + token 真值 |
+| [`docs/UI_DESIGN.md`](docs/UI_DESIGN.md) | UI 规范与编号锚点：设计语言五支柱 / Token / §8 设计决策点 / §4.0.x 真机反馈修正表（编号被代码 KDoc 引用，数值已由 UI3.0 接管） |
 | [`docs/TONING_DESIGN.md`](docs/TONING_DESIGN.md) | 调色参数体系：参数全表、管线顺序、分批实施与落地记录（批次 1~4） |
 | [`docs/OBJECT_TONE_DESIGN.md`](docs/OBJECT_TONE_DESIGN.md) | 对象作用域调色（批次 5）：作用域全表、数据模型、单趟逐层 lerp、验收方式 |
-| [`docs/PHASE_DESIGN_HISTORY.md`](docs/PHASE_DESIGN_HISTORY.md) | **阶段设计存档**：P1b / P1+ / P2 三阶段设计 + 审查修复台账（`F01~F24` / `R01~R10` / `D01~D10` 编号溯源）。代码 KDoc 直接引用这些编号 |
-| [`docs/Github_CI.md`](docs/Github_CI.md) | 最近一次 CI 运行的完整报告（**每次 CI 后覆盖重写**，工具性文档） |
-| [`docs/UI3.0.html`](docs/UI3.0.html) | **UI 3.0「Aperture」设计稿**（14 屏 + 2 横屏 + 动效系统 + 性能字号审计）—— 当前 UI 真值 |
-| [`docs/UI2.0.html`](docs/UI2.0.html) | UI 3.0「Studio」备选方案（未被采纳，保留供对比） |
-| [`docs/app_icon.svg`](docs/app_icon.svg) | App 图标资产（自适应三层：背景/前景/单色） |
 | [`docs/ONDEVICE_MODEL_PLAN.md`](docs/ONDEVICE_MODEL_PLAN.md) | **端侧模型规划**：P6/P7 候选模型表 + 体积延迟预算 + 接入架构 |
-| `docs/archive/` | 本机历史存档：P1 之前的 4 份规划稿。**被 `.gitignore` 屏蔽 ⇒ 不上传 GitHub**（仓库内还有一份同名目录的说明写在它自己的 README 里，克隆者看不到） |
-| `docs/archive/` | 本机历史存档：P1 之前的 4 份规划稿。**被 `.gitignore` 屏蔽 ⇒ 不上传 GitHub**（仓库内还有一份同名目录的说明写在它自己的 README 里，克隆者看不到） |
+| [`docs/Github_CI.md`](docs/Github_CI.md) | 最近一次 CI 运行的完整报告（**每次 CI 后覆盖重写**，工具性文档） |
+| [`docs/app_icon.svg`](docs/app_icon.svg) | App 图标资产（自适应三层：背景/前景/单色） |
+| `docs/archive/` | **本地历史存档（不入库）**：早期规划稿、UI2.0 备选稿、阶段设计存档（`PHASE_DESIGN_HISTORY.md`，KDoc 编号引用的溯源处）、两份外部审计报告。**被 `.gitignore` 屏蔽 ⇒ 克隆仓库看不到**；入库过的原件可 `git show v0.6.4:docs/<文件名>` 取回 |
 
 > 三层文档体系：`docs/*_DESIGN.md`（设计决策，入库）→ `docs/ENGINEERING_NOTES.md`（工程纪律）→ 代码 KDoc（实现细节）。
-> 本地工作记忆（`.workbuddy/memory/`）不入库，需要长期留存的内容一律提炼进上面的入库文档。
+> 本地工作记忆（`.workbuddy/memory/`）与 `docs/archive/` 不入库，需要长期留存的结论一律提炼进上面的入库文档。
 
 ---
 

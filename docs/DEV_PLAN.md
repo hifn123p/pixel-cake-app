@@ -1,50 +1,48 @@
 ---
-title: 像素蛋糕 App — 开发计划（唯一有效文档 v3.0）
+title: 像素蛋糕 App — 开发计划（唯一有效文档 v3.1）
 status: active
 created: 2026-09-05
-updated: 2026-10-30
+updated: 2026-11-07
 project: D:\AI_Project
 replaces: [PLAN.md, FEASIBILITY_REPORT.md, P1_MVP_DESIGN.md, PLAN_REVIEW.md]
-description: 像素蛋糕（AI 人像精修）安卓应用的唯一开发计划：项目介绍、功能矩阵、核心原理、技术路线、代码架构（复用清单含具体路径 / 新开发模块）、设备要求、交付调试与风险。阶段设计稿（P1b / P1+ / P2）与审查台账已合并至 docs/PHASE_DESIGN_HISTORY.md，原稿在合并后已从工作树移除（可从合并前的提交取回）。文档索引见 §9。
+description: 像素蛋糕（AI 人像精修）安卓应用的唯一开发计划：项目介绍、功能矩阵、核心原理、技术路线、代码架构（当前真实模块树）、设备要求、交付调试与风险、文档索引。历史设计（阶段稿 / UI2.0 备选稿 / 外部审计快照）已移至本地 docs/archive/（不入库），原件可 git show 取回。
 ---
 
-# 像素蛋糕 App — 开发计划（v3.0）
+# 像素蛋糕 App — 开发计划（v3.1）
 
-> **本文是本项目唯一有效的开发计划**，已合并此前的 `PLAN.md` / `FEASIBILITY_REPORT.md` / `P1_MVP_DESIGN.md` / `PLAN_REVIEW.md`（这 4 份已归档到本地目录 `docs/archive/`，**该目录被 `.gitignore` 屏蔽、不上传 GitHub**，仅供本机追溯，不再维护）。
-> v3.0 相对之前的关键变更：
+> **本文是本项目唯一有效的开发计划**，已合并此前的 `PLAN.md` / `FEASIBILITY_REPORT.md` / `P1_MVP_DESIGN.md` / `PLAN_REVIEW.md`。
+> **文档政策（2026-11-07）**：`docs/` 只保留**当前技术路线与设计**；被取代 / 阶段性 / 快照性质的
+> 文档一律移入本地 `docs/archive/`（`.gitignore` 屏蔽、不入库）——含阶段设计存档
+> `PHASE_DESIGN_HISTORY.md`（KDoc 编号 `F01~F24` / `R01~R10` / `D01~D10` 的溯源处，取回命令见
+> `docs/archive/README.md`）、`UI2.0.html` 备选稿、两份外部审计报告（整改结论已沉淀进
+> `ENGINEERING_NOTES.md` §13）。
+> v3.1 相对 v3.0 的关键变更：
+> 1. **进度更新到 v0.6.4**：UI 3.0「Aperture」全量改版 + 外部审计整改批次（EXIF 层 / 导出取消 / 系留健壮化 / 空作用域禁用 / T1 参数栈 JSON）。
+> 2. **§5.2 代码架构树改为当前真实模块**（v3.0 的「规划未建」占位已全部兑付或删除）。
+> 3. **§9 文档索引只列现行文档**；历史文档的溯源方式集中在 `docs/archive/README.md`。
+>
+> v3.0 保留的关键决策（仍然生效）：
 > 1. **ARW 修图必须走全量 RAW**（LibRaw 真解马赛克），内嵌预览**只用于打开/快速预览**，不作为修图数据源。
-> 2. **P1 拆为 P1a / P1b**（先拿首个真机 APK，再堆完整人像功能）。
-> 3. **SDK：minSdk 36；compileSdk / targetSdk 暂对齐 36**（CI runner 的 SDK 仓库截至 2026-08 镜像尚未发布 `platforms;android-37`，`sdkmanager` 在 stable 与 canary 均 `Failed to find package`，故暂降到 36；待官方发布 API 37 平台后改回 37，代码已预留非致命的 37 安装尝试）。
-> 4. 修正 A7C II 规格（33MP / 7008×4672 / 14bit）与 ARW 体积，重算内存与自适应档位。
-> 5. 删除"16-bit 导出"过度承诺：内部 16-bit 保精度，**导出最高 8/10-bit**。
+> 2. **SDK：minSdk 36；compileSdk / targetSdk 暂对齐 36**（CI runner 镜像尚未发布 `platforms;android-37`，待官方发布后升回 37）。
+> 3. A7C II 规格（33MP / 7008×4672 / 14bit）；**导出最高 8/10-bit**（内部 16-bit 保精度，不承诺 16-bit 文件导出）。
 
 ---
 
-## 0. 当前进度（2026-10-25）
+## 0. 当前进度（2026-11-07）
 
-> **已发布到 `v0.5.0`**（`v0.1.0` → `v0.5.0` tag 齐全，5 个 CI job 含 `Publish GitHub Release`）。
-> 本轮（v0.4.7 → v0.5.0）做了两件事：**第二轮全量代码审查**（3 个 P1 + 12 个 P2 + 删死代码 3 文件
-> + 新增 3 个测试文件，见 `ENGINEERING_NOTES.md` §8）与 **UI v2.1**（预览缩放手势 +
-> 调色菜单 7→6 重排 + 尺寸回调，见 `UI_DESIGN.md` §4.0.9 / §4.0.10）。
-> 上一版进度停在 2026-10-06（v0.4.6）。**「设计稿」一栏统一指向 `PHASE_DESIGN_HISTORY.md`**
-> —— 原来的 `P1b_DESIGN.md` / `P1p_DESIGN.md` / `P2_DESIGN.md` / `FIX_LIST.md` 已合并进该文档，
-> 原稿在合并后已**从工作树移除**（它们是 HEAD 里有记录的正式提交内容，
-> 可 `git show <合并前的提交>:docs/<原名>` 取回）。
+> **已发布到 `v0.6.4`**（`versionCode = 19`；`v0.1.0` → `v0.6.4` tag 齐全，5 个 CI job 含 `Publish GitHub Release`；
+> 最新 run 全绿报告见 `docs/Github_CI.md`）。逐版本明细见根 `README.md` 的「版本历史」表。
+>
+> | 阶段 | 状态 | 说明 |
+> |---|---|---|
+> | M0a / M0b / P1a / P1b / P1+ / P2 | ✅ | 全部落地（P1a 最小链路 → P1b LibRaw 全量 + 人像算子 → P1+ LiteRT 双模型 → P2 USB PTP 直连与批量）。真机验收持续进行，清单见 §10 |
+> | 调色批次 1~5 | ✅ | 参数体系 **81 项** + 对象作用域图层（8 作用域）。设计见 `TONING_DESIGN.md` / `OBJECT_TONE_DESIGN.md` |
+> | **UI 3.0「Aperture」** | ✅（v0.6.2） | **One-Surface** 全屏画布 / 双通道调节 / 点哪修哪 / 强度环 / 自动增强 / 历史丝带 / 分割对比 / 导出回执 / 曲线本体 / 系留出片 v2 / 暖石墨琥珀主题 / 自适应图标。设计见 `UI3.0.html`（唯一真值） |
+> | **外部审计整改** | ✅（v0.6.3~v0.6.4） | 双模型审计（qwen3.8 + hy4）→ 3 个 P0（系留 ARW 必失败 / EXIF 层缺失 / 陈旧直方图）+ P1 批次（导出可取消 / 直方图进锁按带 / 系留基线播种 / 空作用域禁用 / 滤镜强度空转 / 悬空缓存路径 / Hint 矛盾）+ **T1 参数栈 JSON 序列化**。台账见 `ENGINEERING_NOTES.md` §13；判级以 hy4 报告为权威（已归档） |
+> | P3 | 🔜 | NAS Docker 化 Rust 引擎 —— 未启动 |
+> | 端侧模型 P6/P7 | 🔜 | 见 `ONDEVICE_MODEL_PLAN.md`（M1 交互分割 / M2 关键点 / M4 超分 / M5 深度…） |
 
-| 阶段 | 状态 | 说明 |
-|---|---|---|
-| M0a | ✅ | SDK 升 36 + CI 出首个可装 APK + DebugLog 模块 |
-| M0b | ✅ | ARW 内嵌 JPEG 预览解码（纯 Kotlin TIFF/IFD，零 NDK） |
-| P1a | ✅ | 最小编辑链路 → 首个真机可测 APK（导入/曝光·曲线·LUT/导出/日志）。**收尾补齐**：① 亮度**曲线** UI（黑场/中间调/白场三点锚点 → `EditParams.lumaPoints`，换算抽为 `core/edit/ToneCurve.kt` 并单测）——引擎 `PixelProgram` 早已支持、矩阵也标 ✅，但编辑器一直没有入口；② **PNG 导出**可选（`Exporter` 本就支持 JPEG/PNG，此前所有调用点硬编码 JPEG 导致 PNG 不可达）。 |
-| P1b | ✅ | **LibRaw 全量解码**（子模块 `third_party/LibRaw`[master `dde798dd`] + LibRaw-cmake[`eb98e432`]，静态链接；`raw_bridge.cpp` 全量解马赛克 → 16-bit 线性；`useLibRaw=true`，失败回退预览）。**人像算子全量落地**：NeutralGray / Beauty / Inpaint / ColorTransfer 均落 `core/edit/retouch/`，由 `RetouchLayer` 按「磨皮→液化→祛瑕→追色」编排；retouch pass 已接到 RAW 与 JPEG/HEIF 的预览 + 全分辨率导出四条路径。编辑器：工具选择（皮肤/祛瑕）、美型三滑块、追色风格+强度、**44 套分类预设**（`core/edit/preset/Presets.kt`）、撤销/重做（`EditSnapshot` 同步回退 tonal + retouch）、画笔描迹节流+条数上限、打开大图加载进度、「重置全部」+ 预设选中态。单测：NeutralGray / Beauty / Inpaint / ColorTransfer / RasterMask / Presets / EditHistory / RetouchLayer 等价性。**剩**：P1b-6 真机统一测试（用户侧 A7C2 实拍验收）。设计见 `PHASE_DESIGN_HISTORY.md`（P1b 部分）。 |
-| P1+ / F03② | ✅/🔜 | **P1+** ML 自动蒙版：用 **LiteRT + MediaPipe `selfie_multiclass_256x256`**（Apache-2.0，6 类含 `face-skin`/`body-skin`）替代原「TFLite + NNAPI」（**NNAPI 已在 Android 15 废弃**）。**P1p-1 已落地**（`core/ml/` + LiteRT + 模型 16,371,837B，见根 `NOTICE`）：`RetouchScale.editorSkinMask` 合成「ML ∪ 画笔取 `max`」，编辑器「自动蒙版」开关默认开（显示 GPU/CPU 加速器与回退提示），预览/导出四条路径接入；模型不可用或 OOM 时降级回退「画笔 → 整幅」。**P1p-2 已落地**：人脸检测（`face_detection_full_range_sparse`，676,746B）+ 锚点换算，把脸中心/眼心喂 `Beauty.centroid`/`eyeCentroid`，并 UI 回显锚点来源。**剩**：真机验收（一加15）。**F03②**「代理秒进」的感知延迟已用「打开即显解码进度 + 预览本就走 `halfSize` 代理」缓解；「后台母版无缝切换」为可选画质优化，**后置**。设计见 `PHASE_DESIGN_HISTORY.md`（P1+ 部分）。 |
-| P2 / P3 | ✅（待真机验收）/ 🔜 | **P2**：A7C2 USB 直连 —— **PoC-1~5 全部落地**：① 免权限 USB 枚举 + Sony VID/接口类识别（`camera/CameraProbe`、`camera/UsbCameraScanner`）；② USB 授权（`camera/UsbPermission`：`FLAG_MUTABLE` PendingIntent + 广播/系统 action 双注册 + 300ms 轮询兜底）；③ PTP 会话握手 + 设备信息 + 存储/对象枚举（`PtpProtocol`/`PtpData`/`PtpTransport`/`CameraPtpReport`）；④ **`GetObject` 256KB 分块流式下载** + **长生命周期会话** `camera/CameraSession`（列图/拉图/批量复用，I/O 串行化于内部 Mutex）；⑤ **批量套预设导出** `camera/CameraBatch`（拉取→复用 P1 管线套 `Presets.ALL`→导出到相册，导完即删、文件边界取消、进度回调）。UI：首页 `CameraPanel` 完成 检测→握手→列图→单张导入编辑器→批量套预设；连接成功后自动产出体检报告（`CameraConnection.inspect(session, steps)` 对**已有会话**体检，不自开会话）。协议层 + 数据集解析 + 批处理纯逻辑均有 JVM 单测。**剩**：真机验收（A7C2 实插）+ PoC-6（边拍边看）后置。设计见 `PHASE_DESIGN_HISTORY.md`（P2 部分）。**P3**：NAS Docker 化 Rust 引擎 —— **未启动**。 |
-| 调色批次 1~5 | ✅ | 参数体系扩展 **81 项**（白平衡 / 影调 / 偏好 / 曲线 / HSL / 彩色分级 / LUT / 细节 / 效果）+ **对象作用域图层**（8 个作用域 = 模型原生 6 类 + 2 个派生）。设计见 `TONING_DESIGN.md`、`OBJECT_TONE_DESIGN.md`。 |
-| UI v2.0 | ✅ | 玻璃工作台外壳 + 五段式编辑器 + Token 体系（间距/圆角/字阶/动效）+ 设置页与关于页 + 静态模糊底图。设计见 `UI_DESIGN.md`。 |
-| **第二轮全量审查** | ✅ | 覆盖 `core/edit`/`core/ml`/`camera`/`decode`/`arw`/`cpp`/`ui`/`MainActivity` 全域逐文件精读。**修 3 个 P1**：① `RawLinearSource` 加 `ioLock` 互斥，关死「快照句柄→JNI」与 `close()` 的 use-after-free 窗口（原生越界写）；② `raw_bridge.cpp` 的 `readLinearRows` 缓冲校验改 **jlong** 比较（`rows*width*3` 截断成 32 位会变负 ⇒ 判小失效）；③ ARW 预览候选**先按 `3..32MB` 过滤再取最大**（超限回退到合规次大候选，不再「整张 ARW 打不开」）。另 12 个 P2：`Histogram.clippedMedian` 阈值 / `meanShift` 分母两个真 bug、代理采样改「超目标 1.5 倍再对折」、`runCatching` 吞 `CancellationException`、`ParamSlider` 的 `onDispose` 兜底等。**删死代码**：`ui/editor/curves/` 整包（3 文件、4 个 P0、包外零引用）。**新增测试** 3 个文件（`ProxySampleSizeTest` / `HistogramTest` / `PreviewZoomTest`）。详见 `ENGINEERING_NOTES.md` §8。 |
-| **UI v2.1** | ✅ | **预览缩放**：双指缩放（≤8×）+ 平移、双击 2.5×↔1×（以点击处为锚）、画笔模式下单指恒为涂抹、未放大时按住看原图；手势从 3 个 `pointerInput` 合并为**单协程状态机**（`awaitEachGesture`），落点换算与平移钳位抽为 3 个 `internal` 纯函数（有单测）。**调色菜单 7→6**（调色拆「明暗/颜色」、效果并入细节、预设吸收 LUT）。**RGB 三通道直方图**接进「明暗」页。**尺寸回调**（§4.0.9）：字阶 28→24 / 18→16 / 15→14 / 13→12 / 12→11，`xl` 20→24、`xxl` 28→32，`controlHeight` 仍 48dp。`CameraPanel` 视觉迁移到 `GlassCard` + token。设计见 `UI_DESIGN.md` §4.0.9 / §4.0.10。 |
-
-> LibRaw master API 注意：已移除 `dcraw_free()`；`dcraw_make_mem_image()` 的返回产物必须用 `LibRaw::dcraw_clear_mem()` 释放，`free_image()` 只释放内部 `imgdata.image`、二者不可混用（见 F02 / D09）；Kotlin `val version` 与 native `getVersion()` JVM 签名冲突，已改名 `librawVersion`（详见 §8 风险表与每日日志 2026-09-09）。
+> LibRaw master API 注意（仍然生效）：`dcraw_make_mem_image()` 的返回产物必须用 `LibRaw::dcraw_clear_mem()` 释放，`free_image()` 只释放内部 `imgdata.image`、二者不可混用；Kotlin `val version` 与 native `getVersion()` JVM 签名冲突，已改名 `librawVersion`。
 
 ## 1. 项目介绍
 
@@ -149,7 +147,7 @@ description: 像素蛋糕（AI 人像精修）安卓应用的唯一开发计划�
 - **(B) `.cube` 3D LUT**：仅取 **MIT / CC 可再分发**源（如 `shravankumar147/photo-edit-app` 的 `cinematic.cube`、`fuji_fp-100c_alt.cube`；`mv-lab/NILUT` CC4.0）。构建期转 3D LUT（33³/64³ half-float）打包为 asset，运行时 GPU 采样 + 三线性插值。
 - ⚠️ 打包前逐个核许可并保留 LICENSE/NOTICE；**社区流传的 Lightroom DNG/XMP 预设不是 `.cube`**，不可直接内置（且多为付费/来源不明）→ 一律不用。
 
-### 3.5 轻量 ML（P1+；设计存档见 `docs/PHASE_DESIGN_HISTORY.md` P1+ 部分）
+### 3.5 轻量 ML（P1+；已落地，模块见 `core/ml/`）
 > **⚠️ 口径更正（2026-09-12）**：原定「TFLite + NNAPI delegate（NNAPI→GPU→CPU 降级）」**已过期** ——
 > **NNAPI 自 Android 15 起被官方废弃**（LiteRT 的 NNAPI delegate 页已重定向到迁移指南），TFLite 本体进入维护模式（只收安全/稳定性修复）。
 > 现行栈是 **LiteRT**：`com.google.ai.edge.litert:litert:2.x`，用 **`CompiledModel`** API，accelerator 走 **`GPU → CPU` 级联**（NPU 需 `BuiltinNpuAcceleratorProvider` + 厂商 delegate，列为后续可选）。
@@ -226,44 +224,56 @@ P3   NAS Docker 化 + axum API（注意 API 37 本地网络权限）
 
 > P3 需"去 Tauri 化"：新增 `axum` HTTP 层替换 Tauri IPC，ONNX EP 从 CUDA/DirectML 改为 **OpenVINO / Vulkan / CPU**。
 
-### 5.2 新开发模块（代码架构）
+### 5.2 代码架构（当前真实模块树，2026-11-07）
 
 ```
 com.hifn.pixelcake
-├── MainActivity.kt · PixelCakeApp.kt        # 入口与 Application（已实现）
-├── arw/                                      # 【已建】ARW 解析
-│   ├── ArwContainer.kt                       #   IFD 链遍历，择最大内嵌 JPEG 预览（F04）
-│   ├── ArwFullDecoder.kt                     #   全量解码编排 + 缓存清理（F21）
-│   ├── ArwPreviewDecoder.kt                  #   内嵌预览解码（纯 Kotlin，零 NDK）
-│   └── ArwPreviewExtractor.kt                #   预览字节提取（JVM 单测覆盖）
+├── MainActivity.kt · PixelCakeApp.kt      # 入口 / Application / 编辑页宿主（含渲染协程与导出编排）
+├── arw/                                    # ARW 解析（纯 Kotlin + LibRaw）
+│   ├── ArwContainer.kt                     #   IFD 链遍历，择最大内嵌 JPEG 预览
+│   ├── ArwFullDecoder.kt                   #   全量解码编排 + 缓存（落盘 → LibRaw / releaseCache）
+│   ├── ArwPreviewDecoder.kt                #   内嵌预览解码（秒开占位图）
+│   └── ArwPreviewExtractor.kt              #   预览字节提取（JVM 单测覆盖）
+├── camera/                                 # Sony USB PTP 直连（11 文件）
+│   ├── PtpProtocol / PtpData / PtpTransport#   协议层（事务 / 数据集 / USB 传输）
+│   ├── CameraSession / CameraConnection    #   长会话（列图/拉图/批量复用，I/O 串行化）+ 体检
+│   ├── CameraBatch / CameraPhoto(List|Filter) / CameraPtpReport
+│   └── CameraProbe / UsbCameraScanner / UsbPermission
 ├── core/
-│   ├── decode/                               # 【已建】解码入口
-│   │   ├── Decoder.kt                        #   按扩展名路由 JPEG/HEIF/ARW；ARW 走 LibRaw 线性
-│   │   ├── RawNative.kt                      #   LibRaw JNI 封装（openLinear/readLinearRows/closeLinear）
-│   │   ├── LinearImage.kt                    #   【新·P1b】16-bit 线性图数据类
-│   │   ├── RawLinearSource.kt                #   【新·P1b】分带读取封装
-│   │   └── Exporter.kt                       #   导出（死代码已清，F20）
-│   ├── edit/                                 # 【已建】编辑管线
-│   │   ├── EditModel.kt                      #   编辑参数模型
-│   │   ├── ColorMath.kt                      #   线性↔sRGB 查表（processPixel 已移除，F06）
-│   │   ├── PixelProgram.kt                   #   【新·P1b】预编译 WB×曝光标量增益 + sRGB LUT
-│   │   └── EditEngine.kt                     #   分带渲染（renderIntoSrgb/renderIntoLinear/renderLinearFile）
-│   ├── ml/                                   # 【已建·P1p-1】FloatGrid / SkinMaskPostProcess / SkinMaskModel / LiteRtSkinMaskModel / MlSkinMask / MlMaskProvider（见 docs/PHASE_DESIGN_HISTORY.md（P1+ 部分））；P1p-2 再扩 FaceDetector/Landmarker
-│   ├── render/                               # 【规划未建】PreviewPipeline（GPU/RenderEffect/AGSL）
-│   └── model/                                # 【部分】EditParams 等；Photo/Preset/Project 规划中
-├── data/                                     # 【规划未建】Room 历史/预设缓存；preset/ .cube LUT
-├── ui/
-│   ├── home/                                 # 【已建】HomeScreen · DeviceCapabilities · ResolutionProfile
-│   ├── theme/                                # 【已建】Color/Theme/Type
-│   ├── editor/EditorScreen.kt                # 【已建】画布 + 滑块节流（F08）
-│   ├── gallery/                              # 【规划未建】相册 + ARW 选择
-│   └── export/                               # 【规划未建】导出对话框
-├── diag/DebugLog.kt                          # 【已建·必须随首包】结构化日志落盘 + 导出分享
-└── util/                                     # 【规划未建】
+│   ├── decode/                             # 解码与导出
+│   │   ├── Decoder.kt                      #   路由 JPEG/HEIF/ARW + EXIF 方向烘焙（applyExifOrientation）
+│   │   ├── Exporter.kt                     #   相册导出（取消双检查点 + 最小 EXIF 回写）
+│   │   ├── LinearImage.kt / RawLinearSource.kt / RawNative.kt   # 16-bit 线性母版（分带）
+│   ├── edit/                               # 编辑管线（15 文件）
+│   │   ├── EditModel.kt                    #   EditParams(81 项)/HslMix/ColorGrading（@Serializable）
+│   │   ├── EditEngine.kt                   #   三条渲染入口（sRGB/Linear/LinearFile，分带 + 取消）
+│   │   ├── EditSnapshotJson.kt             #   T1：EditDocument(version+params+retouch+layers) ⇄ JSON
+│   │   ├── PixelProgram / ColorMath        #   预编译逐像素程序 + 查表数学
+│   │   ├── DetailPass / DetailApply        #   细节（锐化/降噪/清晰度/纹理）邻域 pass
+│   │   ├── Histogram / ToneCurve           #   直方图 + 曲线锚点
+│   │   ├── Mask / ObjectLayers / RetouchScale / RetouchState / EditLerp / AutoEnhance
+│   │   ├── preset/Presets.kt               #   44 套分类预设（参数栈）
+│   │   └── retouch/                        #   磨皮/液化/祛瑕/追色（NeutralGray/Beauty/Inpaint/ColorTransfer/RetouchLayer）
+│   └── ml/                                 # LiteRT 端侧推理（13 文件）
+│       ├── MlMaskProvider / MlSkinMask / SkinMaskModel / LiteRtSkinMaskModel / SkinMaskPostProcess
+│       ├── ObjectMasks.kt                  #   6 类分割 → 8 作用域蒙版 + scopeAt 命中 + coveredScopes 判空
+│       └── FaceDetection* / FaceAnchors / MlFaceProvider / Letterbox / FloatGrid
+├── diag/DebugLog.kt                        # 结构化日志落盘 + 导出分享
+└── ui/                                     # （30 文件）
+    ├── shell/AppShell.kt                   #   2-Tab 工作台外壳
+    ├── home/                               #   HomeScreen（Hero 卡）/ CameraPanel（直连+系留）/ DeviceCapabilities / ResolutionProfile
+    ├── editor/                             #   EditorScreen（One-Surface + 双通道手势 + 拾取）/ ParamPanel / Rail（PathParser 图标引擎）/ ParamAdjust / EditorToolbar / ExportSheet
+    ├── components/                         #   ParamSlider（HUD）/ CurveEditor / GlassCard / GlassChipRow / ActionTile / PresetThumbRow / GlassCircleButton
+    ├── settings/                           #   SettingsScreen / AppSettings（版本化迁移）/ AboutSheet
+    └── theme/                              #   Color / Type / Spacing / Radius / Glass / Motion / Theme / Backdrop（暖石墨+琥珀）
 ```
-> 注：**已建** = 当前仓库真实存在并可编译的模块；**规划未建** = v3.0 路线图中尚未落地的部分（编辑栈 EditStack/ops、ML 蒙版、GPU 预览、Room、相册/导出 UI、Hilt 依赖注入等）。Hilt / Room / Coil / Navigation / ktlint / detekt 截至本版**均未引入**——避免「逼代码去凑计划」，故按现状登记（D04）。
 
-**依赖现状**：截至本版仅引入 `androidx.core-ktx` / `activity-compose` / `lifecycle-runtime-ktx` / Compose BOM(Material3) / **`com.google.ai.edge.litert:litert` 2.2.0（P1p-1 自动蒙版）** / JUnit(测试)。Hilt · Room · Coil · Navigation · TFLite(旧 Interpreter API，已被 LiteRT 取代) · ktlint · detekt · ONNX-RT 均**未引入**（规划中，引入前需本地验证）。
+**依赖现状**（2026-11-07）：`androidx.core-ktx` / `activity-compose` / `lifecycle-runtime-ktx` /
+Compose BOM(Material3 + animation) / **`com.google.ai.edge.litert:litert` 2.2.0** /
+**`androidx.exifinterface` 1.3.7（P0-2 EXIF 层）** / **`kotlinx-serialization-json` 1.7.3 +
+`kotlin.plugin.serialization` 编译器插件（T1）** / JUnit(测试)。
+Hilt · Room · Coil · Navigation · ktlint · detekt · ONNX-RT 均**未引入**（规划中，引入前需本地验证）。
+NDK pin `30.0.16248370`；LibRaw 子模块静态链接。
 
 ### 5.3 复用 vs 自研 决策表
 | 能力 | 决策 | 理由 |
@@ -336,7 +346,7 @@ com.hifn.pixelcake
 | LibRaw 接入（NDK + 子模块 + ILCE-7CM2 机型配置） | P1b | **高** | 先在 P1a 只做 JPEG/HEIF 修图、ARW 仅预览；P1b 再接入；CI 编译耗时需评估 |
 | `app/src/main/cpp/third_party/LibRaw` 子模块为空 | P1b | 中 | `git submodule add` 官方 LibRaw，确认版本含 A7C II |
 | 相机 API / liveview 可用性 | P2 | 中 | 先 USB PTP 拉图 PoC；liveview（ScalarWebAPI）待验证，不行则退回"拍完拉图" |
-| ONNX → TFLite 模型转换 | P1+ | **低** | **已规避**：改用 MediaPipe 现成 `.tflite` 模型（见 §3.5 / `docs/PHASE_DESIGN_HISTORY.md`（P1+ 部分）），转换链降级为可选后置项 |
+| ONNX → TFLite 模型转换 | P1+ | **低** | **已规避**：改用 MediaPipe 现成 `.tflite` 模型（见 §3.5；模型与降级链实现见 `core/ml/`），转换链降级为可选后置项 |
 | 端侧 GPEN 设备分化 | P1+ | 中 | 设备分级；弱机转 P3 |
 | NAS 算力（i5-8600T + UHD630） | P3 | 中 | INT8 量化 + 低分辨率 + 批量串行 |
 | targetSdk 37 破坏性变更 | 全 | 中 | 见 §6.3 逐项验证 |
@@ -346,36 +356,39 @@ com.hifn.pixelcake
 
 ---
 
-## 9. 文档索引
+## 9. 文档索引（只列现行文档）
 
 > 三层体系：`docs/*_DESIGN.md`（**设计决策**，随仓库走）→ `docs/ENGINEERING_NOTES.md`（**工程纪律**）
 > → 代码 KDoc（**实现细节**）。
-> ⚠️ 本地工作记忆（`.workbuddy/memory/`）与 `docs/archive/` **都在 `.gitignore` 里**，
-> 换机器会丢 —— 任何需要长期留存的结论都必须落进下表里的入库文档。
+> **文档政策（2026-11-07）**：`docs/` 只保留当前技术路线与设计。历史设计（阶段稿 / UI2.0 备选 /
+> 审计快照）已移入本地 `docs/archive/`（`.gitignore` 屏蔽）；入库过的原件可
+> `git show v0.6.4:docs/<文件名>` 取回，溯源表见 `docs/archive/README.md`。
+> ⚠️ 本地工作记忆（`.workbuddy/memory/`）与 `docs/archive/` 都不入库 ——
+> 任何需要长期留存的结论都必须落进下表里的入库文档。
 
 | 文档 | 作用 | 何时读 |
 |---|---|---|
-| [`DEV_PLAN.md`](DEV_PLAN.md) | **本文**：唯一有效计划。项目介绍 / 功能矩阵 / 核心原理 / 技术路线 / 代码架构 / 设备要求 / 风险 | 想了解「要做什么、做到哪了」 |
-| [`ENGINEERING_NOTES.md`](ENGINEERING_NOTES.md) | **工程笔记**：仓库与协作约定（本地零环境 ⇒ CI 是唯一编译器）、Compose 布局陷阱、渲染/并发纪律、构建与发版 | **动代码之前必读** |
-| [`UI_DESIGN.md`](UI_DESIGN.md) | UI 规范（**v2.0 旧版**）：竞品基线 / 五支柱 / Token / 五段式编辑器 / 动效 / 无障碍 / **每轮真机反馈修正表 §4.0.1~§4.0.10** | 改界面时；尺寸冲突以序号最大的 §4.0.x 为准 |
-| [`UI3.0.html`](UI3.0.html) | **UI 3.0 规范（当前唯一真值来源）**：One-Surface 骨架（顶栏→直方图条→照片→Deck→Rail）、token 真值（`:root` 与 CSS）、Rail/Deck/顶栏规格、动效与字号红线、launcher 图标规范 | **改 UI 前先看这份**；`UI_DESIGN.md` 的 §4.0.x 已被它覆盖（字阶 28/20/15/13/11、圆角 12/20/28） |
-| [`UI2.0.html`](UI2.0.html) | UI 2.0 规范存档（对照用） | 需要看改版前后的差异时 |
-| [`TONING_DESIGN.md`](TONING_DESIGN.md) | 调色参数体系：参数全表 / 管线顺序 / 分批实施 / 批次 1~4 落地记录 | 改 tonal 参数或管线顺序时 |
+| [`DEV_PLAN.md`](DEV_PLAN.md) | **本文**：唯一有效计划 | 想了解「要做什么、做到哪了」 |
+| [`ENGINEERING_NOTES.md`](ENGINEERING_NOTES.md) | **工程纪律**：仓库与协作约定（CI 是唯一编译器）、Compose 布局陷阱、渲染/并发纪律、构建与发版、§7~§13 历史审查整改台账 | **动代码之前必读** |
+| [`UI3.0.html`](UI3.0.html) | **UI 3.0 规范（当前唯一真值来源）**：One-Surface 骨架、token 真值（`:root` 与 CSS）、Rail/Deck/顶栏规格、动效与字号红线、launcher 图标规范 | **改 UI 前先看这份** |
+| [`UI_DESIGN.md`](UI_DESIGN.md) | UI 规范与**编号锚点**：§1 竞品基线 / §2 设计语言五支柱 / §5 动效 / §6 无障碍 / §8 设计决策点 / §11 UI3.0 落地对照；§4.0.x 修正表的**编号**被代码 KDoc 引用（数值已由 UI3.0 接管） | 查一个被 KDoc 引用的编号、或改动效/无障碍时 |
+| [`TONING_DESIGN.md`](TONING_DESIGN.md) | 调色参数体系：参数全表 / 管线顺序 / 批次 1~4 落地记录 | 改 tonal 参数或管线顺序时 |
 | [`OBJECT_TONE_DESIGN.md`](OBJECT_TONE_DESIGN.md) | 对象作用域调色（批次 5）：作用域全表 / 数据模型 / 单趟逐层 lerp / 哪些参数不能进层 / 验收方式 | 改对象图层或蒙版作用域时 |
-| [`PHASE_DESIGN_HISTORY.md`](PHASE_DESIGN_HISTORY.md) | **阶段设计存档**：P1b / P1+ / P2 三阶段设计 + 审查修复台账。**保留了 `F01~F24` / `R01~R10` / `D01~D10` 编号，代码 KDoc 直接引用它们** | 想知道「当年为什么这么设计」或追一个编号的来历 |
-| [`Github_CI.md`](Github_CI.md) | 最近一次 CI 运行的完整报告（**每次 CI 后覆盖重写**，工具性文档，含历史回归记录） | 想知道上一次 CI 红/绿与原因 |
-| [`ui_preview.html`](ui_preview.html) | 四个界面的静态预览 + token 表 | 无法本地构建时评审版式与密度 |
-| `archive/` | 本机历史存档：`PLAN.md` / `FEASIBILITY_REPORT.md` / `P1_MVP_DESIGN.md` / `PLAN_REVIEW.md` —— **被 `.gitignore` 屏蔽，不上传 GitHub**（目录内有 README 说明维护约定） | 追最早期决策 |
+| [`ONDEVICE_MODEL_PLAN.md`](ONDEVICE_MODEL_PLAN.md) | 端侧模型规划：P6/P7 候选模型表 + 体积延迟预算 + 接入架构 | 接入新端侧模型时 |
+| [`Github_CI.md`](Github_CI.md) | 最近一次 CI 运行的完整报告（**每次 CI 后覆盖重写**，工具性文档） | 想知道上一次 CI 红/绿与原因 |
+| `docs/archive/` | **本地历史存档（不入库）**：`PLAN.md` 等最早规划 + `PHASE_DESIGN_HISTORY.md`（KDoc 编号 `F01~F24`/`R01~R10`/`D01~D10` 溯源处）+ `UI2.0.html` + 两份外部审计报告 | 追历史决策或审计证据链时（取回命令见其 README） |
 
 ## 10. 当前版本与待验收
 
-- **当前版本**：`v0.5.0`（`versionCode = 13`）。**发版四者必须同时改**：`build.gradle.kts` 的
+- **当前版本**：`v0.6.4`（`versionCode = 19`）。**发版四者必须同时改**：`build.gradle.kts` 的
   `versionCode`/`versionName` → git tag → `AboutSheet` 显示 → CI 报告记录。
   ⚠️ 任何「记忆里的版本号 / 尺寸」用前先 `git grep` 复核（`ENGINEERING_NOTES.md` §5.5）。
 - **待真机验收（至今未闭环）**：A2 涂抹落点 / A1 导出内存日志 / 自动蒙版（P1p-1c）/ 人脸锚点（P1p-2c）/
-  A7C2 直连（P2）/ `TONE_ZONE_GAIN=0.35` 是否过猛 / 批次 3 预览↔导出一致性 /
-  批次 4 锐化必须晚于磨皮 / 批次 5 的 6 条（`OBJECT_TONE_DESIGN.md` §12.2）；
-  **v0.5.0 新增**：预览缩放（≤8x 上限 / 平移边界 / 双击 2.5x 锚点是否落在点击处）/
-  调色菜单 7→6 有无漏项 / LUT 是否已被「预设 → 滤镜」完整接管 / RGB 直方图是否挂在「明暗」页 /
-  字号回调（28→24、18→16）在小屏上会不会挤 / ARW 超大预览候选回退（超 32MB 时回退次大候选）是否真的能打开。
-- **未启动**：P3（NAS Docker 化 Rust 引擎）。
+  A7C2 直连（P2）/ 批次 3 预览↔导出一致性 / 批次 4 锐化必须晚于磨皮 /
+  批次 5 的 6 条 / 预览缩放手势 / UI3.0 逐屏（`UI_DESIGN.md` §11 已知偏离）；
+  **v0.6.4 新增（hy4 整改判据，`ENGINEERING_NOTES.md` §13.1）**：
+  `Orientation=6` 竖拍片进 App 是正的、导出也是正的（同名 ARW/JPEG 方向一致）/
+  导出中点取消后相册**没有**该文件 / 卡上有旧片时打开系留**不产生任何下载** /
+  混有目录对象时轮询仍能推进 / 拖滑块时直方图与画面同代、GC 抖动消失 /
+  图里没有的对象作用域 chip 呈禁用态。
+- **未启动**：P3（NAS Docker 化 Rust 引擎）；端侧模型 P6/P7（`ONDEVICE_MODEL_PLAN.md`）。

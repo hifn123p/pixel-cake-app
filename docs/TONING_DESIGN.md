@@ -558,8 +558,7 @@ HSL 若真机实测掉帧，退路是：**预览路径跳过 HSL，只在导出�
 - **括号配平**：`app/src` 下 **109 个 `.kt` 全部配平**（`scanned=109 unbalanced=0`；批次 1+2 时为 107，
   本批新增 `EffectMathTest.kt` / `PipelineTestSupport.kt`）。`.kt` 配平用 Python 按 UTF-8 读、
   自剥注释与字符串后统计括号**字节**并做深度下界检查（不能用 PowerShell `Get-Content`：
-  它会把中文注释行与后续代码行合并，在中文项目上会假报不平衡）。`docs/ui_preview.html`
-  同步做了标签配平（`div 250/250`、`span 82/82`、`table/tr/td/ul/li/p/h2/h3` 全部相等）。
+  它会把中文注释行与后续代码行合并，在中文项目上会假报不平衡）。
 - **跨文件引用**：新符号（`EffectTab` / `PanelSelection.effectTab` / `EffectParams` /
   `ColorMath.buildVignetteLut` / `ColorMath.smoothstep` / `ColorMath.VIGNETTE_LUT_SIZE` /
   `GrainNoise.{SIZE,MASK,TEXELS_PER_CELL,sampleScale,tile}` / `srgbAtCenter` / `linearAtCenter`）

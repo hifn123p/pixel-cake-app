@@ -2,7 +2,7 @@
 
 > 参照 Lightroom 的「蒙版 / 局部调整」：**同一套调色参数，作用域可以是整图，也可以是识别到的某个对象。**
 > 本文是这一批（下称「批次 5」）的**唯一设计依据**。姊妹文档：`docs/TONING_DESIGN.md`（参数体系）、
-> `docs/UI_DESIGN.md`（界面）、`docs/PHASE_DESIGN_HISTORY.md` P1+ 部分（端侧推理栈）。三者冲突时以本文为对象作用域部分的准。
+> `docs/UI_DESIGN.md`（界面）、`docs/ONDEVICE_MODEL_PLAN.md` 与 `core/ml/` 实现（端侧推理栈）。冲突时以本文为对象作用域部分的准。
 
 ---
 
@@ -443,7 +443,7 @@ val write = if (layer == null) onParamChange
    否则 `${ml.accelerator ?: "?"}` 这类嵌套引号模板会提前结束字符串、把 `}` 当代码推栈而错位级联）；
    跨文件调用点实参核对（`EditSnapshot(...)` 的三参、`EditEngine.*` 的 `layers`、
    `MlMaskProvider.objectMasksFor`、`buildLayerStack` / `blendStack8` / `scopeProbability` 的签名）。
-3. **文档同步**：`TONING_DESIGN`（§13 指向本文）、`UI_DESIGN`（§4.4 作用域行）、`ui_preview.html`。
+3. **文档同步**：`TONING_DESIGN`（§13 指向本文）、`UI_DESIGN`（§4.4 作用域行）。
 
 ### 12.2 真机（离线证明不了的事）
 
@@ -476,7 +476,7 @@ val write = if (layer == null) onParamChange
 | `ui/components/GlassChipRow.kt` | 新增可选 `itemEnabled: ((T) -> Boolean)?`（用整行 `enabled` 会把「整图」也一起灰掉） |
 | `MainActivity.kt` | `layers` 状态 + 独立 `LaunchedEffect(imported)` 预热探测 + `snapshotFlow` 观察 `layers` + 三条渲染入口传 `layerStack` + 6 处 `EditSnapshot(...)` 补第三实参 |
 | 测试 | `ObjectLayersTest`（新增）· `ObjectMasksTest`（新增）· `SkinMaskPostProcessTest`（扩展） |
-| 文档 | 本文 · `TONING_DESIGN.md` §13 · `UI_DESIGN.md` §4.4 · `ui_preview.html` |
+| 文档 | 本文 · `TONING_DESIGN.md` §13 · `UI_DESIGN.md` §4.4 |
 
 ### 13.2 实施中新增 / 收紧的决定（规格里没写、但代码里做死了）
 

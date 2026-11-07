@@ -1129,8 +1129,8 @@ app/src/main/java/com/hifn/pixelcake/
 
 - **`docs/UI3.0.html`**（134KB）——**当前规范的唯一真值来源**，16 个屏的完整 mock（A~N + J′/L′ 横屏），
   `:root` 是色板、CSS 是尺寸。改任何 token 前先在这份里查。
-- `docs/ui_preview.html` —— **v2.x 时期的四屏预览**，仅作历史参考，数值已作废。
-- `docs/UI2.0.html` / `docs/app_icon.svg` —— UI 2.0 存档与应用图标源文件。
+- `docs/app_icon.svg` —— 应用图标源文件（自适应三层）。
+- 历史 mock（`ui_preview.html`、`UI2.0.html`）已于 2026-11-07 移入本地 `docs/archive/`（不入库），取回方式见其 README。
 
 ---
 
