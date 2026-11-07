@@ -125,6 +125,9 @@ fun <T> GlassChipRow(
         // 审计债「横滑 chips 无截断提示」：行尾叠一层渐隐遮罩 —— 被截断的选项淡出，
         // 比只靠「半露的 chip」更明确地表达「右边还有」。仅当真的溢出时才画
         //（`canScrollForward`），未溢出的短行（3~5 项的二级行）完全不受影响。
+        // ⚠️ 表面色必须在**组合期**捕获成局部量 —— `drawWithContent` 不是组合上下文，
+        // 在里面读 `MaterialTheme.colorScheme`（@Composable getter）编译不过。
+        val fadeBase = MaterialTheme.colorScheme.surface
         val hScroll = rememberScrollState()
         Row(
             modifier = modifier
@@ -138,7 +141,7 @@ fun <T> GlassChipRow(
                                 0f to Color.Transparent,
                                 // 用主题表面色（而非写死画布色）：编辑器里是 Deck 深色，
                                 // 未来若在浅色容器复用单行模式也能正确融合。
-                                1f to MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+                                1f to fadeBase.copy(alpha = 0.92f),
                                 startX = size.width - fadeW,
                                 endX = size.width
                             ),

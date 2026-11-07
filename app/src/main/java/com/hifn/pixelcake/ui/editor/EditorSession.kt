@@ -32,9 +32,10 @@ object EditorSessionLifecycle {
 
     /**
      * 在 [lock] 内逐个 [release]。所有像素写入者都持有同一把锁 ⇒ 授予锁即证明
-     * 「此刻没有在途写者」。
+     * 「此刻没有在途写者」。泛型让调用方直接传 `List<Bitmap>`，release 里拿到
+     * 的就是 Bitmap（不必 `as` 强转—— 类型不匹配本来就该在编译期暴露）。
      */
-    suspend fun retireInLock(lock: Mutex, resources: List<Any>, release: (Any) -> Unit) {
+    suspend fun <T> retireInLock(lock: Mutex, resources: List<T>, release: (T) -> Unit) {
         lock.withLock {
             for (r in resources) release(r)
         }
