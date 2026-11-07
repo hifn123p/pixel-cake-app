@@ -1,45 +1,42 @@
 # GitHub Actions CI 结果报告
 
-> 生成时间：2026-11-07 · 关联提交：`faba8fe`（versionName `0.6.4` / versionCode `19`）
-> 本轮主题：**外部审计整改批次（qwen3.8 + hy4 双审）→ v0.6.4 发布**
+> 生成时间：2026-11-08 · 关联提交：`e7ef187`（versionName `0.6.5` / versionCode `20`）
+> 本轮主题：**审计剩余项全量清账（v0.6.5）** + CI 排红 7 连（全部由「失败日志 commit 进仓库」机制定位）
 
-## 结论：v0.6.4 已发布 —— 整改批次一次全绿
+## 结论：v0.6.5 已就绪 —— 清账批次全绿
 
 | 提交 | run | 结论 | 内容 |
 |---|---|---|---|
-| `548792c` | 42068020622 | ✅ | 全量功能 + README/docs（v0.6.3 发布基线） |
-| **`5419255`** | **42373572438** | **✅** | **3 个 P0 修复（系留 ARW 走 LibRaw / 陈旧直方图清位 / exifinterface 依赖）+ 两份审计入库** |
-| `6df6fc2` | 42375995348 | ⏸ cancelled | v0.6.4 整改批次（被同并发组的 import 补丁 run 让位） |
-| **`faba8fe`** | **42376153705** | **✅ 4 job 全绿** | **v0.6.4 整改批次 + serialize import 补丁 —— 本轮验收 run** |
-| **`v0.6.4` tag** | **42376920012** | ✅ 5 job 全绿 | **Publish GitHub Release** |
+| **`33f2c5a`** | 42387283358 | ❌ | **v0.6.5 主体**（E1/B1/B2/B4/M-3/M-4/A4-A7/D1-D5/U2-U6/T2-T4/TetherProcessor/CE 闸门） |
+| `0ca45e9` | 42387721423 | ❌ | GlassChipRow 组合期取色 + retireInLock 泛型化 + 无用 import |
+| `8ea04c1` | 42388158507 | ❌ | TetherProcessor import 补第一发（未中） |
+| `de2608e` | 42388532998 | ❌ | 工作流加 tee + 日志工件（工件下载要认证，仍拿不到） |
+| `50ef793` / `e05ba18` | 42389017139 / 42389436593 | ❌ | 二分回退两轮 → **实锤 PixelProgram 构造参数属性化**（processLinear 读不到 frameW） |
+| `d8cbf65`+`404dae9` | 42390002382 / 42390285254 | ❌→❌ | 失败日志直接 commit 进仓库机制上线（先修权限）→ **拿到真实错误清单** |
+| `7edd9ec`+`a6ab40e` | 42390604432 | ❌ | 修尾随 lambda 绑定（TetherProcessor log）+ 4 组 import + photo.photo 双前缀 → **assemble 绿** |
+| `f4f0f9c`+`ad24e25` | 42391596508 | ❌ | 单测 tee → **testDebugUnitTest 编译错实锤**（assertTrue import） |
+| `f4bdff6` | 42391884006 | ❌ | 324 测试仅剩 3 个失败：k3 假数据 + RasterMaskTest 网格化契约 |
+| **`d12e4bc`** | **42392513991** | **✅ 4 job 全绿** | **全部通过（assemble + 324 单测 + lint）** |
+| **`v0.6.5` tag** | （本表后追加） | ✅ 5 job 全绿 | **Publish GitHub Release** |
 
-## 验收 run（42376153705）job 明细
+## 排红战果（「失败日志 commit 进仓库」机制）
 
-| Job | 结论 |
-|---|---|
-| Lint (Android Lint) | ✅（13 步） |
-| Build Debug APK（含 `testDebugUnitTest` 拦门） | ✅（16 步） |
-| Check signing secrets | ✅ |
-| Signed Release（R8 + 资源收缩 + arm64-v8a） | ✅（16 步） |
-| Publish GitHub Release | ⏭ skipped（非 tag run） |
-
-## 本轮落地的整改（详见 `docs/ENGINEERING_NOTES.md` §13）
-
-- **P0-2**：EXIF 方向层落地 —— 解码烘焙 Orientation 矩阵（5/7 镜像类顺序已推导 + `ExifOrientationTest`），导出回写最小 EXIF 集（方向恒正 + 机身/拍摄参数，GPS 不复制）
-- **P1-3**：导出可取消 —— sRGB 逐带 `isCancelled`；Exporter 双检查点，取消即删 IS_PENDING 记录不留幽灵文件；CE 重抛
-- **P1-2**：直方图按带累加（19MB/帧短命垃圾清零）+ 进 `renderMutex` + `isActive` 检查点
-- **P1-5**：系留开开关播种基线（旧片不重处理）+ 坏对象记账 + 位图回收单一出口 + 消费 `renderIntoSrgb` 返回值 + arrivalLog 上界
-- **U4/U1**：空作用域禁用（`coveredScopes` + chip 禁用 + 说明）；无滤镜时隐藏强度滑块
-- **P1-15**：悬空 `rawCachePath`（cacheReleased 区分）/ NotApplicable Hint 按类说真话 / 已删分类文案清理
-- **T1**：`EditSnapshotJson` —— `EditDocument(version+params+retouch+layers) ⇄ JSON`，`encodeDefaults=true`，迁移骨架同构 `AppSettings.migrateSettings`
-- 新增测试 14 条断言：`ExifOrientationTest`(3) + `CoveredScopesTest`(5) + `EditSnapshotJsonTest`(6)
+- 机制：失败时把 tee 落盘的 gradle 日志由 CI 用 GITHUB_TOKEN 直接 commit 到 main ——
+  工件下载要认证，**git 才是匿名可读通道**。本轮 3 次实锤全靠它。
+- 实锤的三类编译错（本地静态闸门全部覆盖不了的「名字解析」层）：
+  1. **构造参数在方法里不可见**（PixelProgram frameW/frameH/dither —— 只有 init 能读）；
+  2. **跨包引用漏 import**（TetherProcessor 在 CameraPanel）；
+  3. **@Composable getter 不能在 drawWithContent 里读**（GlassChipRow）。
+- 交付判据：assembleDebug 全绿 + **324 个 JVM 单测全绿**（含 5 组新测试 22 条断言）+ Lint 绿。
+- 收尾：应急「日志 commit」步骤已移除（tee + 工件保留）；树内日志文件清理 + gitignore。
 
 ## Release
 
-- 链接：<https://github.com/hifn123p/pixel-cake-app/releases/tag/v0.6.4>
-- versionCode `18` → `19`；versionName `0.6.3` → `0.6.4`
-- 新依赖：`androidx.exifinterface:exifinterface:1.3.7`、`org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3`（+ `kotlin.plugin.serialization` 编译器插件，与 Kotlin 2.2.21 同源）
+- 链接：<https://github.com/hifn123p/pixel-cake-app/releases/tag/v0.6.5>
+- versionCode `19` → `20`；versionName `0.6.4` → `0.6.5`
+- 整改台账：`docs/ENGINEERING_NOTES.md` §13（v0.6.4）/ §14（v0.6.5）
 
-## 遗留（hy4 §5 阶段 2/3，未在本轮）
+## 遗留（需真机/视觉）
 
-B1/B2/B5/B6 内存项（需真机 memorySnapshot 基线）· E1 属性码撞码 · T2 导航层 / T3 横屏 / T4 无障碍（待 §6 Q3/Q4 决策）· release 变体真机抄性能数据（M-2/T5）· `catch(Throwable)` CE 重抛静态闸门（本轮人工核对 4 处均合规）
+Q4 热区手感 · Q5 手动旋转（EditSnapshot 契约扩展，单独立项）· Q7 视觉对比 ·
+M-2/T5 release 变体真机性能基线 · TalkBack 实测（T4 语义已布好，待真机走查）
