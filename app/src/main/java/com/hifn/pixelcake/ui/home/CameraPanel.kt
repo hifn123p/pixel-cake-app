@@ -47,6 +47,7 @@ import com.hifn.pixelcake.camera.UsbDeviceSummary
 import android.graphics.Bitmap
 import android.net.Uri
 import com.hifn.pixelcake.camera.CameraPhoto
+import com.hifn.pixelcake.core.camera.TetherProcessor
 import com.hifn.pixelcake.core.decode.Decoder
 import com.hifn.pixelcake.core.decode.ExportFormat
 import com.hifn.pixelcake.core.decode.Exporter
