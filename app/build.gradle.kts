@@ -22,8 +22,10 @@ android {
         // B1 导出双全幅档位缓解、B2 笔刷蒙版网格化、M-3 Bayer 抖动、M-4 热观测、
         // D1-D5 无响应五项、A4/A5/A6 并发三项、U2/U3/U6 诚实界面、T2 BackHandler+生命周期可测化、
         // T3 横屏最小可用、T4 无障碍语义、TetherProcessor 可测化 + CE 静态闸门上线。
-        versionCode = 20
-        versionName = "0.6.5"
+        // v0.6.6：用户预设库 —— 另存当前调法为自定义预设（T1 序列化解锁），
+        // 编辑器应用/强度环 + 相机批量 + 系留默认参数三处复用；持久化 JSON 原子写 + 坏文件留证。
+        versionCode = 21
+        versionName = "0.6.6"
 
         // 刻意**不声明** testInstrumentationRunner（审计 M8）：本项目没有 androidTest 源集、
         // 也没有 androidx.test 依赖，裸声明是死配置 —— 一旦有人加仪器测试会因缺依赖直接红；

@@ -42,7 +42,10 @@ enum class PresetCategory(val label: String) {
     Portrait("人像"),
     Landscape("风景"),
     Food("食物"),
-    Bw("黑白")
+    Bw("黑白"),
+
+    /** 用户自定义预设（v0.6.6 用户预设库）。只作元数据；列表由 `CustomPresets` 持久化。 */
+    Custom("我的")
 }
 
 object Presets {

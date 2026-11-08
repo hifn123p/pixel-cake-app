@@ -13,7 +13,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -38,6 +40,7 @@ import com.hifn.pixelcake.core.edit.ObjectLayer
 import com.hifn.pixelcake.core.edit.ObjectScope
 import com.hifn.pixelcake.core.edit.RetouchState
 import com.hifn.pixelcake.core.edit.ToneCurve
+import com.hifn.pixelcake.core.edit.preset.CustomPreset
 import com.hifn.pixelcake.core.edit.preset.Preset
 import com.hifn.pixelcake.core.edit.retouch.ColorTransfer
 import com.hifn.pixelcake.ui.components.CurveEditor
@@ -158,7 +161,8 @@ enum class DetailTab(val label: String) {
  */
 enum class PresetTab(val label: String) {
     Style("风格"),
-    Filter("滤镜")
+    Filter("滤镜"),
+    My("我的")
 }
 
 /**
@@ -337,6 +341,11 @@ fun ParamPanel(
     presetThumbs: Map<String, Bitmap> = emptyMap(),
     presetAmount: Float = 1f,
     onPresetAmount: (Float) -> Unit = {},
+    // v0.6.6 用户预设库：保存/应用/删除（presets 列表本身已含自定义，这里只带管理面需要的数据）
+    customPresets: List<CustomPreset> = emptyList(),
+    canSaveCurrent: Boolean = false,
+    onSaveCurrentPreset: (String) -> Unit = {},
+    onDeleteCustomPreset: (String) -> Unit = {},
     onSelectionChange: (PanelSelection) -> Unit,
     onParamChange: (EditParams) -> Unit,
     onParamCommit: () -> Unit,
@@ -431,7 +440,11 @@ fun ParamPanel(
                 EditorCategory.Preset -> PresetParams(
                     presets, activePresetId, presetThumbs, onPreset,
                     selection.presetTab, params, onParamChange, onParamCommit, onDraggingChange,
-                    presetAmount, onPresetAmount
+                    presetAmount, onPresetAmount,
+                    customPresets = customPresets,
+                    canSaveCurrent = canSaveCurrent,
+                    onSaveCurrent = onSaveCurrentPreset,
+                    onDeleteCustom = onDeleteCustomPreset
                 )
             }
         }
@@ -1006,6 +1019,123 @@ private fun LutGroup(
     }
 }
 
+
+/**
+ * 「我的」预设页（v0.6.6 用户预设库）：保存当前 / 应用 / 管理删除。
+ *
+ * ## 保存语义
+ *
+ * 保存的是**整图参数 + 人像精修**（瑕疵描迹由 `CustomPreset.capture` 统一剥离 ——
+ * 描迹属于「这张图的这个点」，换图无意义）；对象图层不保存（与内置预设同一口径）。
+ *
+ * ## 为什么应用行复用 [PresetThumbRow]
+ *
+ * 自定义预设转成 [Preset] 后与内置同型消费（编辑器 / 相机批量 / 系留三处），
+ * 应用与强度环的交互就**不需要**任何新代码 —— 只有「保存 / 删除」是本页新增。
+ */
+@Composable
+private fun MyPresetsSection(
+    customPresets: List<CustomPreset>,
+    activePresetId: String,
+    presetThumbs: Map<String, Bitmap>,
+    onPreset: (Preset) -> Unit,
+    canSaveCurrent: Boolean,
+    onSaveCurrent: (String) -> Unit,
+    onDeleteCustom: (String) -> Unit
+) {
+    var showSaveDialog by remember { mutableStateOf(false) }
+    var showManage by remember { mutableStateOf(false) }
+    var draftName by remember { mutableStateOf("") }
+
+    GroupLabel("我的预设（自定义参数栈）")
+    if (canSaveCurrent) {
+        TextButton(onClick = { showSaveDialog = true; draftName = "" }) {
+            Text("把当前调法存为预设")
+        }
+    } else {
+        TextButton(onClick = {}, enabled = false) {
+            Text("把当前调法存为预设")
+        }
+        Hint("当前参数与精修都是中性 —— 先调出一点风格再保存。")
+    }
+
+    if (customPresets.isEmpty()) {
+        Hint("还没有自定义预设。调好一套参数后保存，它会出现在这里；相机批量与系留的默认参数也能选它。")
+    } else {
+        PresetThumbRow(
+            items = customPresets.map { it.asPreset() },
+            selected = customPresets.map { it.asPreset() }.firstOrNull { it.id == activePresetId },
+            label = { it.name },
+            thumb = { presetThumbs[it.id] },
+            onSelect = onPreset
+        )
+        TextButton(onClick = { showManage = true }) {
+            Text("管理（删除）")
+        }
+    }
+
+    if (showSaveDialog) {
+        AlertDialog(
+            onDismissRequest = { showSaveDialog = false },
+            title = { Text("保存为自定义预设") },
+            text = {
+                Column {
+                    Text(
+                        "保存整图参数与人像精修（不含对象图层与瑕疵描迹）。",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    OutlinedTextField(
+                        value = draftName,
+                        onValueChange = { draftName = it },
+                        label = { Text("预设名") },
+                        singleLine = true
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = draftName.isNotBlank(),
+                    onClick = {
+                        onSaveCurrent(draftName.trim())
+                        draftName = ""
+                        showSaveDialog = false
+                    }
+                ) { Text("保存") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSaveDialog = false }) { Text("取消") }
+            }
+        )
+    }
+
+    if (showManage && customPresets.isNotEmpty()) {
+        AlertDialog(
+            onDismissRequest = { showManage = false },
+            title = { Text("管理自定义预设") },
+            text = {
+                Column {
+                    for (cp in customPresets) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(cp.name, style = MaterialTheme.typography.bodyMedium)
+                            TextButton(onClick = { onDeleteCustom(cp.id) }) {
+                                Text("删除")
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showManage = false }) { Text("完成") }
+            }
+        )
+    }
+}
+
+
 /**
  * 曲线分类：亮度曲线 + 红/绿/蓝三条分通道曲线，形态完全一致，只有作用对象不同。
  *
@@ -1245,9 +1375,25 @@ private fun PresetParams(
     onCommit: () -> Unit,
     onDraggingChange: (Boolean) -> Unit,
     presetAmount: Float = 1f,
-    onPresetAmount: (Float) -> Unit = {}
+    onPresetAmount: (Float) -> Unit = {},
+    // v0.6.6 用户预设库：自定义预设的保存/应用/删除
+    customPresets: List<CustomPreset> = emptyList(),
+    canSaveCurrent: Boolean = false,
+    onSaveCurrent: (String) -> Unit = {},
+    onDeleteCustom: (String) -> Unit = {}
 ) {
     when (tab) {
+        PresetTab.My -> {
+            MyPresetsSection(
+                customPresets = customPresets,
+                activePresetId = activePresetId,
+                presetThumbs = presetThumbs,
+                onPreset = onPreset,
+                canSaveCurrent = canSaveCurrent,
+                onSaveCurrent = onSaveCurrent,
+                onDeleteCustom = onDeleteCustom
+            )
+        }
         PresetTab.Style -> {
             GroupLabel("预设（参数栈）")
             PresetThumbRow(

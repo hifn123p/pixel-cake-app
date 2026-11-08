@@ -1100,3 +1100,32 @@ UI 层不需要再判断一次。
 - **T2 完整形态**（sealed 路由 + Home/Settings 入栈）与「系留期间可修图」「独立模型中心页」——
   BackHandler + 生命周期可测化已就位，路由层是纯 UI 重组，单独一批；
 - **M-2/T5** release 变体真机跑性能基线。
+
+## §15 用户预设库（v0.6.6，2026-11-08）
+
+> README「规划中」→ 已实现。**解锁链**：v0.6.4 T1（参数栈 ⇄ JSON）→ 本批是它的第一个消费功能。
+> 也回应了真机验收（§13 判据走完）后「继续开发」的方向选择：修错清账已毕，按项目顺序进入加功能阶段。
+
+### 15.1 设计与判据
+
+| 项 | 决定 | 理由 |
+|---|---|---|
+| 保存内容 | 整图参数 + 人像精修；**不含对象图层** | 与内置预设/MainActivity 注释同一口径：预设描述「整图调法」，层是按图搭的结构 |
+| 瑕疵描迹 | `capture()` 统一剥离（`inpaint = emptyList()`） | 描迹是「这张图的这个点」，存进预设会在别的图指错位置 —— 与「画笔轨迹属工具态」同一条哲学 |
+| id 命名 | `custom:` + 8 位 uuid | 与内置 id（"portra" 等）永不冲突；`asPreset()` 后三处（编辑器/批量/系留）同型消费 |
+| 持久化 | `files/custom_presets.json`，**原子写**（tmp+rename，失败退回直写） | 断电/杀进程不留半截文件 |
+| 坏文件 | load 解析失败 → 改名 `.corrupt` 留证 → 返回空 | **绝不**让下一次 save 静默覆盖用户数据（EditSnapshotJson 同一原则的文件层落实） |
+| 保存动作 | 不进撤销栈 | 保存是元操作：不改 params/retouch，push 历史反而让「撤销」出现无画面变化的空步 |
+| 缩略图 | 复用 `buildPresetThumbs`，`LaunchedEffect(imported, customPresets)` | 保存/删除后缩略图即时重算（后台 Default 线程，A6 去锁后与首帧无竞争） |
+
+### 15.2 接线面（改动即契约）
+
+- 编辑器：`预设 → 我的` 二级页（保存按钮[中性时禁用+说明] / PresetThumbRow 应用 / 管理删除对话框）；
+  强度环对自定义预设自动生效（走同一 `onPresetAmount` lerp）。
+- 相机批量：chips 列表 = 内置 + 自定义（`allPresets`），`CameraBatch.run` 收到的仍是 `Preset` 同型对象。
+- 系留：默认修图参数 chips 加自定义项；`LaunchedEffect` 键补 `customPresets`（晚加载不漏）。
+- **删除联动**：删除当前生效的自定义预设 → `activePresetId` 回 "none"。
+
+### 15.3 单测（8 断言，`CustomPresetsTest`）
+
+round-trip / capture 剥离描迹 / asPreset 映射 / 未知键容忍 / Store 存读 / 缺文件空 / 坏文件留证 / 原子写无 tmp 残留。

@@ -50,6 +50,8 @@ import com.hifn.pixelcake.core.edit.RetouchScale
 import com.hifn.pixelcake.core.edit.RetouchState
 import com.hifn.pixelcake.core.edit.buildLayerStack
 import com.hifn.pixelcake.core.edit.preset.Preset
+import com.hifn.pixelcake.core.edit.preset.CustomPreset
+import com.hifn.pixelcake.core.edit.preset.CustomPresets
 import com.hifn.pixelcake.core.edit.preset.Presets
 import com.hifn.pixelcake.core.edit.retouch.RetouchLayer
 import com.hifn.pixelcake.core.ml.MlFaceProvider
@@ -83,6 +85,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
+import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.min
@@ -269,17 +272,31 @@ private fun AppRoot(settings: AppSettings) {
     // UI-4b（A 档）：预设缩略图（id → 位图）。按**原图**渲染，只在换图时算一次。
     var presetThumbs by remember { mutableStateOf(emptyMap<String, Bitmap>()) }
 
+    // v0.6.6 用户预设库：自定义预设（整图参数 + 人像精修）持久化于 files/custom_presets.json。
+    // T1（EditSnapshotJson/@Serializable）解锁的第一批用户数据落盘。
+    val customPresetStore = remember { CustomPresets.Store(File(context.filesDir, "custom_presets.json")) }
+    var customPresets by remember { mutableStateOf(emptyList<CustomPreset>()) }
+    LaunchedEffect(Unit) {
+        customPresets = withContext(Dispatchers.IO) { customPresetStore.load() }
+    }
+    val persistCustomPresets: (List<CustomPreset>) -> Unit = { list ->
+        customPresets = list
+        scope.launch(Dispatchers.IO) { customPresetStore.save(list) }
+    }
+    // 内置 + 自定义合成一份给编辑器/缩略图/相机批量 —— 全部按 Preset 同型消费。
+    val allPresets = remember(customPresets) { Presets.ALL + customPresets.map { it.asPreset() } }
+
     // 预设缩略图：**从原图渲染**，与当前编辑无关 —— 缩略图回答的是「这个预设会把照片变成什么样」，
     // 不是「在现有编辑上叠加会怎样」。否则用户一调参全部缩略图跟着变，就失去了参照意义。
     // 放在 IO/Default 线程：10 张 192×192 的渲染约几十毫秒，放主线程会卡一次首帧。
-    LaunchedEffect(imported) {
+    LaunchedEffect(imported, customPresets) {
         val src = imported ?: return@LaunchedEffect
         // A6 修复：**不再持 `renderMutex`**。旧写法让首帧预览在锁外排队等 10 张缩略图
         //（打开大图的首帧被无谓推迟）。缩略图只读 `src.bitmap` —— 而 `src.bitmap` 按
         // `onBack` 的约定**从不手动回收**（读者不唯一，交 GC），所以它没有需要互斥的
         // 写者，也没有「回收竞态」可言。逐张渲染间检查 `isActive`：换图/退出立即让位。
         presetThumbs = withContext(Dispatchers.Default) {
-            buildPresetThumbs(src.bitmap, Presets.ALL) { !isActive }
+            buildPresetThumbs(src.bitmap, Presets.ALL + customPresets.map { it.asPreset() }) { !isActive }
         }
         DebugLog.i(
             DebugLog.TAG_EDIT, "preset thumbs ready",
@@ -771,8 +788,22 @@ private fun AppRoot(settings: AppSettings) {
                     autoMaskEnabled = settings.autoMask,
                     autoMaskNote = autoMaskNote,
                     liquifyNote = liquifyNote,
-                    presets = Presets.ALL,
+                    presets = allPresets,
                     activePresetId = activePresetId,
+                    customPresets = customPresets,
+                    canSaveCurrentPreset = params != EditParams() || retouch != RetouchState(),
+                    onSaveCurrentPreset = { name ->
+                        // 保存是元操作：不改 params/retouch，因此**不进撤销栈**（与「套用预设」不同）。
+                        val cp = CustomPreset.capture(name, params, retouch, System.currentTimeMillis())
+                        persistCustomPresets(customPresets + cp)
+                        activePresetId = cp.id
+                        DebugLog.i(DebugLog.TAG_EDIT, "custom preset saved",
+                            mapOf("name" to name, "id" to cp.id, "count" to (customPresets.size + 1)))
+                    },
+                    onDeleteCustomPreset = { id ->
+                        persistCustomPresets(customPresets.filterNot { it.id == id })
+                        if (activePresetId == id) activePresetId = "none"
+                    },
                     presetThumbs = presetThumbs,
                     // 对象作用域（批次 5）：可用性来自上面的预热探测；层列表是编辑状态的一部分。
                     objectScopesAvailable = objectScopesAvailable,

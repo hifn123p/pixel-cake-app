@@ -54,12 +54,16 @@ import com.hifn.pixelcake.core.decode.Exporter
 import com.hifn.pixelcake.core.edit.EditEngine
 import com.hifn.pixelcake.core.edit.RetouchScale
 import com.hifn.pixelcake.core.edit.lerped
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import com.hifn.pixelcake.core.edit.preset.CustomPreset
+import com.hifn.pixelcake.core.edit.preset.CustomPresets
 import com.hifn.pixelcake.core.edit.preset.Presets
 import com.hifn.pixelcake.diag.DebugLog
 import com.hifn.pixelcake.ui.components.GlassCard
 import com.hifn.pixelcake.ui.theme.Spacing
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -117,6 +121,13 @@ fun CameraPanel(
         // 尾随 lambda 会绑到它身上（CI 两红才定位到的绑定规则）。
         TetherProcessor(log = { m -> arrivalLog = (arrivalLog + m).takeLast(30) })
     }
+    // v0.6.6 用户预设库：批量与系留共用编辑器保存的自定义预设（同一份 json 文件）
+    val customPresetStore = remember { CustomPresets.Store(File(context.filesDir, "custom_presets.json")) }
+    var customPresets by remember { mutableStateOf(emptyList<CustomPreset>()) }
+    LaunchedEffect(Unit) {
+        customPresets = withContext(Dispatchers.IO) { customPresetStore.load() }
+    }
+    val allPresets = remember(customPresets) { Presets.ALL + customPresets.map { it.asPreset() } }
     val batchCancel = remember { AtomicBoolean(false) }
 
     // 系留仪表盘快照：连接后拉一次（电量/ISO/光圈）
@@ -136,10 +147,10 @@ fun CameraPanel(
     // ③ **位图回收进 finally**：Exporter 抛出时位图不能泄漏（导出是 OOM 高发点）；
     // ④ **消费 renderIntoSrgb 返回值**：false = 尺寸不匹配，绝不能把一块从未被写过的
     //    黑位图当成品导出。
-    LaunchedEffect(session, tetherOn, defaultPresetId) {
+    LaunchedEffect(session, tetherOn, defaultPresetId, customPresets) {
         val sn = session ?: return@LaunchedEffect
         if (!tetherOn) return@LaunchedEffect
-        val preset = Presets.byId(defaultPresetId) ?: return@LaunchedEffect
+        val preset = allPresets.firstOrNull { it.id == defaultPresetId } ?: return@LaunchedEffect
         val storageId = sn.storageIds.firstOrNull() ?: return@LaunchedEffect
         // 到达流日志上界：P2 债里「arrivalLog 无上界」的最小修 —— 界面只显示最后 5 条，
         // 内存里也只留最后 30 条，长会话不会无限增长。
@@ -444,6 +455,14 @@ fun CameraPanel(
                             label = { Text(name) }
                         )
                     }
+                    // v0.6.6：自定义预设也能作为系留默认修图参数
+                    customPresets.forEach { cp ->
+                        FilterChip(
+                            selected = defaultPresetId == cp.id,
+                            onClick = { defaultPresetId = cp.id },
+                            label = { Text(cp.name) }
+                        )
+                    }
                 }
                 if (arrivalLog.isNotEmpty()) {
                     Column(modifier = Modifier.padding(top = Spacing.s)) {
@@ -666,7 +685,7 @@ fun CameraPanel(
                             .padding(top = Spacing.xs),
                         horizontalArrangement = Arrangement.spacedBy(Spacing.s)
                     ) {
-                        for (p in Presets.ALL) {
+                        for (p in allPresets) {
                             FilterChip(
                                 selected = p.id == presetId,
                                 onClick = { presetId = p.id },
@@ -679,7 +698,7 @@ fun CameraPanel(
                     val chosen = list.photos.filter { it.handle in selected }
                     val rawCount = chosen.count { it.isRaw }
                     val otherCount = chosen.size - rawCount
-                    val preset = Presets.byId(presetId) ?: Presets.ALL.first()
+                    val preset = allPresets.firstOrNull { it.id == presetId } ?: allPresets.first()
 
                     Button(
                         onClick = {

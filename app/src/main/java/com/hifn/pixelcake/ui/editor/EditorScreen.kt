@@ -99,6 +99,7 @@ import com.hifn.pixelcake.core.edit.hasScope
 import com.hifn.pixelcake.core.edit.isAdjusted
 import com.hifn.pixelcake.core.edit.upsert
 import com.hifn.pixelcake.core.edit.without
+import com.hifn.pixelcake.core.edit.preset.CustomPreset
 import com.hifn.pixelcake.core.edit.preset.Preset
 import com.hifn.pixelcake.core.ml.ObjectMasks
 import com.hifn.pixelcake.ui.components.CapsuleNote
@@ -252,6 +253,11 @@ fun EditorScreen(
     presets: List<Preset>,
     activePresetId: String,
     presetThumbs: Map<String, Bitmap> = emptyMap(),
+    // v0.6.6 用户预设库：保存/应用/删除
+    customPresets: List<CustomPreset> = emptyList(),
+    canSaveCurrentPreset: Boolean = false,
+    onSaveCurrentPreset: (String) -> Unit = {},
+    onDeleteCustomPreset: (String) -> Unit = {},
     objectScopesAvailable: Boolean = false,
     // 「点哪修哪」的命中测试数据源（探测 effect 顺手存下的那份，无额外推理）。
     // null = 模型不可用 ⇒ 拾取入口隐藏。
@@ -834,6 +840,10 @@ fun EditorScreen(
                                     autoMaskEnabled = autoMaskEnabled,
                                     presets = presets,
                                     activePresetId = activePresetId,
+                                    customPresets = customPresets,
+                                    canSaveCurrent = canSaveCurrentPreset,
+                                    onSaveCurrentPreset = onSaveCurrentPreset,
+                                    onDeleteCustomPreset = onDeleteCustomPreset,
                                     selection = selection,
                                     activeScope = scope,
                                     activeLayer = activeLayer,
