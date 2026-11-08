@@ -73,13 +73,14 @@ class CustomPresetsTest {
 
     @Test
     fun withFreshIds_regenOnlyTaken() {
+        // a 与 existing 里的同名对象 id 相同（真冲突 ⇒ 重生成）；b 的 id 不在 existing ⇒ 原样保留。
         val a = CustomPreset.capture("甲", EditParams(), RetouchState(), 1L)
         val b = CustomPreset.capture("乙", EditParams(), RetouchState(), 2L)
         val existing = listOf(a)
         val out = CustomPresets.withFreshIdsWhereTaken(listOf(a, b), existing)
         assertEquals(2, out.size)
-        assertTrue("未冲突的条目 id 原样保留", out[0].id == a.id)
-        assertTrue("冲突的条目重新生成 id", out[1].id != b.id && out[1].id.startsWith("custom:"))
+        assertTrue("冲突的条目（a 已在 existing）重新生成 id", out[0].id != a.id)
+        assertTrue("未冲突的条目（b）id 原样保留", out[1].id == b.id)
         assertEquals("名称原样保留", "乙", out[1].name)
     }
 
