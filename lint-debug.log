@@ -24,9 +24,11 @@ Starting a Gradle Daemon (subsequent builds will be faster)
 > Task :app:preDebugUnitTestBuild UP-TO-DATE
 
 > Task :app:compileDebugKotlin FAILED
-e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/editor/ParamPanel.kt:462:21 No parameter with name 'onImport' found.
-e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/editor/ParamPanel.kt:1447:28 Unresolved reference 'onImportPresets'.
-gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/__run_2-1794144892418.json
+e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/editor/ParamPanel.kt:460:33 Unresolved reference 'onSaveCurrent'.
+e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/editor/ParamPanel.kt:461:34 Unresolved reference 'onDeleteCustom'.
+e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/editor/ParamPanel.kt:462:28 Unresolved reference 'onImport'.
+e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/editor/ParamPanel.kt:1448:28 Unresolved reference 'onImportPresets'.
+gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/__run_2-1794145742658.json
 
 FAILURE: Build failed with an exception.
 
@@ -41,5 +43,5 @@ Execution failed for task ':app:compileDebugKotlin'.
 > Run with --scan to get full insights.
 > Get more help at https://help.gradle.org.
 
-BUILD FAILED in 31s
+BUILD FAILED in 24s
 19 actionable tasks: 5 executed, 14 from cache
