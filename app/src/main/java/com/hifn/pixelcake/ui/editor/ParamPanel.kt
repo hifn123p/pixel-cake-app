@@ -1445,7 +1445,7 @@ private fun PresetParams(
                 canSaveCurrent = canSaveCurrent,
                 onSaveCurrent = onSaveCurrent,
                 onDeleteCustom = onDeleteCustom,
-                onImport = onImportPresets
+                onImport = onImport
             )
         }
         PresetTab.Style -> {
