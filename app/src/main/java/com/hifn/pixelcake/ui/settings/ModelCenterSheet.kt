@@ -18,6 +18,7 @@ import androidx.compose.ui.text.font.FontWeight
 import com.hifn.pixelcake.core.ml.MlFaceProvider
 import com.hifn.pixelcake.core.ml.MlMaskProvider
 import com.hifn.pixelcake.ui.components.GlassCard
+import com.hifn.pixelcake.ui.components.SectionHeader
 import com.hifn.pixelcake.ui.theme.Radius
 import com.hifn.pixelcake.ui.theme.Spacing
 

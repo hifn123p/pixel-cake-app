@@ -53,6 +53,7 @@ import com.hifn.pixelcake.core.edit.ObjectScope
 import com.hifn.pixelcake.core.edit.RetouchState
 import com.hifn.pixelcake.core.edit.ToneCurve
 import com.hifn.pixelcake.core.edit.preset.CustomPreset
+import com.hifn.pixelcake.core.edit.preset.CustomPresets
 import com.hifn.pixelcake.core.edit.preset.Preset
 import com.hifn.pixelcake.core.edit.retouch.ColorTransfer
 import com.hifn.pixelcake.ui.components.CurveEditor
@@ -1068,7 +1069,7 @@ private fun MyPresetsSection(
         scope.launch(Dispatchers.IO) {
             try {
                 val dir = File(context.cacheDir, "presets").apply { mkdirs() }
-                val safe = cp.name.replace(Regex("[\/:*?\"<>|]"), "_")
+                val safe = cp.name.replace(Regex("[/:*?\"<>|]"), "_")
                 val f = File(dir, safe + ".pcpreset.json")
                 f.writeText(CustomPresets.encode(listOf(cp)))
                 val uri = FileProvider.getUriForFile(context, context.packageName + ".fileprovider", f)
@@ -1168,7 +1169,7 @@ private fun MyPresetsSection(
                         ) {
                             Text(cp.name, style = MaterialTheme.typography.bodyMedium)
                             Row {
-                                TextButton(onClick = { onExport(cp) }) {
+                                TextButton(onClick = { exportPreset(cp) }) {
                                     Text("导出")
                                 }
                                 TextButton(onClick = { onDeleteCustom(cp.id) }) {
@@ -1442,7 +1443,8 @@ private fun PresetParams(
                 onPreset = onPreset,
                 canSaveCurrent = canSaveCurrent,
                 onSaveCurrent = onSaveCurrent,
-                onDeleteCustom = onDeleteCustom
+                onDeleteCustom = onDeleteCustom,
+                onImport = onImportPresets
             )
         }
         PresetTab.Style -> {

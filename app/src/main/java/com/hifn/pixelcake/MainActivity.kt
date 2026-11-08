@@ -139,7 +139,7 @@ private fun AppRoot(settings: AppSettings) {
     // 把画面整块交给预览区（`docs/UI_DESIGN.md` §3.3）。
     // T2 完整形态：编辑页开关由导航栈驱动（sealed AppScreen + NavStack，有单测）。
     // 加新页面 = 加枚举值 + push，而不是再发明一个 `xxOpen` 布尔。
-    val nav = remember { NavStack(AppScreen.Workspace) }
+    val nav = remember { NavStack<AppScreen>(AppScreen.Workspace) }
     val editorOpen = nav.current == AppScreen.Editor
     var imported by remember { mutableStateOf<DecodedImage?>(null) }
     var srcUri by remember { mutableStateOf<Uri?>(null) }
@@ -815,7 +815,7 @@ private fun AppRoot(settings: AppSettings) {
                     onImportPresets = { uri ->
                         scope.launch {
                             val text = withContext(Dispatchers.IO) {
-                                context.contentResolver.openInputStream(uri)?.use { it.readText() }
+                                context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
                             } ?: return@launch
                             val imported = CustomPresets.decode(text)
                             if (imported.isEmpty()) {
