@@ -67,6 +67,15 @@ jobs:
           name: assemble-debug-log-${{ github.run_id }}
           path: assemble-debug.log
 
+      - name: Commit failure log (git 是唯一匿名可读通道；-f 顶掉 gitignore)
+        if: failure()
+        run: |
+          git config user.name "ci-log-bot"
+          git config user.email "ci-log-bot@users.noreply.github.com"
+          git add -f assemble-debug.log
+          git commit -m "ci-log: assemble failure (run ${{ github.run_id }})"
+          git push origin HEAD:main
+
       # F11：CI 质量闸门——本地 JVM 单测（ColorMathTest / ArwPreviewExtractorTest）必过
       - name: Run unit tests
         run: |
@@ -79,6 +88,15 @@ jobs:
         with:
           name: unit-tests-log-${{ github.run_id }}
           path: unit-tests.log
+
+      - name: Commit unit test failure log (-f 顶掉 gitignore)
+        if: failure()
+        run: |
+          git config user.name "ci-log-bot"
+          git config user.email "ci-log-bot@users.noreply.github.com"
+          git add -f unit-tests.log
+          git commit -m "ci-log: unit test failure (run ${{ github.run_id }})"
+          git push origin HEAD:main
 
 
       - name: Upload debug APK
@@ -167,6 +185,15 @@ jobs:
         with:
           name: lint-debug-log-${{ github.run_id }}
           path: lint-debug.log
+
+      - name: Commit lint failure log (-f 顶掉 gitignore)
+        if: failure()
+        run: |
+          git config user.name "ci-log-bot"
+          git config user.email "ci-log-bot@users.noreply.github.com"
+          git add -f lint-debug.log
+          git commit -m "ci-log: lint failure (run ${{ github.run_id }})"
+          git push origin HEAD:main
 
       - name: Upload lint report
         if: always()
