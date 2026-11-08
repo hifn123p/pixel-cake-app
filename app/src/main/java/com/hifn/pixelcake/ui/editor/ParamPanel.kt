@@ -1432,7 +1432,8 @@ private fun PresetParams(
     customPresets: List<CustomPreset> = emptyList(),
     canSaveCurrent: Boolean = false,
     onSaveCurrent: (String) -> Unit = {},
-    onDeleteCustom: (String) -> Unit = {}
+    onDeleteCustom: (String) -> Unit = {},
+    onImport: (android.net.Uri) -> Unit = {}
 ) {
     when (tab) {
         PresetTab.My -> {
