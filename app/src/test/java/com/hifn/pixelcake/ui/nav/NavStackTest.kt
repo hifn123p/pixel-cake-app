@@ -11,7 +11,7 @@ import org.junit.Test
  */
 class NavStackTest {
 
-    private fun stack() = NavStack(AppScreen.Workspace)
+    private fun stack() = NavStack<AppScreen>(AppScreen.Workspace)
 
     @Test
     fun initial_isWorkspace() {

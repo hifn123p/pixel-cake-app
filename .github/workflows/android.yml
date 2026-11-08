@@ -50,6 +50,9 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      - name: Nuke stale Gradle/Kotlin caches (幻影错误根治：IC 状态在连续 rebase 后可能引用旧源码)
+        run: rm -rf ~/.gradle/caches/journal-1 ~/.gradle/caches/build-cache-1 ~/.gradle/caches/8.13.2 ~/.gradle/caches/transforms-4
+
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
@@ -171,6 +174,9 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      - name: Nuke stale Gradle/Kotlin caches (幻影错误根治：IC 状态在连续 rebase 后可能引用旧源码)
+        run: rm -rf ~/.gradle/caches/journal-1 ~/.gradle/caches/build-cache-1 ~/.gradle/caches/8.13.2 ~/.gradle/caches/transforms-4
+
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
@@ -250,6 +256,9 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
+
+      - name: Nuke stale Gradle/Kotlin caches (幻影错误根治：IC 状态在连续 rebase 后可能引用旧源码)
+        run: rm -rf ~/.gradle/caches/journal-1 ~/.gradle/caches/build-cache-1 ~/.gradle/caches/8.13.2 ~/.gradle/caches/transforms-4
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
