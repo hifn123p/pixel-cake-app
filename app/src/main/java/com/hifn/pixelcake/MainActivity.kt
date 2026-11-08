@@ -60,6 +60,8 @@ import com.hifn.pixelcake.core.ml.ObjectMasks
 import com.hifn.pixelcake.diag.DebugLog
 import com.hifn.pixelcake.ui.editor.EditorScreen
 import com.hifn.pixelcake.ui.editor.EditorSessionLifecycle
+import com.hifn.pixelcake.ui.nav.AppScreen
+import com.hifn.pixelcake.ui.nav.NavStack
 import com.hifn.pixelcake.ui.editor.EditorStatus
 import com.hifn.pixelcake.ui.editor.StatusKind
 import com.hifn.pixelcake.ui.home.HomeScreen
@@ -135,7 +137,10 @@ private fun AppRoot(settings: AppSettings) {
     var tab by remember { mutableStateOf(PixelCakeTab.Darkroom) }
     // 编辑器是否打开。**刻意不用第三个 Tab**：编辑是全屏工作台，进入后 TabBar 直接消失，
     // 把画面整块交给预览区（`docs/UI_DESIGN.md` §3.3）。
-    var editorOpen by remember { mutableStateOf(false) }
+    // T2 完整形态：编辑页开关由导航栈驱动（sealed AppScreen + NavStack，有单测）。
+    // 加新页面 = 加枚举值 + push，而不是再发明一个 `xxOpen` 布尔。
+    val nav = remember { NavStack(AppScreen.Workspace) }
+    val editorOpen = nav.current == AppScreen.Editor
     var imported by remember { mutableStateOf<DecodedImage?>(null) }
     var srcUri by remember { mutableStateOf<Uri?>(null) }
     val history = remember { EditHistory() }
@@ -646,7 +651,10 @@ private fun AppRoot(settings: AppSettings) {
                 } else {
                     EditorStatus()
                 }
-                editorOpen = true
+                // 编辑器内再导图（Photo Picker）时已处于 Editor —— replaceTop 防止栈里
+                // 堆叠两层 Editor（否则 onBack 一次退不出）。
+                if (nav.current == AppScreen.Editor) nav.replaceTop(AppScreen.Editor)
+                else nav.push(AppScreen.Editor)
                 DebugLog.i(
                     DebugLog.TAG_DECODE,
                     "decoded",
@@ -750,7 +758,7 @@ private fun AppRoot(settings: AppSettings) {
                         autoMaskNote = ""
                         liquifyNote = ""
                         renderStamp = 0
-                        editorOpen = false
+                        nav.pop()
     }
     BackHandler(enabled = editorOpen) { editorOnBack() }
 
@@ -803,6 +811,22 @@ private fun AppRoot(settings: AppSettings) {
                     onDeleteCustomPreset = { id ->
                         persistCustomPresets(customPresets.filterNot { it.id == id })
                         if (activePresetId == id) activePresetId = "none"
+                    },
+                    onImportPresets = { uri ->
+                        scope.launch {
+                            val text = withContext(Dispatchers.IO) {
+                                context.contentResolver.openInputStream(uri)?.use { it.readText() }
+                            } ?: return@launch
+                            val imported = CustomPresets.decode(text)
+                            if (imported.isEmpty()) {
+                                DebugLog.w(DebugLog.TAG_EDIT, "preset import failed (not a preset file)",
+                                    mapOf("uri" to uri.toString()))
+                                return@launch
+                            }
+                            val merged = CustomPresets.withFreshIdsWhereTaken(imported, customPresets)
+                            persistCustomPresets(customPresets + merged)
+                            DebugLog.i(DebugLog.TAG_EDIT, "preset imported", mapOf("count" to merged.size))
+                        }
                     },
                     presetThumbs = presetThumbs,
                     // 对象作用域（批次 5）：可用性来自上面的预热探测；层列表是编辑状态的一部分。

@@ -258,6 +258,7 @@ fun EditorScreen(
     canSaveCurrentPreset: Boolean = false,
     onSaveCurrentPreset: (String) -> Unit = {},
     onDeleteCustomPreset: (String) -> Unit = {},
+    onImportPresets: (android.net.Uri) -> Unit = {},
     objectScopesAvailable: Boolean = false,
     // 「点哪修哪」的命中测试数据源（探测 effect 顺手存下的那份，无额外推理）。
     // null = 模型不可用 ⇒ 拾取入口隐藏。
@@ -844,6 +845,7 @@ fun EditorScreen(
                                     canSaveCurrent = canSaveCurrentPreset,
                                     onSaveCurrentPreset = onSaveCurrentPreset,
                                     onDeleteCustomPreset = onDeleteCustomPreset,
+                                    onImportPresets = onImportPresets,
                                     selection = selection,
                                     activeScope = scope,
                                     activeLayer = activeLayer,

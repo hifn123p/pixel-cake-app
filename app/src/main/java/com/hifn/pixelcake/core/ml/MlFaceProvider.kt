@@ -35,6 +35,25 @@ object MlFaceProvider {
     /** 已加载模型的加速器名（`GPU` / `CPU`）；未加载时为 `null`。 */
     val accelerator: String? get() = model?.acceleratorName
 
+    // ———— 只读状态（UI 3.0 §N「端侧模型中心」，与 MlMaskProvider 同款）————
+
+    /** 模型实例是否已解析出来。 */
+    val isModelResolved: Boolean get() = modelResolved
+
+    /** 本会话已放弃人脸检测（致命失败）。 */
+    val isDisabled: Boolean get() = disabled
+
+    /** 当前缓存 key 前 24 位（诊断展示用）；null = 本会话还没检测过。 */
+    val cachedKeyForUi: String? get() = cacheKey?.take(24)
+
+    /** 模型中心（UI 3.0 §N）的行数据：键 = 展示名，值 = 展示值。只读快照。 */
+    fun diagnostics(): Map<String, String> = mapOf(
+        "模型已加载" to (model != null).toString(),
+        "加速器" to (accelerator ?: "未加载"),
+        "本会话禁用" to disabled.toString(),
+        "缓存键" to (cachedKeyForUi ?: "无")
+    )
+
     /**
      * 对 [src] 做一次人脸检测，结果按**面积降序**（最大脸在前）。
      *

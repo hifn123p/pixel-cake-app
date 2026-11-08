@@ -83,6 +83,7 @@ fun SettingsScreen(
     // D4：缓存清理等页面级磁盘 IO 的协程域（主线程派发，IO 动作显式切线程）
     val cacheScope = rememberCoroutineScope()
     var showAbout by remember { mutableStateOf(false) }
+    var showModelCenter by remember { mutableStateOf(false) }
     // 「端侧模型」状态的刷新计数：`MlMaskProvider` 没有可观察性，改它做 key 即可重读快照。
     var modelRefresh by remember { mutableStateOf(0) }
     var logExported by remember { mutableStateOf(false) }
@@ -322,6 +323,17 @@ fun SettingsScreen(
 
                 Spacer(Modifier.height(Spacing.s))
 
+                Spacer(Modifier.height(Spacing.s))
+
+                SettingRow(
+                    title = "模型中心",
+                    subtitle = "分割 / 人脸模型的加载状态、加速器与缓存（只读诊断）"
+                ) {
+                    TextButton(onClick = { showModelCenter = true }) { Text("查看") }
+                }
+
+                Spacer(Modifier.height(Spacing.s))
+
                 SettingRow(
                     title = "导出调试日志",
                     subtitle = if (logExported) "已触发系统分享" else "排查真机问题时导出给开发者"
@@ -345,6 +357,10 @@ fun SettingsScreen(
                 }
             }
         }
+    }
+
+    if (showModelCenter) {
+        ModelCenterSheet(onDismiss = { showModelCenter = false })
     }
 
     if (showAbout) {

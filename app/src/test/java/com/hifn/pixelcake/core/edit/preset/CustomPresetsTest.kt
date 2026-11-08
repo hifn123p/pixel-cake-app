@@ -72,6 +72,18 @@ class CustomPresetsTest {
     }
 
     @Test
+    fun withFreshIds_regenOnlyTaken() {
+        val a = CustomPreset.capture("甲", EditParams(), RetouchState(), 1L)
+        val b = CustomPreset.capture("乙", EditParams(), RetouchState(), 2L)
+        val existing = listOf(a)
+        val out = CustomPresets.withFreshIdsWhereTaken(listOf(a, b), existing)
+        assertEquals(2, out.size)
+        assertTrue("未冲突的条目 id 原样保留", out[0].id == a.id)
+        assertTrue("冲突的条目重新生成 id", out[1].id != b.id && out[1].id.startsWith("custom:"))
+        assertEquals("名称原样保留", "乙", out[1].name)
+    }
+
+    @Test
     fun store_saveLoad_roundtrip() {
         val store = CustomPresets.Store(tmp.newFile("presets.json"))
         val list = listOf(CustomPreset.capture("甲", sampleParams(), sampleRetouch(), 7L))

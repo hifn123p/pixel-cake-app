@@ -98,6 +98,17 @@ object MlMaskProvider {
     /** 已缓存概率的边长；0 = 当前这张图还没推理过。 */
     val cachedSideForUi: Int get() = cacheSide
 
+    /** 模型中心（UI 3.0 §N）的行数据：键 = 展示名，值 = 展示值。只读快照。 */
+    fun diagnostics(): Map<String, String> = mapOf(
+        "模型已加载" to (model != null).toString(),
+        "加速器" to (accelerator ?: "未加载"),
+        "本会话禁用" to disabled.toString(),
+        "永久关闭" to permanentlyDisabled.toString(),
+        "OOM 计数" to oomCount.toString(),
+        "概率缓存边长" to (if (cacheSide > 0) cacheSide.toString() else "未推理"),
+        "缓存键" to (cacheKey?.take(24) ?: "无")
+    )
+
     /** 永久关闭的 OOM 阈值（UI 要显示「1 / 2」这类进度）。 */
     val oomThreshold: Int get() = MAX_OOM_BEFORE_PERMANENT
 

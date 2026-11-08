@@ -84,6 +84,16 @@ object CustomPresets {
     fun encode(list: List<CustomPreset>): String =
         json.encodeToString(CustomPresetFile(version = VERSION, presets = list))
 
+    /**
+     * 导入清洗（v0.7.0 预设导入/导出）：id 与已有预设冲突的条目**重新生成 id**
+     * —— 同名保留（用户可自行删除），同 id 会造成「两张卡同选态」的状态污染。
+     */
+    fun withFreshIdsWhereTaken(imported: List<CustomPreset>, existing: List<CustomPreset>): List<CustomPreset> =
+        imported.map { cp ->
+            if (existing.none { it.id == cp.id }) cp
+            else cp.copy(id = "custom:" + UUID.randomUUID().toString().substring(0, 8))
+        }
+
     /** 文件存储。所有 IO 由调用方决定调度（UI 层一律 Dispatchers.IO）。 */
     class Store(private val file: File) {
 

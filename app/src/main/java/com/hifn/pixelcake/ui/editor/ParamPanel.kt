@@ -4,6 +4,17 @@ import android.graphics.Bitmap
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.FileProvider
+import com.hifn.pixelcake.diag.DebugLog
+import java.io.File
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -347,6 +358,7 @@ fun ParamPanel(
     canSaveCurrent: Boolean = false,
     onSaveCurrentPreset: (String) -> Unit = {},
     onDeleteCustomPreset: (String) -> Unit = {},
+    onImportPresets: (android.net.Uri) -> Unit = {},
     onSelectionChange: (PanelSelection) -> Unit,
     onParamChange: (EditParams) -> Unit,
     onParamCommit: () -> Unit,
@@ -445,7 +457,8 @@ fun ParamPanel(
                     customPresets = customPresets,
                     canSaveCurrent = canSaveCurrent,
                     onSaveCurrent = onSaveCurrentPreset,
-                    onDeleteCustom = onDeleteCustomPreset
+                    onDeleteCustom = onDeleteCustomPreset,
+                    onImport = onImportPresets
                 )
             }
         }
@@ -1042,13 +1055,45 @@ private fun MyPresetsSection(
     onPreset: (Preset) -> Unit,
     canSaveCurrent: Boolean,
     onSaveCurrent: (String) -> Unit,
-    onDeleteCustom: (String) -> Unit
+    onDeleteCustom: (String) -> Unit,
+    onImport: (android.net.Uri) -> Unit
 ) {
     var showSaveDialog by remember { mutableStateOf(false) }
     var showManage by remember { mutableStateOf(false) }
     var draftName by remember { mutableStateOf("") }
+    val context = LocalContext.current
 
+    val scope = rememberCoroutineScope()
+    val exportPreset: (CustomPreset) -> Unit = { cp ->
+        scope.launch(Dispatchers.IO) {
+            try {
+                val dir = File(context.cacheDir, "presets").apply { mkdirs() }
+                val safe = cp.name.replace(Regex("[\/:*?\"<>|]"), "_")
+                val f = File(dir, safe + ".pcpreset.json")
+                f.writeText(CustomPresets.encode(listOf(cp)))
+                val uri = FileProvider.getUriForFile(context, context.packageName + ".fileprovider", f)
+                val intent = Intent(Intent.ACTION_SEND).apply {
+                    type = "application/json"
+                    putExtra(Intent.EXTRA_STREAM, uri)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                withContext(Dispatchers.Main) {
+                    context.startActivity(Intent.createChooser(intent, "分享预设文件"))
+                }
+            } catch (t: Throwable) {
+                DebugLog.w(DebugLog.TAG_EDIT, "preset share failed", mapOf("err" to (t.message ?: t.javaClass.simpleName)))
+            }
+        }
+    }
+    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) onImport(uri)
+    }
     GroupLabel("我的预设（自定义参数栈）")
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Spacing.s)) {
+        TextButton(onClick = { importLauncher.launch(arrayOf("application/json", "application/octet-stream", "text/plain")) }, enabled = true) {
+            Text("导入")
+        }
+    }
     if (canSaveCurrent) {
         TextButton(onClick = { showSaveDialog = true; draftName = "" }) {
             Text("把当前调法存为预设")
@@ -1122,8 +1167,13 @@ private fun MyPresetsSection(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(cp.name, style = MaterialTheme.typography.bodyMedium)
-                            TextButton(onClick = { onDeleteCustom(cp.id) }) {
-                                Text("删除")
+                            Row {
+                                TextButton(onClick = { onExport(cp) }) {
+                                    Text("导出")
+                                }
+                                TextButton(onClick = { onDeleteCustom(cp.id) }) {
+                                    Text("删除")
+                                }
                             }
                         }
                     }
