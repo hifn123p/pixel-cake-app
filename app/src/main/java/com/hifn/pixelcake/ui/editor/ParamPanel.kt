@@ -455,12 +455,12 @@ fun ParamPanel(
                     presets, activePresetId, presetThumbs, onPreset,
                     selection.presetTab, params, onParamChange, onParamCommit, onDraggingChange,
                     presetAmount, onPresetAmount,
-                customPresets = customPresets,
-                canSaveCurrent = canSaveCurrent,
-                onSaveCurrent = onSaveCurrent,
-                onDeleteCustom = onDeleteCustom,
-                onImport = onImport
-            )
+                    customPresets = customPresets,
+                    canSaveCurrent = canSaveCurrent,
+                    onSaveCurrent = onSaveCurrentPreset,
+                    onDeleteCustom = onDeleteCustomPreset,
+                    onImport = onImportPresets
+                )
             }
         }
     }
