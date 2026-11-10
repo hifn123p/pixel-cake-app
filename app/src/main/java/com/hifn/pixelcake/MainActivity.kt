@@ -39,6 +39,7 @@ import com.hifn.pixelcake.core.edit.BeautyParams
 import com.hifn.pixelcake.core.edit.EditEngine
 import com.hifn.pixelcake.core.edit.EditHistory
 import com.hifn.pixelcake.core.edit.EditRotation
+import com.hifn.pixelcake.core.edit.RotatedMask
 import com.hifn.pixelcake.core.edit.AutoEnhance
 import com.hifn.pixelcake.core.edit.EditParams
 import com.hifn.pixelcake.core.edit.lerped
