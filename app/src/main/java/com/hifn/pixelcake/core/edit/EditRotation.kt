@@ -1,7 +1,6 @@
 package com.hifn.pixelcake.core.edit
 
 import com.hifn.pixelcake.core.decode.LinearImage
-import com.hifn.pixelcake.core.edit.retouch.RetouchLayer
 import kotlin.math.max
 
 /**
@@ -64,23 +63,20 @@ object EditRotation {
     /**
      * 液化锚点映射：旋转后（预览）空间的锚点 → 未旋转渲染空间的锚点。
      * [a] 的坐标按**旋转后渲染尺寸**（q 奇数时 = h×w）给出。
+     * 返回四元组 (faceX, faceY, eyeX, eyeY) —— 调用方组装 FaceAnchor
+     * （避免本文件依赖 retouch 子包：core.edit ↔ core.edit.retouch 双向依赖在
+     * 某些 K1 增量编译场景下产生幻影 Unresolved，见 CI run 42847732601）。
      */
-    fun mapAnchorToRender(a: RetouchLayer.FaceAnchor, quarterTurns: Int, w: Int, h: Int): RetouchLayer.FaceAnchor {
+    fun mapAnchorToRender(
+        faceX: Float, faceY: Float, eyeX: Float, eyeY: Float,
+        quarterTurns: Int, w: Int, h: Int
+    ): FloatArray {
         val q = norm(q = quarterTurns)
-        if (q == 0) return a
+        if (q == 0) return floatArrayOf(faceX, faceY, eyeX, eyeY)
         return when (q) {
-            1 -> RetouchLayer.FaceAnchor(
-                faceX = a.faceY, faceY = (h - 1 - a.faceX),
-                eyeX = a.eyeY, eyeY = (h - 1 - a.eyeX)
-            )
-            2 -> RetouchLayer.FaceAnchor(
-                faceX = (w - 1 - a.faceX), faceY = (h - 1 - a.faceY),
-                eyeX = (w - 1 - a.eyeX), eyeY = (h - 1 - a.eyeY)
-            )
-            else -> RetouchLayer.FaceAnchor(
-                faceX = (w - 1 - a.faceY), faceY = a.faceX,
-                eyeX = (w - 1 - a.eyeY), eyeY = a.eyeX
-            )
+            1 -> floatArrayOf(faceY, h - 1 - faceX, eyeY, h - 1 - eyeX)
+            2 -> floatArrayOf(w - 1 - faceX, h - 1 - faceY, w - 1 - eyeX, h - 1 - eyeY)
+            else -> floatArrayOf(w - 1 - faceY, faceX, w - 1 - eyeY, eyeX)
         }
     }
 
