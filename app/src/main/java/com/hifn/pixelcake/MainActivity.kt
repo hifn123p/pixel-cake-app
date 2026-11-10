@@ -777,9 +777,9 @@ private fun AppRoot(settings: AppSettings) {
     // 自动重启，全链路同转。导出端：sRGB 在全分辨率解码后预旋转；RAW 在 renderLinearFile 输出后
     // 一次性旋转，蒙版/液化锚点经 EditRotation 逆映射（RotatedMask 装饰器）保持位置一致。
     val applySessionRotation: (Int) -> Unit = { q ->
-        val pristine = pristineDecoded ?: return@let
+        val pristine = pristineDecoded
         val target = ((q % 4) + 4) % 4
-        if (target != rotationQuarterTurns) {
+        if (pristine != null && target != rotationQuarterTurns) {
             rotationQuarterTurns = target
             status = EditorStatus(StatusKind.Info, "正在旋转…")
             scope.launch {
