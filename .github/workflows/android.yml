@@ -61,7 +61,7 @@ jobs:
         # 远端排障不再靠猜（无本地构建环境，日志是唯一证据）。
         run: |
           set -o pipefail
-          ./gradlew assembleDebug --stacktrace 2>&1 | tee assemble-debug.log
+          ./gradlew --no-build-cache assembleDebug --stacktrace 2>&1 | tee assemble-debug.log
 
       - name: Upload assemble log (failure evidence)
         if: failure()
@@ -83,7 +83,7 @@ jobs:
       - name: Run unit tests
         run: |
           set -o pipefail
-          ./gradlew testDebugUnitTest --stacktrace 2>&1 | tee unit-tests.log
+          ./gradlew --no-build-cache testDebugUnitTest --stacktrace 2>&1 | tee unit-tests.log
 
       - name: Upload unit test log (failure evidence)
         if: failure()
@@ -183,7 +183,7 @@ jobs:
       - name: Run lint
         run: |
           set -o pipefail
-          ./gradlew lintDebug 2>&1 | tee lint-debug.log
+          ./gradlew --no-build-cache lintDebug 2>&1 | tee lint-debug.log
 
       - name: Upload lint log (failure evidence)
         if: failure()
@@ -274,7 +274,7 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: ./gradlew assembleRelease --stacktrace
+        run: ./gradlew --no-build-cache assembleRelease --stacktrace
 
       - name: Upload signed APK
         uses: actions/upload-artifact@v4
