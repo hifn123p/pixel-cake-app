@@ -75,10 +75,9 @@ class EditRotationTest {
     @Test
     fun mapAnchorToRender_routesIntoUnrotatedFrame() {
         // 锚点在旋转后空间 (49, 0)（q1）→ 未旋转渲染空间 (0, 49-1-0) = (0, 49)
-        val a = RetouchLayer.FaceAnchor(faceX = 49f, faceY = 0f, eyeX = 49f, eyeY = 0f)
-        val mapped = EditRotation.mapAnchorToRender(a, 1, w, h)
-        assertEquals(0f, mapped.faceX, 1e-4f)
-        assertEquals(49f, mapped.faceY, 1e-4f)
+        val m = EditRotation.mapAnchorToRender(49f, 0f, 49f, 0f, 1, w, h)
+        assertEquals(0f, m[0], 1e-4f)
+        assertEquals(49f, m[1], 1e-4f)
     }
 
     @Test
