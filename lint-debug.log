@@ -4,23 +4,23 @@ Starting a Gradle Daemon (subsequent builds will be faster)
 > Task :app:preDebugBuild UP-TO-DATE
 > Task :app:checkDebugAarMetadata
 > Task :app:processDebugNavigationResources
-> Task :app:compileDebugNavigationResources
 > Task :app:generateDebugResValues
+> Task :app:compileDebugNavigationResources
 > Task :app:mapDebugSourceSetPaths
 > Task :app:generateDebugResources
 > Task :app:packageDebugResources
-> Task :app:mergeDebugResources
 > Task :app:createDebugCompatibleScreenManifests
 > Task :app:extractDeepLinksDebug
 > Task :app:parseDebugLocalResources
+> Task :app:mergeDebugResources
 
 > Task :app:processDebugMainManifest
 [com.google.ai.edge.litert:litert:2.2.0] /home/runner/.gradle/caches/8.13/transforms/6cd64d3859112caf3769544d574db9c5/transformed/litert-2.2.0/AndroidManifest.xml Warning:
 	Namespace 'com.google.ai.edge.litert' is used in multiple modules and/or libraries: com.google.ai.edge.litert:litert:2.2.0, com.google.ai.edge.litert:litert-api:2.2.0. Please ensure that all modules and libraries have a unique namespace. For more information, See https://developer.android.com/studio/build/configure-app-module#set-namespace
 
 > Task :app:processDebugManifest
-> Task :app:javaPreCompileDebug
 > Task :app:processDebugManifestForPackage
+> Task :app:javaPreCompileDebug
 > Task :app:preDebugAndroidTestBuild SKIPPED
 > Task :app:generateDebugAndroidTestResValues FROM-CACHE
 > Task :app:extractProguardFiles
@@ -28,10 +28,9 @@ Starting a Gradle Daemon (subsequent builds will be faster)
 > Task :app:processDebugResources
 
 > Task :app:compileDebugKotlin FAILED
-e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/MainActivity.kt:780:49 Unresolved label.
 e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/MainActivity.kt:1055:45 Unresolved reference 'RotatedMask'.
 e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/MainActivity.kt:1084:49 Unresolved reference 'RotatedMask'.
-gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/__run_3-1794325170588.json
+gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/__run_3-1794325368438.json
 
 FAILURE: Build failed with an exception.
 
@@ -46,5 +45,5 @@ Execution failed for task ':app:compileDebugKotlin'.
 > Run with --scan to get full insights.
 > Get more help at https://help.gradle.org.
 
-BUILD FAILED in 30s
+BUILD FAILED in 37s
 19 actionable tasks: 18 executed, 1 from cache
