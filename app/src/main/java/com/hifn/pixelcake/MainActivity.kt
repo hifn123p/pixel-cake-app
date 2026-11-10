@@ -1096,7 +1096,13 @@ private fun AppRoot(settings: AppSettings) {
                                                     it, img.bitmap.width, img.bitmap.height, ewU, ehU
                                                 )
                                                 if (a != null && rotationQuarterTurns != 0) {
-                                                    EditRotation.mapAnchorToRender(a, rotationQuarterTurns, ewU, ehU)
+                                                    val m = EditRotation.mapAnchorToRender(
+                                                        a.faceX, a.faceY, a.eyeX, a.eyeY,
+                                                        rotationQuarterTurns, ewU, ehU
+                                                    )
+                                                    RetouchLayer.FaceAnchor(
+                                                        faceX = m[0], faceY = m[1], eyeX = m[2], eyeY = m[3]
+                                                    )
                                                 } else {
                                                     a
                                                 }
