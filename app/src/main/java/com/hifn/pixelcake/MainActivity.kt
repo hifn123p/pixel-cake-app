@@ -2,6 +2,7 @@ package com.hifn.pixelcake
 
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Rect
 import android.net.Uri
@@ -33,9 +34,11 @@ import com.hifn.pixelcake.arw.ArwFullDecoder
 import com.hifn.pixelcake.core.decode.DecodedImage
 import com.hifn.pixelcake.core.decode.Decoder
 import com.hifn.pixelcake.core.decode.Exporter
+import com.hifn.pixelcake.core.decode.LinearImage
 import com.hifn.pixelcake.core.edit.BeautyParams
 import com.hifn.pixelcake.core.edit.EditEngine
 import com.hifn.pixelcake.core.edit.EditHistory
+import com.hifn.pixelcake.core.edit.EditRotation
 import com.hifn.pixelcake.core.edit.AutoEnhance
 import com.hifn.pixelcake.core.edit.EditParams
 import com.hifn.pixelcake.core.edit.lerped
@@ -142,6 +145,11 @@ private fun AppRoot(settings: AppSettings) {
     val nav = remember { NavStack<AppScreen>(AppScreen.Workspace) }
     val editorOpen = nav.current == AppScreen.Editor
     var imported by remember { mutableStateOf<DecodedImage?>(null) }
+    // Q5 手动旋转：pristine = 导入原样（**永不旋转**的基准）；imported = 旋转后的会话源。
+    // 旋转从 pristine 重推导（零累积损失），替换 imported ⇒ 渲染/ML/缩略图/对比全链路
+    // 经 `LaunchedEffect(imported)` 自动重启 —— 不需要任何消费者感知旋转。
+    var pristineDecoded by remember { mutableStateOf<DecodedImage?>(null) }
+    var rotationQuarterTurns by remember { mutableStateOf(0) }
     var srcUri by remember { mutableStateOf<Uri?>(null) }
     val history = remember { EditHistory() }
     var params by remember { mutableStateOf(EditParams()) }
@@ -341,7 +349,7 @@ private fun AppRoot(settings: AppSettings) {
                 // 漏掉的后果不是「不重渲」，而是「拖对象层的滑块画面完全不动」——
                 // 滑块自己会动、数值也在变，只有照片不变。那比崩溃更难排查。
                 params, retouch, layers, brushStrokes, inpaintStrokes, settings.autoMask,
-                brushRadius, inpaintRadius
+                brushRadius, inpaintRadius, rotationQuarterTurns
             )
         }
             .conflate()
@@ -626,6 +634,8 @@ private fun AppRoot(settings: AppSettings) {
                 }
                 loading = false
                 imported = dec
+                pristineDecoded = dec
+                rotationQuarterTurns = 0
                 srcUri = uri
                 // 异步释放上一张的 ARW 缓存（不阻塞解码收尾；IO 磁盘操作用 IO 调度器）
                 if (staleRaw != null && staleRaw != dec.rawCachePath) {
@@ -745,6 +755,8 @@ private fun AppRoot(settings: AppSettings) {
                         // 上面的 `rendered` / `compareBase` 之所以仍走手动回收，正是因为它们的
                         // 读写者**只有渲染协程自己**：生命周期明确，一把锁就能管住。
                         imported = null
+                        pristineDecoded = null
+                        rotationQuarterTurns = 0
                         srcUri = null
                         retouch = RetouchState()
                         // 对象层与 retouch 同口径一起清（下一次导入本来也会清，这里是为了不让
@@ -759,6 +771,49 @@ private fun AppRoot(settings: AppSettings) {
                         liquifyNote = ""
                         renderStamp = 0
                         nav.pop()
+    }
+    // Q5：会话级旋转 —— 从 pristine 重推导 imported（bitmap + linear 一次性重排，零累积损失），
+    // 替换 imported ⇒ 渲染协程 / ML 探测 / 缩略图 / compareBase 全部经 `LaunchedEffect(imported)`
+    // 自动重启，全链路同转。导出端：sRGB 在全分辨率解码后预旋转；RAW 在 renderLinearFile 输出后
+    // 一次性旋转，蒙版/液化锚点经 EditRotation 逆映射（RotatedMask 装饰器）保持位置一致。
+    val applySessionRotation: (Int) -> Unit = { q ->
+        val pristine = pristineDecoded ?: return@let
+        val target = ((q % 4) + 4) % 4
+        if (target != rotationQuarterTurns) {
+            rotationQuarterTurns = target
+            status = EditorStatus(StatusKind.Info, "正在旋转…")
+            scope.launch {
+                val rotatedBase = withContext(Dispatchers.Default) {
+                    val bmp = pristine.bitmap
+                    if (target == 0) {
+                        bmp
+                    } else {
+                        val m = Matrix().apply { postRotate((target * 90f) % 360f) }
+                        Bitmap.createBitmap(bmp, 0, 0, bmp.width, bmp.height, m, true)
+                    }
+                }
+                val rotatedLinear = pristine.linear?.let { lin ->
+                    withContext(Dispatchers.Default) { lin.rotateQuarter(target) }
+                }
+                // 替换 imported（保持 rawCachePath/isRaw/mime）——所有 keyed-on-imported 的副作用自动重启
+                imported = DecodedImage(
+                    bitmap = rotatedBase,
+                    mime = pristine.mime,
+                    width = rotatedBase.width,
+                    height = rotatedBase.height,
+                    isRaw = pristine.isRaw,
+                    linear = rotatedLinear,
+                    rawCachePath = pristine.rawCachePath
+                )
+                status = EditorStatus()
+            }
+        }
+    }
+    val onRotate: () -> Unit = {
+        val newQ = (rotationQuarterTurns + 1) % 4
+        applySessionRotation(newQ)
+        // 旋转是编辑的一部分：进撤销栈（撤销/重做会经 applySnapshot 恢复旋转）
+        history.push(EditSnapshot(params, retouch, layers, rotationQuarterTurns = newQ))
     }
     BackHandler(enabled = editorOpen) { editorOnBack() }
 
@@ -777,6 +832,10 @@ private fun AppRoot(settings: AppSettings) {
                 params = s.params
                 retouch = s.retouch
                 layers = s.layers
+                // Q5：撤销/重做恢复旋转 —— 从 pristine 重推导（零累积损失）
+                if (s.rotationQuarterTurns != rotationQuarterTurns) {
+                    applySessionRotation(s.rotationQuarterTurns)
+                }
                 activePresetId = "none"
             }
             // 编辑页**强制深色**：照片必须是页面上唯一的彩色主体（`docs/UI_DESIGN.md` §8 决策点 1）。
@@ -812,6 +871,7 @@ private fun AppRoot(settings: AppSettings) {
                         persistCustomPresets(customPresets.filterNot { it.id == id })
                         if (activePresetId == id) activePresetId = "none"
                     },
+                    onRotate = onRotate,
                     onImportPresets = { uri ->
                         scope.launch {
                             val text = withContext(Dispatchers.IO) {
@@ -864,12 +924,12 @@ private fun AppRoot(settings: AppSettings) {
                         params = it
                         if (activePresetId != "none") activePresetId = "none"
                     },
-                    onParamCommit = { history.push(EditSnapshot(params, retouch, layers)) },
+                    onParamCommit = { history.push(EditSnapshot(params, retouch, layers, rotationQuarterTurns)) },
                     onRetouchChange = {
                         retouch = it
                         if (activePresetId != "none") activePresetId = "none"
                     },
-                    onRetouchCommit = { history.push(EditSnapshot(params, retouch, layers)) },
+                    onRetouchCommit = { history.push(EditSnapshot(params, retouch, layers, rotationQuarterTurns)) },
                     // 图层变更（拖动中）只改状态；离散动作由 `onLayersCommit` 单独入栈
                     //（两者分开的理由与 `onParamChange` / `onParamCommit` 完全一样：
                     // 拖动过程中每帧都入栈会把撤销栈撑爆）。
@@ -877,7 +937,7 @@ private fun AppRoot(settings: AppSettings) {
                     // 刻意**不**清 `activePresetId`：预设只描述「整图参数 + 人像精修」，
                     // 对象层是并列的结构 ⇒ 改层不算「偏离预设」（见 `PresetParams` 的说明）。
                     onLayersChange = { layers = it },
-                    onLayersCommit = { history.push(EditSnapshot(params, retouch, layers)) },
+                    onLayersCommit = { history.push(EditSnapshot(params, retouch, layers, rotationQuarterTurns)) },
                     onToolChange = { retouchTool = it },
                     onBrushStroke = { nx, ny ->
                         // 节流：与上一描迹太近则忽略；并设条数上限，防蒙版重建爆炸。
@@ -904,7 +964,7 @@ private fun AppRoot(settings: AppSettings) {
                         // 而对象层是用户按**这张图的具体内容**搭出来的结构（「背景压暗」「面部提亮」）。
                         // 换个调色风格不该把这张图的分区结构拆掉 —— 那与「选一个作为起点」的语义相反。
                         // 但 `layers` 仍要进快照，否则这一步的撤销会把已有的层抹掉。
-                        history.push(EditSnapshot(params, retouch, layers))
+                        history.push(EditSnapshot(params, retouch, layers, rotationQuarterTurns))
                     },
                     onReset = {
                         params = EditParams()
@@ -914,7 +974,7 @@ private fun AppRoot(settings: AppSettings) {
                         brushStrokes = emptyList()
                         inpaintStrokes = emptyList()
                         activePresetId = "none"
-                        history.push(EditSnapshot(params, retouch, layers))
+                        history.push(EditSnapshot(params, retouch, layers, rotationQuarterTurns))
                     },
                     onUndo = {
                         if (history.undo()) applySnapshot(history.current)
@@ -982,12 +1042,30 @@ private fun AppRoot(settings: AppSettings) {
                                 withContext(Dispatchers.Default) {
                                     val rawPath = img.rawCachePath
                                     if (rawPath != null) {
-                                        // 全分辨率 RAW：边解码边分带渲染，不把 196MB 线性图搬进堆
-                                        val (ew, eh) = fitLongEdge(img.width, img.height, profile.fullResLongEdge)
+                                        // 全分辨率 RAW：边解码边分带渲染，不把 196MB 线性图搬进堆。
+                                        // Q5：蒙版/液化/图层在**未旋转空间**渲染（ewU/ehU = 原始朝向尺寸），
+                                        // 渲染完成后一次性旋转到会话方向 —— 蒙版经 RotatedMask 装饰器映射采样坐标，
+                                        // 与预览（旋转空间）所见一致。
+                                        val (ewU, ehU) = fitLongEdge(pristineDecoded?.width ?: img.width, pristineDecoded?.height ?: img.height, profile.fullResLongEdge)
                                         // 预览阶段的 ML 蒙版按 key 复用；resampleTo 只换尺寸、共享网格（无整幅分配）。
                                         val mlMask = if (autoOn) MlMaskProvider.skinMaskFor(context, img.bitmap, mlKey) else null
-                                        val mask = buildSkinMask(ew, eh, strokes, radius, mlMask)
-                                        val renderRetouch = buildRenderRetouch(rt, ew, eh, inpStrokes, inpRadius)
+                                        // Q5：ML 蒙版网格在**旋转后（预览）空间** —— 渲染在未旋转空间采样，
+                                        // 用 RotatedMask 装饰器映射（256×256 正方形网格 = 纯下标重排，零损失）。
+                                        val mlMaskRender = if (rotationQuarterTurns != 0 && mlMask != null) {
+                                            RotatedMask(mlMask, rotationQuarterTurns, ewU, ehU)
+                                        } else {
+                                            mlMask
+                                        }
+                                        // Q5：画笔描迹在旋转后（预览）空间采集 —— 逆映射到未旋转空间建栅格。
+                                        val unrotStrokes = if (rotationQuarterTurns != 0) {
+                                            strokes.map { (u, v) ->
+                                                EditRotation.unmapNormPoint(u, v, rotationQuarterTurns, ewU, ehU)
+                                            }
+                                        } else {
+                                            strokes
+                                        }
+                                        val mask = buildSkinMask(ewU, ehU, unrotStrokes, radius, mlMaskRender)
+                                        val renderRetouch = buildRenderRetouch(rt, ewU, ehU, inpStrokes, inpRadius)
                                         // 对象作用域图层（批次 5）：按**导出分辨率**重建。
                                         // 代价可以忽略：`ObjectMasks.maskFor` 的网格与目标尺寸无关，
                                         // `resampleTo(ew, eh)` 只换一个分母（零大分配），
@@ -998,20 +1076,34 @@ private fun AppRoot(settings: AppSettings) {
                                         } else {
                                             MlMaskProvider.objectMasksFor(context, img.bitmap, mlKey)
                                         }
-                                        val layerStack =
-                                            buildLayerStack(layerList, { sc -> objMasks?.maskFor(sc) }, ew, eh)
+                                        // Q5：图层蒙版在旋转后（预览）空间 —— RotatedMask 装饰器映射
+                                        // 到未旋转渲染空间（网格为正方形，纯下标重排）。
+                                        val layerStack = buildLayerStack(layerList, { sc ->
+                                            val m = objMasks?.maskFor(sc)
+                                            if (m != null && rotationQuarterTurns != 0) {
+                                                RotatedMask(m, rotationQuarterTurns, ewU, ehU)
+                                            } else {
+                                                m
+                                            }
+                                        }, ewU, ehU)
                                         // 液化锚点（P1p-2c）：预览阶段若已跑过检测，这里直接命中 MlFaceProvider 缓存
                                         // （同一 mlKey）⇒ 零成本；锚点按**导出分辨率**重新换算（与预览尺寸不同）。
                                         val faceAnchor = if (beautyActive(renderRetouch.beauty)) {
                                             MlFaceProvider.facesFor(context, img.bitmap, mlKey)?.firstOrNull()?.let {
-                                                RetouchLayer.FaceAnchor.fromDetection(
-                                                    it, img.bitmap.width, img.bitmap.height, ew, eh
+                                                // Q5：检测在旋转后（预览）空间 —— 锚点逆映射到未旋转渲染空间
+                                                val a = RetouchLayer.FaceAnchor.fromDetection(
+                                                    it, img.bitmap.width, img.bitmap.height, ewU, ehU
                                                 )
+                                                if (a != null && rotationQuarterTurns != 0) {
+                                                    EditRotation.mapAnchorToRender(a, rotationQuarterTurns, ewU, ehU)
+                                                } else {
+                                                    a
+                                                }
                                             }
                                         } else null
                                         // A1 取证：耗峰前一刻（画笔栅格已建，液化条带与包围盒尚未分配）
                                         DebugLog.i(DebugLog.TAG_EDIT, "raw export pre-render", memorySnapshot(context))
-                                        val full = EditEngine.renderLinearFile(
+                                        val fullRendered = EditEngine.renderLinearFile(
                                             path = rawPath,
                                             maxLongSide = profile.fullResLongEdge,
                                             p = tonalParams,
@@ -1026,6 +1118,16 @@ private fun AppRoot(settings: AppSettings) {
                                                 }
                                             }
                                             !exportCancelled.get()
+                                        }
+                                        // Q5：渲染在未旋转空间完成（蒙版经 RotatedMask 映射），
+                                        // 这里一次性旋转到会话方向（导出低频，一次性 131MB 重排可接受）。
+                                        val full = if (fullRendered != null && rotationQuarterTurns != 0) {
+                                            val m = Matrix().apply { postRotate((rotationQuarterTurns * 90f) % 360f) }
+                                            Bitmap.createBitmap(fullRendered, 0, 0, fullRendered.width, fullRendered.height, m, true).also {
+                                                if (it !== fullRendered) fullRendered.recycle()
+                                            }
+                                        } else {
+                                            fullRendered
                                         }
                                         if (full == null) {
                                                                             null to "RAW 导出失败"
@@ -1050,7 +1152,22 @@ private fun AppRoot(settings: AppSettings) {
                                         var fullTarget: Bitmap? = null
                                         try {
                                             fullBase = srcUri?.let {
-                                                Decoder.decodeFullRes(context, it, profile.fullResLongEdge)
+                                                val decoded = Decoder.decodeFullRes(context, it, profile.fullResLongEdge)
+                                                // Q5：会话旋转烘焙进全分辨率底图（与 EXIF 方向烘焙同一模式）
+                                                // —— 下游蒙版/液化/参数全部在旋转后的空间一致工作。
+                                                if (decoded != null && rotationQuarterTurns != 0) {
+                                                    val m = Matrix().apply { postRotate((rotationQuarterTurns * 90f) % 360f) }
+                                                    val rb = Bitmap.createBitmap(decoded.bitmap, 0, 0, decoded.bitmap.width, decoded.bitmap.height, m, true)
+                                                    DecodedImage(
+                                                        bitmap = rb,
+                                                        mime = decoded.mime,
+                                                        width = rb.width,
+                                                        height = rb.height,
+                                                        isRaw = decoded.isRaw
+                                                    )
+                                                } else {
+                                                    decoded
+                                                }
                                             }
                                             if (fullBase != null) {
                                                 // 尺寸先取出来：对象层要按**导出分辨率**建（见 RAW 分支的说明），
@@ -1183,7 +1300,7 @@ private fun AppRoot(settings: AppSettings) {
                                 val suggestion = withContext(Dispatchers.Default) { AutoEnhance.suggest(h) }
                                 activePresetId = "none"
                                 params = suggestion
-                                history.push(EditSnapshot(suggestion, retouch, layers))
+                                history.push(EditSnapshot(suggestion, retouch, layers, rotationQuarterTurns))
                                 status = EditorStatus(StatusKind.Info, "已自动增强")
                                 DebugLog.i(DebugLog.TAG_EDIT, "auto enhance", mapOf(
                                     "ev" to suggestion.exposureEv, "c" to suggestion.contrast))

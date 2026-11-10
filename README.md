@@ -9,7 +9,7 @@
 [![targetSdk](https://img.shields.io/badge/targetSdk-36-blue)](https://developer.android.com)
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.2.21-7F52FF?logo=kotlin)](https://kotlinlang.org)
 [![Compose](https://img.shields.io/badge/Jetpack%20Compose-Material3%204285F4?logo=jetpackcompose)](https://developer.android.com/jetpack/compose)
-[![Version](https://img.shields.io/badge/version-v0.7.0-success)](https://github.com/hifn123p/pixel-cake-app/releases)
+[![Version](https://img.shields.io/badge/version-v0.7.1-success)](https://github.com/hifn123p/pixel-cake-app/releases)
 [![Build](https://img.shields.io/badge/Build-GitHub%20Actions-2088FF?logo=githubactions)](https://github.com/features/actions)
 [![License](https://img.shields.io/badge/License-TBD-lightgrey)](#许可)
 
@@ -171,6 +171,7 @@ com.hifn.pixelcake
 
 | 版本 | 内容 |
 |---|---|
+| `v0.7.1` | **Q5 手动旋转**（审计裁决「都要」）：顶栏旋转按钮（顺时针 90° 步进）；**会话级旋转**——从无损原图重推导（零累积损失），预览/对比/ML 蒙版/缩略图全链路同转；导出端烘焙（sRGB 解码预旋转；RAW 渲染后旋转 + RotatedMask 装饰器无损映射蒙版 + 液化锚点逆映射）；旋转进撤销栈；线性母版 16-bit 纯下标重排（零精度损失）+ 3 组旋转单测 |
 | `v0.7.0` | **架构与诊断**：**T2 导航层完整化**（sealed AppScreen + NavStack，编辑器内再导图防栈叠层，6 断言单测）；**模型中心页**（UI3.0 §N：分割/人脸模型加载状态、加速器、OOM/缓存只读诊断，设置→高级→模型中心）；**预设导入/导出**（我的预设页：SAF 导入 + FileProvider 分享 `.pcpreset.json`，id 冲突自动重生成）；.gitmodules 去浮动 branch（P3 合规） |
 | `v0.6.6` | **用户预设库**（T1 解锁的首个功能）：编辑器「预设 → 我的」把当前调法存为自定义预设（JSON 原子写 + 坏文件留证 + 8 断言单测），应用/强度环与内置同型；**相机批量与系留默认参数均可选自定义预设**；瑕疵描迹按语义不入预设 |
 | `v0.6.5` | **审计剩余项全量清账**（hy4 阶段 2/3 + Q 决策）：**协议** E1 属性码撞码修正（0x5007/0x5008/0x5009 按 PTP 标准）+ datatype 校验 + 数据阶段事务号校验对称 + E2 SessionID 存档 + E3(b) 诊断上屏 + E5 注释修正；**并发** A4 帧栅栏回收 / A5 进度回调切主线程 / A6 缩略图去锁不堵首帧；**无响应** D1 后台线程释放 USB / D2 busy 进 finally×4 / D3 日志攒批刷盘 / D4 缓存清理进 IO / D5 渲染分片等待加超时；**内存** B1 导出即回收底图+6-8GB 档收敛 / B2 笔刷蒙版网格化（131MB→≤4MB）/ B4 openLinear 内存预算；**质量** M-3 Bayer 有序抖动（16-bit→8-bit）/ M-4 thermal headroom 进日志；**诚实界面** U2 强度 0 禁用修饰量 / U3 分级色相 chip / U6 重置接线 + 磨皮阈值滑块 / 横滑 chips 截断渐隐；**架构** T2 BackHandler（系统返回=安全退出编辑器）+ 生命周期决策可测化 + TetherProcessor 抽取（K1/K2/K3 回归测试）/ **T3 横屏最小可用**（Deck 右侧栏）/ **T4 无障碍语义清单**；**护栏** `catch(Throwable)` CE 闸门进 kotlin_gates.py；Q1/Q2/Q3/Q6 决策落地；死代码清理。+5 组新测试 |
@@ -187,7 +188,7 @@ com.hifn.pixelcake
 | `v0.4.4` | UI Redesign v2.0 |
 | `v0.4.0` / `v0.4.1` | 调色批次 1~4（81 项）/ 批次 5 对象作用域 |
 
-（`v0.1.0` → `v0.7.0` tag 齐全，Release 页可下载签名 APK。）
+（`v0.1.0` → `v0.7.1` tag 齐全，Release 页可下载签名 APK。）
 
 ---
 

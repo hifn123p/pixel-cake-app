@@ -22,6 +22,36 @@ class LinearImage(
         }
     }
 
+    /**
+     * Q5：q×90°（顺时针）旋转。16-bit 数据**纯下标重排**（零精度损失），
+     * q 奇数时宽高互换。纯函数，JVM 可测（`LinearImageRotateTest`）。
+     */
+    fun rotateQuarter(quarterTurns: Int): LinearImage {
+        val q = ((quarterTurns % 4) + 4) % 4
+        if (q == 0) return this
+        val w = width
+        val h = height
+        val out = ShortArray(data.size)
+        for (y in 0 until h) {
+            for (x in 0 until w) {
+                val s = (y * w + x) * 3
+                val dx: Int
+                val dy: Int
+                when (q) {
+                    1 -> { dx = h - 1 - y; dy = x }
+                    2 -> { dx = w - 1 - x; dy = h - 1 - y }
+                    else -> { dx = y; dy = w - 1 - x }
+                }
+                val nw = if (q == 2) w else h
+                val d = (dy * nw + dx) * 3
+                out[d] = data[s]
+                out[d + 1] = data[s + 1]
+                out[d + 2] = data[s + 2]
+            }
+        }
+        return if (q == 2) LinearImage(w, h, out) else LinearImage(h, w, out)
+    }
+
     /** 占用字节数，用于内存日志。 */
     val sizeBytes: Int get() = data.size * 2
 }

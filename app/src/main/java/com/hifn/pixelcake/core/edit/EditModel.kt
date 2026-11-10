@@ -360,7 +360,10 @@ data class EditParams(
 data class EditSnapshot(
     val params: EditParams = EditParams(),
     val retouch: RetouchState = RetouchState(),
-    val layers: List<ObjectLayer> = emptyList()
+    val layers: List<ObjectLayer> = emptyList(),
+    // Q5 手动旋转：0/1/2/3 = 顺时针 90° 步数。**带默认值** ⇒ 旧的三参调用点照常编译，
+    // 但每个 push 点必须补上当前值（漏掉的后果：撤销一次旋转后，再撤销参数会把它转回来）。
+    val rotationQuarterTurns: Int = 0
 )
 
 /** 撤销/重做历史：持有当前 [EditSnapshot]，push 新状态即记录旧状态。 */

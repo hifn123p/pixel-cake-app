@@ -259,6 +259,8 @@ fun EditorScreen(
     onSaveCurrentPreset: (String) -> Unit = {},
     onDeleteCustomPreset: (String) -> Unit = {},
     onImportPresets: (android.net.Uri) -> Unit = {},
+    // Q5 手动旋转：每次点击顺时针 90°。上层负责旋转会话源并入撤销栈。
+    onRotate: () -> Unit = {},
     objectScopesAvailable: Boolean = false,
     // 「点哪修哪」的命中测试数据源（探测 effect 顺手存下的那份，无额外推理）。
     // null = 模型不可用 ⇒ 拾取入口隐藏。
@@ -909,6 +911,7 @@ fun EditorScreen(
                             splitCompare = !splitCompare
                             if (splitCompare) showOriginal = false
                         },
+                        onRotate = onRotate,
                         onAutoEnhance = { onAutoEnhance(histogram) },
                         histogramReady = histogram != null,
                         onExport = { showExport = true }
@@ -1416,6 +1419,7 @@ private fun EditorTopBar(
     onToggleSplit: () -> Unit,
     histogramReady: Boolean = false,
     onAutoEnhance: () -> Unit = {},
+    onRotate: () -> Unit = {},
     onExport: () -> Unit
 ) {
     ChromeSkin(lightChrome) {
@@ -1466,6 +1470,13 @@ private fun EditorTopBar(
                         label = "自动增强",
                         enabled = histogramReady,
                         onClick = onAutoEnhance
+                    )
+                    // Q5 手动旋转（审计 §6 Q5 裁决「都要」）：顺时针 90° 步进，
+                    // 会话级旋转 —— 预览/对比/缩略图/导出全链路同转（见 MainActivity.applySessionRotation）。
+                    IconAction(
+                        def = AppIcons.Rotate,
+                        label = "旋转 90°",
+                        onClick = onRotate
                     )
                     Spacer(Modifier.width(Spacing.s))
                     ExportPill(enabled = !exporting, exporting = exporting, onClick = onExport)
