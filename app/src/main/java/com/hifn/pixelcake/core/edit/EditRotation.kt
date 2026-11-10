@@ -1,6 +1,7 @@
 package com.hifn.pixelcake.core.edit
 
 import com.hifn.pixelcake.core.decode.LinearImage
+import com.hifn.pixelcake.core.edit.retouch.RetouchLayer
 import kotlin.math.max
 
 /**
