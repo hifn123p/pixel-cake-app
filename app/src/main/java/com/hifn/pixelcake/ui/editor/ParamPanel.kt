@@ -745,6 +745,8 @@ private fun PortraitParams(
                 label = "笔刷大小", value = brushRadius,
                 valueRange = 0.005f..0.15f, step = 0.005f, format = { "%.3f".format(it) },
                 onValueChange = onBrushRadiusChange,
+                // 刻意不提交：半径是**工具设置**不是图像参数，进撤销栈会制造
+                // 「画面无变化的历史步骤」。松手不 commit 是与全面板唯一不同之处。
                 onValueChangeFinished = {},
                 onDraggingChange = onDraggingChange
             )
@@ -757,6 +759,7 @@ private fun PortraitParams(
                 label = "瑕疵点半径", value = inpaintRadius,
                 valueRange = 0.002f..0.04f, step = 0.002f, format = { "%.3f".format(it) },
                 onValueChange = onInpaintRadiusChange,
+                // 刻意不提交：同「笔刷大小」——工具设置不进撤销栈。
                 onValueChangeFinished = {},
                 onDraggingChange = onDraggingChange
             )
@@ -1237,9 +1240,12 @@ private fun CurveParams(
     // 曲线本体（UI 3.0 §E）：拖这三个锚点就是改下面那三个数字，两者是同一份数据的
     // 图形/数字两种通道。**没有这一块时用户是在盲调** —— 只看得见「黑场 12」这种数字，
     // 看不见「这条线把输入映射成了什么形状」。
+    // ⚠️ 必须经 onParamChange 写回：setPoints 是纯函数只返回新 EditParams，
+    // 这里若写成 `{ setPoints(it) }`，返回值会被 (List)->Unit 的期望类型静默丢弃
+    // —— 拖动锚点一次都不进状态（图形通道整个失效，只有数字滑块能用）。
     CurveEditor(
         points = points,
-        onPointsChange = { setPoints(it) },
+        onPointsChange = { onParamChange(setPoints(it)) },
         onCommit = onCommit,
         histogram = histogram
     )
@@ -1574,19 +1580,26 @@ private fun EditSlider(
     enabled: Boolean = true
 ) {
     // 双通道调节（UI 3.0）：把本滑块的规格登记进当前组的登记簿 ——
-    // 照片上横拖即可调同一个参数（SideEffect 每次重组都会用最新 value 刷新）。
+    // 照片上横拖即可调同一个参数。登记必须放 **SideEffect**（成功提交的组合才生效）：
+    // 直接在组合期写 `specs`（mutableStateOf）的话，被丢弃的推测性组合也会留下写入 ——
+    // 与 `ParamAdjust.kt` KDoc 声明的「SideEffect，每次重组都会用最新 value 刷新」对齐。
+    // ⚠️ `CompositionLocal.current` 是 @Composable getter（v0.6.0 轮的实锤教训）：
+    // 只能在组合期读、捕获成局部值，不能在 SideEffect lambda 里读。
     // 注册簿为 null 的场合（非编辑器 / 测试）直接跳过；禁用的滑块不登记（见上）。
     if (enabled) {
-        LocalParamAdjust.current?.register(
-            ParamAdjustSpec(
-                label = label,
-                range = min..max,
-                step = step,
-                format = format,
-                apply = apply,
-                value = value,
+        val registry = LocalParamAdjust.current
+        SideEffect {
+            registry?.register(
+                ParamAdjustSpec(
+                    label = label,
+                    range = min..max,
+                    step = step,
+                    format = format,
+                    apply = apply,
+                    value = value,
+                )
             )
-        )
+        }
     }
     ParamSlider(
         label = label,

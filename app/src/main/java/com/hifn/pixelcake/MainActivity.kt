@@ -182,6 +182,10 @@ private fun AppRoot(settings: AppSettings) {
     // ⚠️ **声明必须在本函数的靠前位置**：下面的对象作用域预热 `LaunchedEffect` 会读它。
     // 局部变量按声明顺序可见，放在后面会得到 `Unresolved reference 'imageEpoch'`。
     val imageEpoch = remember { AtomicInteger(0) }
+    // Q5 旋转的写回代次（与 imageEpoch 同口径、各自独立）：旋转是百毫秒级异步，
+    // 发起时同步更新 rotationQuarterTurns —— 连点/撤销/换图/退出都要能作废
+    // 在途旋转的写回，否则状态圈数与实际位图错位（详见 applySessionRotation 处注释）。
+    val rotationEpoch = remember { AtomicInteger(0) }
 
     // 对象作用域的可用性**预热**（批次 5）。
     //
@@ -637,6 +641,9 @@ private fun AppRoot(settings: AppSettings) {
                 imported = dec
                 pristineDecoded = dec
                 rotationQuarterTurns = 0
+                // 在途旋转协程作废（同 editorOnBack 的口径）：编辑器内再导图时，
+                // 旧图的旋转可能还在跑，晚到的写回会把 `imported` 盖回旧图。
+                rotationEpoch.incrementAndGet()
                 srcUri = uri
                 // 异步释放上一张的 ARW 缓存（不阻塞解码收尾；IO 磁盘操作用 IO 调度器）
                 if (staleRaw != null && staleRaw != dec.rawCachePath) {
@@ -654,9 +661,13 @@ private fun AppRoot(settings: AppSettings) {
                 retouchTool = "none"
                 inpaintStrokes = emptyList()
                 inpaintRadius = 0.01f
+                // brushRadius 与 inpaintRadius 同口径复位（编辑器内再导图时同样适用）
+                brushRadius = 0.04f
                 activePresetId = "none"
                 autoMaskNote = ""
                 liquifyNote = ""
+                // 上一张的导出回执不能带进新会话：卡片盖在新照片上、分享的还是旧图 uri
+                exportReceipt = null
                 status = if (dec.linear != null) {
                     EditorStatus(StatusKind.Info, "RAW 已按 16-bit 线性管线载入")
                 } else {
@@ -758,6 +769,10 @@ private fun AppRoot(settings: AppSettings) {
                         imported = null
                         pristineDecoded = null
                         rotationQuarterTurns = 0
+                        // ⚠️ 与 imageEpoch 同一道工序：作废在途旋转协程的写回资格。旋转是
+                        // 百毫秒级异步 —— 若退出后它才算完，会把刚被清空的 `imported`
+                        // 复活成一块无人管理的新位图（泄漏 + 状态错位）。
+                        rotationEpoch.incrementAndGet()
                         srcUri = null
                         retouch = RetouchState()
                         // 对象层与 retouch 同口径一起清（下一次导入本来也会清，这里是为了不让
@@ -767,21 +782,36 @@ private fun AppRoot(settings: AppSettings) {
                         retouchTool = "none"
                         inpaintStrokes = emptyList()
                         inpaintRadius = 0.01f
+                        // brushRadius 与 inpaintRadius 同口径复位：描迹已清、半径却沿用
+                        // 上一张调过的值，是新会话里「一上来画笔粗细就不对」的来源。
+                        brushRadius = 0.04f
                         activePresetId = "none"
                         autoMaskNote = ""
                         liquifyNote = ""
                         renderStamp = 0
+                        // 导出回执 / 状态条是**编辑器会话态**：残留的「已导出」卡会盖在
+                        // 下一张照片上，且卡上的「分享」分享的还是上一张图的 uri；
+                        // 首页 message（= status.text）同理会残留上一会话的编辑器文案。
+                        exportReceipt = null
+                        status = EditorStatus()
                         nav.pop()
     }
     // Q5：会话级旋转 —— 从 pristine 重推导 imported（bitmap + linear 一次性重排，零累积损失），
     // 替换 imported ⇒ 渲染协程 / ML 探测 / 缩略图 / compareBase 全部经 `LaunchedEffect(imported)`
     // 自动重启，全链路同转。导出端：sRGB 在全分辨率解码后预旋转；RAW 在 renderLinearFile 输出后
     // 一次性旋转，蒙版/液化锚点经 EditRotation 逆映射（RotatedMask 装饰器）保持位置一致。
+    //
+    // ⚠️ 旋转是异步写回（百毫秒级），而 `rotationQuarterTurns` 在发起时**同步**更新：
+    // 快速连点会并发多个旋转协程、完成顺序不定 —— 若不加护栏，最后写进 `imported` 的
+    // 可能是较早一次点击的结果，状态里的圈数与实际位图错位，导出端的蒙版/液化锚点
+    // 映射（全部按 rotationQuarterTurns 计算）就会「所见非所得」。护栏沿用本文件
+    // `imageEpoch` 的代次口径：每次发起推进代次，只有**最新代次**的协程允许写回。
     val applySessionRotation: (Int) -> Unit = { q ->
         val pristine = pristineDecoded
         val target = ((q % 4) + 4) % 4
         if (pristine != null && target != rotationQuarterTurns) {
             rotationQuarterTurns = target
+            val myEpoch = rotationEpoch.incrementAndGet()
             status = EditorStatus(StatusKind.Info, "正在旋转…")
             scope.launch {
                 val rotatedBase = withContext(Dispatchers.Default) {
@@ -793,10 +823,12 @@ private fun AppRoot(settings: AppSettings) {
                         Bitmap.createBitmap(bmp, 0, 0, bmp.width, bmp.height, m, true)
                     }
                 }
+                if (rotationEpoch.get() != myEpoch) return@launch
                 val rotatedLinear = pristine.linear?.let { lin ->
                     withContext(Dispatchers.Default) { lin.rotateQuarter(target) }
                 }
                 // 替换 imported（保持 rawCachePath/isRaw/mime）——所有 keyed-on-imported 的副作用自动重启
+                if (rotationEpoch.get() != myEpoch) return@launch
                 imported = DecodedImage(
                     bitmap = rotatedBase,
                     mime = pristine.mime,

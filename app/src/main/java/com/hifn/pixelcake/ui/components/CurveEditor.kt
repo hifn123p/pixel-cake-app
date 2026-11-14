@@ -52,6 +52,9 @@ import kotlin.math.roundToInt
  * 拖第二下用的还是第一次的旧值（**拖动看起来能用、但每次都是从原值起算**）。
  * `pointerInput(points)` 又会每帧重启手势、把正在进行的拖动打断。
  * 正确解法是 `rememberUpdatedState` —— 闭包稳定、读到的永远是最新值。
+ * **回调（onPointsChange / onCommit）与数据是同一个坑的两面**：闭包捕获的旧回调
+ * 会在切页签后写错通道、用旧 params 做 copy 回滚其它调整 —— 两者都必须走
+ * `rememberUpdatedState`，只修数据不修回调等于没修完。
  *
  * @param points 三个锚点（`ToneCurve.points()` 的产物），x 固定、只有 y 有意义
  * @param histogram 当前渲染图的 RGB 直方图；传 null 时不画底（首帧 / 读取失败）
@@ -66,6 +69,12 @@ fun CurveEditor(
 ) {
     // 闭包里必须读「最新」的 points：见类 KDoc 最后一段。
     val latestPoints = rememberUpdatedState(points)
+    // ⚠️ 回调与数据是同一个坑的两面：pointerInput(Unit) 的闭包若直接捕获
+    // onPointsChange / onCommit，切换页签（Luma→Red）或父级重组后拖动仍会调
+    // 首次组合的旧 lambda —— 写错通道、用旧 params 做 copy 把其它调整回滚。
+    // 与 latestPoints 同一道 rememberUpdatedState 解法（数据修过、回调漏了的那半）。
+    val latestOnPointsChange = rememberUpdatedState(onPointsChange)
+    val latestOnCommit = rememberUpdatedState(onCommit)
     // 当前按住的是哪个锚点。null = 没在拖。
     var active by remember { mutableStateOf<ToneCurve.Anchor?>(null) }
 
@@ -93,7 +102,7 @@ fun CurveEditor(
                     },
                     onDragEnd = {
                         active = null
-                        onCommit()
+                        latestOnCommit.value()
                     },
                     onDragCancel = { active = null }
                 ) { change, _ ->
@@ -109,7 +118,7 @@ fun CurveEditor(
                     }
                     val v = raw.coerceIn(r.start.roundToInt(), r.endInclusive.roundToInt())
                     val p = latestPoints.value
-                    onPointsChange(
+                    latestOnPointsChange.value(
                         ToneCurve.points(
                             black = if (anchor == ToneCurve.Anchor.Black) v else ToneCurve.black(p),
                             mid = if (anchor == ToneCurve.Anchor.Mid) v else ToneCurve.mid(p),

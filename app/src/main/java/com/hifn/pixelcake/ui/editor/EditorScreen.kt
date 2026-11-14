@@ -300,11 +300,11 @@ fun EditorScreen(
     onPreset: (Preset) -> Unit,
     onLayersChange: (List<ObjectLayer>) -> Unit,
     onLayersCommit: () -> Unit,
-    // ⚠️ 2026-11-01：顶栏的「重置」按钮已移走，本参数因此**暂时没有使用点**。
-    // 保留它而不是删掉，是因为它与历史面板的「起始（未编辑）」**不等价**：
-    // 后者只恢复 `EditSnapshot`（参数 / 精修 / 图层），而 `onReset` 在上层还可能顺带
-    // 清掉运行时的画笔蒙版与预设选中态。要不要给它一个新入口（历史面板底部 / 设置页）
-    // 属于产品决策，未定之前不要静默删除 —— 删了就等于悄悄丢掉「清蒙版」这条路。
+    // 重置全部（参数 + 精修 + 图层 + 蒙版），入口在历史面板底部（U6 接线，MainActivity 实现）。
+    // ⚠️ 历史备注：顶栏的重置按钮在 2026-11-01 移除时本参数一度没有使用点，当时的审计
+    // 结论是「不要静默删除」—— 后由 U6 在历史面板给了新入口，这条「保留」决策被验证是对的。
+    // 它与历史面板的「起始（未编辑）」不等价：后者只恢复 EditSnapshot，onReset 还会清
+    // 运行时的画笔蒙版与预设选中态。
     onReset: () -> Unit,
     onUndo: () -> Unit,
     onRedo: () -> Unit,
@@ -349,6 +349,16 @@ fun EditorScreen(
     var pickNote by remember { mutableStateOf("") }
     // 拾取只对「可分层」的分类有意义（细节/效果是整幅阶段；人像/预设与作用域无关）
     val pickAvailable = objectScopesAvailable && objectMasks != null && category.scopeMode.layerable
+    // ⚠️ 拾取的自愈：pickActive 为 true 期间若 pickAvailable 翻 false（切到
+    // 整幅/无关分类、或模型变为不可用），准星按钮会随之消失（onTogglePick = null
+    // / 作用域行整个不渲染）—— 不复位的话压暗层 + 提示胶囊留在屏上且**没有任何
+    // 出口**，onPick 也已变 null，单击不再有响应。这里按「能力在，模式才在」复位。
+    LaunchedEffect(pickAvailable) {
+        if (!pickAvailable) {
+            pickActive = false
+            pickNote = ""
+        }
+    }
 
     // —— 预览缩放 / 平移（双指捏合 ≤8x、双击 2.5x、单指平移；换图整体复位）——
     var previewZoom by remember(original) { mutableStateOf(1f) }
@@ -1676,6 +1686,8 @@ internal fun fitContentRect(box: IntSize, image: IntSize): Rect {
  *
  * ⚠️ pointerInput 的 key 带 boxPx/contentSize（首帧零尺寸），**绝不**带 zoom/pan
  * （平移中每帧变 ⇒ 协程重启 ⇒ 平移断掉）——它们经 readZoom/readPan 读活值。
+ * key 里的 `onPick != null` 同理：拾取回调是普通 lambda 参数，若拾取可用性
+ * 翻转而 key 不变，重启时机不存在的闭包会一直捕获旧值（null 或旧 handler）。
  */
 private fun Modifier.previewGestures(
     retouchTool: String,
@@ -1693,7 +1705,7 @@ private fun Modifier.previewGestures(
     onBrushStroke: (Float, Float) -> Unit,
     onInpaintStroke: (Float, Float) -> Unit,
     onPressChanged: (Boolean) -> Unit
-): Modifier = pointerInput(retouchTool, boxPx, contentSize, pickMode, onParamAdjust != null) {
+): Modifier = pointerInput(retouchTool, boxPx, contentSize, pickMode, onParamAdjust != null, onPick != null) {
     val slopPx = 8.dp.toPx()
     var lastTapUp = 0L
     awaitEachGesture {

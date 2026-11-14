@@ -44,6 +44,7 @@ description: 从本地工作记忆（.workbuddy/memory）提炼的、跨会话�
 | §15 | 用户预设库（v0.6.6） |
 | §16 | 导航层 / 模型中心 / 预设分享（v0.7.0） |
 | §17 | Q5 手动旋转 + v0.7.x CI 排红 + 当前发版状态（v0.7.1） |
+| §18 | UI↔接线全量审计批次（v0.7.1 追加轮）：曲线拖动 P1、旋转代次、四类接线缺陷与四条新纪律 |
 
 > §9~§17 为按版本逐节追加，目录不生成锚点；用 `## §N` 全文搜索定位，避免中文锚点失效成为死链。
 
@@ -1252,3 +1253,52 @@ round-trip / capture 剥离描迹 / asPreset 映射 / 未知键容忍 / Store �
 - **M-2/T5** release 变体（R8 + 资源收缩、native 优化级别）真机性能基线；
 - `docs/Github_CI.md` 待 v0.7.1 全绿后按 §5.4 覆盖重写。
 
+
+## §18 UI↔接线全量审计批次（v0.7.1 追加轮，2026-11-15）
+
+> 触发：项目所有人指出「UI 设计有问题」，要求按审计结果对代码做全量修复。本轮做了一次
+> 「UI 控件 ↔ 回调链」全量审计（两个子代理分域扫描 EditorScreen/ParamPanel/组件 与
+> MainActivity/CameraPanel/设置壳层，逐条源码验证后修复），同时核实了 `Github_CI.md` §7 的遗留项。
+
+### 18.1 审计口径与覆盖面
+
+四类缺陷模式：A=签名声明了回调但函数体从不调用；B=带默认值的参数改变行为但调用点没传
+（功能惰性）；C=effect/pointerInput 的 key 漏闭包实际读取的量（旧值捕获）；D=空壳开关/空回调体。
+EditorScreen 40+ 回调、MainActivity→EditorScreen 全部实参、Home/Camera/Settings 全部可点控件逐一
+核对完毕，无 A/B 类残留（本轮修掉的除外）。
+
+### 18.2 已修清单（6 文件，+111/−24）
+
+| # | 级 | 缺陷 | 修法 |
+|---|---|---|---|
+| 1 | **P1** | **曲线本体拖动完全无效**：`CurveParams` 传 `onPointsChange = { setPoints(it) }`，`setPoints` 返回 `EditParams` 被期望类型 `(List)->Unit` **静默丢弃** —— 拖锚点从不写状态（自 50929ef 引入起即如此），且拖完还推一条空撤销快照 | `onParamChange(setPoints(it))`，与同文件 EditSlider 的既有模式对齐 |
+| 2 | P2 | **CurveEditor 只修了数据的旧值捕获**：`pointerInput(Unit)` 用 rememberUpdatedState 修了 `points`，但 `onPointsChange/onCommit` 仍是首组合旧 lambda —— 修 #1 后立即引爆（切页签写错通道、旧 params 回滚其它调整） | 两个回调同上 rememberUpdatedState |
+| 3 | P2 | **旋转连点竞态**：`applySessionRotation` 同步改圈数、异步写回 `imported`，完成顺序不定 ⇒ 圈数与位图错位 ⇒ 导出端蒙版/锚点映射所见非所得 | 新增 `rotationEpoch`（与 imageEpoch 同口径）；发起/撤销/换图/退出四处推进代次，协程写回前两处验代次 |
+| 4 | P2 | **退出编辑器不清会话态**：`exportReceipt` 残留 ⇒ 「已导出」卡盖在新照片上且分享的是旧图 uri；`status` 残留 ⇒ 首页 message 是上一会话文案 | editorOnBack 与 openInEditor（编辑器内再导图）两处复位清单补齐 |
+| 5 | P2 | **拾取模式卡死**：pickActive 期间 `pickAvailable` 翻 false（切整幅分类/模型不可用）后准星消失、压暗层无出口、onPick 变 null 但 pointerInput 不重启 | `LaunchedEffect(pickAvailable)` 自愈复位 + previewGestures key 补 `onPick != null` |
+| 6 | P2 | **相机单张「取消」是空壳**：按钮条件 `busy && progress!=null` 在单张拉取时也成立，但 `batchCancel` 唯一消费者在批量路径 | 新增 `batchRunning` 门控：取消按钮只在批量场景显示；单张开跑前卫生复位 batchCancel |
+| 7 | P2 | **系留切预设重播种**：轮询 effect key 含 `defaultPresetId/customPresets`，切预设即重启即重播种基线 ⇒ 在途新片被记为已知而**静默漏导** | key 收敛为 `(session, tetherOn)`；预设经 `tetherPreset`（rememberUpdatedState）每轮现读 |
+| 8 | P3 | `brushRadius` 跨会话不清（与 inpaintRadius 不对称） | 两处复位清单补 `brushRadius = 0.04f` |
+| 9 | P3 | EditSlider 在组合期直接写登记簿 `specs`（注释自称 SideEffect） | 真的放进 `SideEffect {}`，与 ParamAdjust KDoc 对齐 |
+| 10 | P3 | 半径滑块 `onValueChangeFinished = {}` 无解释；onReset KDoc 声称「没有使用点」但 U6 已接线；ModelCenterSheet 刷新文案失实 | 三处注释/文案与实现对齐 |
+
+### 18.3 对 §17 / Github_CI §7 的两条修正
+
+- **`Github_CI.md` §7「`ObjectMasks.scopeAt` / `onPick` 未接线」是陈旧记录**：接线在 v0.6.x 批次
+  已落地（准星按钮 → pickActive → previewGestures → scopeAt → selectScope 全链路在位），本轮复核确认。
+  真实余留的是边界态缺陷（上表 #5），已修。
+- **§17.3 表中「`docs/Github_CI.md` 停在 v0.7.0」一行已被 faab9a1 的覆盖重写解除**；tag / Release
+  两项仍待项目所有人拍板（本轮不代做发版决策）。
+
+### 18.4 新纪律（四条）
+
+1. **「返回值丢弃」型断线编译器不报错**：把返回 `EditParams` 的纯函数直接塞进 `(…)->Unit`
+   回调槽位，Kotlin 静默丢弃返回值 —— 表现为「控件在、功能死」。判据：**每个回调 lambda 的
+   函数体必须以「写回」结尾**；`{ pureFn(it) }` 是嫌疑写法，见到就查。
+2. **rememberUpdatedState 有两面**：`pointerInput(Unit)` 这类「闭包只建一次」的场景，捕获的
+   **数据和回调**都要过 rememberUpdatedState 或纳入 key —— CurveEditor 第一轮只修了数据、
+   本轮才补回调，同一坑踩两次 = 纪律要写成两条面。
+3. **「能力在，模式才在」**：由可用性开关进入的临时模式（拾取/对比/拖高），能力翻 false 时必须
+   自愈复位 —— 否则退出按钮随能力一起消失，模式永久卡死（用户只能杀 App）。
+4. **异步写回必须有代次**：凡「同步改状态 A + 异步写回状态 B」的链路（渲染/旋转/系留轮询），
+   写回前必须验代次；**退出与换图两个入口都要作废在途代次**，否则晚到的写回复活已清理的状态。

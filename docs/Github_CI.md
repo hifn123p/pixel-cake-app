@@ -188,9 +188,33 @@ git push https://github.com/hifn123p/pixel-cake-app.git main
 - **TalkBack 走查**；v0.6.6 / v0.7.0 / **v0.7.1（Q5 手动旋转）** 真机验收；
 - **Q5 手动旋转**：代码与单测已落地（`EditRotationTest` 8 例 + `LinearImageRotateTest` 5 例），
   判据见 `DEV_PLAN.md` §10、`ENGINEERING_NOTES.md` §17，**仅余真机验收**；
-- **`ObjectMasks.scopeAt` / `previewGestures(onPick)` 已入库但未接线**：
-  调用点没传 `onPick`，功能是惰性的；接线时 `pointerInput` 的 key 里没有 `onPick`，
-  直接捕获会拿到首次组合的旧值（同 `CurveEditor` 的坑），需配 `rememberUpdatedState`。
+- **v0.7.1 tag / Release**：见 `ENGINEERING_NOTES.md` §17.3，待项目所有人拍板。
+
+### 7.1 对上一版报告一条遗留项的更正（2026-11-15 审计轮）
+
+上一版 §7 写的「**`ObjectMasks.scopeAt` / `previewGestures(onPick)` 已入库但未接线**」是
+**陈旧记录，不成立**：本轮全量复核确认接线在 v0.6.x 批次已落地
+（准星按钮 `ParamScopeBar` → `pickActive` → `previewGestures` 单击命中 → `scopeAt` → `selectScope`
+全链路在位，`MainActivity:894` 传入 `objectScopesAvailable/objectMasks`）。
+当时真实存在的是**边界态缺陷**（拾取模式在 `pickAvailable` 翻 false 后压暗层无出口、
+`onPick` 旧值捕获窗口），已随本轮审计批次修复 —— 台账见 `ENGINEERING_NOTES.md` §18。
+
+### 7.2 UI↔接线审计批次（2026-11-15）修复摘要
+
+「UI 控件 ↔ 回调链」全量审计（四类缺陷模式逐控件反查，覆盖 EditorScreen 40+ 回调、
+MainActivity 全部实参、Home/Camera/Settings 全部可点控件），修复 6 文件（+111/−24）：
+
+| 级 | 内容 |
+|---|---|
+| **P1** | 曲线本体拖动完全无效（`onPointsChange = { setPoints(it) }` 的返回值被 `(List)->Unit` 静默丢弃）→ 经 `onParamChange` 写回；CurveEditor 两个回调补 rememberUpdatedState |
+| P2 | 旋转连点竞态（`rotationEpoch` 代次护栏，发起/撤销/换图/退出四处作废在途写回） |
+| P2 | 退出/换图不清 `exportReceipt`/`status`（旧图回执卡盖新照片、分享旧 uri）|
+| P2 | 拾取模式卡死陷阱（自愈复位 + `pointerInput` key 补 `onPick != null`） |
+| P2 | 相机单张「取消」空壳按钮（`batchRunning` 门控只批量显示）；系留切预设重播种静默漏导（effect key 收敛 + 预设每轮现读） |
+| P3 | `brushRadius` 跨会话复位、EditSlider 登记进 SideEffect、三处注释/文案对齐 |
+
+静态闸门：selftest 通过，双根扫描 144 文件 unbalanced/import/arity/CE 全 0。
+本批次编译/单测验证待 CI。
 
 ---
 

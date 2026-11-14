@@ -59,7 +59,9 @@ fun ModelCenterSheet(onDismiss: () -> Unit) {
             Column {
                 Text("模型中心", style = MaterialTheme.typography.displaySmall)
                 Text(
-                    "端侧推理的实时状态（只读）。状态在每次导入照片后刷新。",
+                    // 口径与实现一致：快照在**打开本页时**取一次（本页刻意无刷新按钮，
+                    // 见类 KDoc「诊断页只读不动」）；本会话禁用模型后重开本页即可看到新状态。
+                    "端侧推理的状态快照（只读）。每次打开本页时重新读取；关闭再打开即可看到最新状态。",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

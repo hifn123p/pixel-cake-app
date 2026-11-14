@@ -30,6 +30,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -129,6 +130,12 @@ fun CameraPanel(
     }
     val allPresets = remember(customPresets) { Presets.ALL + customPresets.map { it.asPreset() } }
     val batchCancel = remember { AtomicBoolean(false) }
+    // 「取消」按钮只在**批量**场景显示：单张拉取路径没有取消消费者（CameraSession.download
+    // 无取消参数），曾出现过「拉单张时也显示取消、点了毫无效果」的空壳按钮。
+    var batchRunning by remember { mutableStateOf(false) }
+    // 系留轮询每轮现读的最新预设：切预设（含自定义预设库重载）**不得**重启轮询 effect ——
+    // 重启会重跑基线播种，把在途/刚落卡的新片记为已知而静默漏导（见轮询 effect 的注释）。
+    val tetherPreset = rememberUpdatedState(allPresets.firstOrNull { it.id == defaultPresetId })
 
     // 系留仪表盘快照：连接后拉一次（电量/ISO/光圈）
     LaunchedEffect(session) {
@@ -139,7 +146,7 @@ fun CameraPanel(
 
     // —— 系留轮询（UI3.0 §J/K/L）：检测新拍摄 → 下载 → 套预设 → 导出 ——
     //
-    // P1-5 K2/K3 校准版，四件事一起修：
+    // P1-5 K2/K3 校准版，五件事一起修：
     // ① **开系留先播种基线**：卡上已有对象全部记为已知 —— 否则把开关合上之前拍的旧片
     //    全部当成「新片」重新下载导出一遍；
     // ② **坏对象记账**：读不到 Info / 不是照片的对象也进 knownHandles —— 否则它会永远
@@ -147,10 +154,12 @@ fun CameraPanel(
     // ③ **位图回收进 finally**：Exporter 抛出时位图不能泄漏（导出是 OOM 高发点）；
     // ④ **消费 renderIntoSrgb 返回值**：false = 尺寸不匹配，绝不能把一块从未被写过的
     //    黑位图当成品导出。
-    LaunchedEffect(session, tetherOn, defaultPresetId, customPresets) {
+    // ⑤ **key 只含 (session, tetherOn)**：预设经 tetherPreset 每轮现读。曾把
+    //    defaultPresetId/customPresets 放进 key —— 切预设即重启 effect 即重跑播种，
+    //    重启瞬间在途/刚落卡的新片被记为「已知」而静默漏导（arrivalLog 无任何解释）。
+    LaunchedEffect(session, tetherOn) {
         val sn = session ?: return@LaunchedEffect
         if (!tetherOn) return@LaunchedEffect
-        val preset = allPresets.firstOrNull { it.id == defaultPresetId } ?: return@LaunchedEffect
         val storageId = sn.storageIds.firstOrNull() ?: return@LaunchedEffect
         // 到达流日志上界：P2 债里「arrivalLog 无上界」的最小修 —— 界面只显示最后 5 条，
         // 内存里也只留最后 30 条，长会话不会无限增长。
@@ -173,6 +182,11 @@ fun CameraPanel(
         }
         while (tetherOn) {
             delay(3000)
+            // 每轮现读最新预设（tetherPreset 经 rememberUpdatedState）：effect 的 key 只有
+            // (session, tetherOn)，切预设 / 自定义预设库重载不会重启本 effect —— 重启 =
+            // 重跑基线播种，会把在途/刚落卡的新片记成「已知」而**静默漏导**。
+            // 未选预设（不应发生，有默认值）时跳过本轮，轮询不退出。
+            val preset = tetherPreset.value ?: continue
             try {
                 val query = sn.objectHandles(storageId)
                 // ②/K3：新片收集与坏对象记账都在 TetherProcessor 里（有单测钉住）。
@@ -619,6 +633,9 @@ fun CameraPanel(
                             TextButton(
                                 onClick = {
                                     busy = true
+                                    // 卫生复位：单张路径虽不读 batchCancel，但残留 true 会让
+                                    // 下一批批量一开跑就「已被取消」。清在源头，不赌时序。
+                                    batchCancel.set(false)
                                     phase = "正在拉取 ${photo.filename}…"
                                     scope.launch {
                                         // D2（审计：第 4 处）：下载失败/取消都不能把 busy 卡死。
@@ -703,6 +720,7 @@ fun CameraPanel(
                     Button(
                         onClick = {
                             busy = true
+                            batchRunning = true
                             batchCancel.set(false)
                             batchLines = emptyList()
                             progress = null
@@ -742,6 +760,7 @@ fun CameraPanel(
                                 } finally {
                                     progress = null
                                     busy = false
+                                    batchRunning = false
                                     phase = ""
                                 }
                             }
@@ -801,7 +820,10 @@ fun CameraPanel(
             )
         }
 
-        if (busy && progress != null) {
+        // 取消只承诺「批量」语义（batchCancel 的唯一消费者是 CameraBatch.run）：
+        // 单张拉取（下载无取消参数）不显示这个按钮 —— 显示一个点了没反应的取消
+        // 比没有取消更糟（诚实界面纪律）。
+        if (busy && progress != null && batchRunning) {
             TextButton(
                 onClick = { batchCancel.set(true) },
                 modifier = Modifier.padding(top = Spacing.xs)
