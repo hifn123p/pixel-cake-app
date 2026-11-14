@@ -74,10 +74,18 @@ class EditRotationTest {
 
     @Test
     fun mapAnchorToRender_routesIntoUnrotatedFrame() {
-        // 锚点在旋转后空间 (49, 0)（q1）→ 未旋转渲染空间 (0, 49-1-0) = (0, 49)
-        val m = EditRotation.mapAnchorToRender(49f, 0f, 49f, 0f, 1, w, h)
-        assertEquals(0f, m[0], 1e-4f)
-        assertEquals(49f, m[1], 1e-4f)
+        // 口径来自 mapMaskPixel 的 q1 公式（同文件已有用例钉死）：
+        //   未旋转渲染 (px, py) -> 旋转后 (h-1-py, px)
+        // 取逆即 旋转后 (rx, ry) -> 未旋转 (ry, h-1-rx)，h = 50。
+        //
+        // 两个角各验一次，避免只测一个角时「x/y 写反」也能通过。
+        val topLeft = EditRotation.mapAnchorToRender(0f, 0f, 0f, 0f, 1, w, h)
+        assertEquals(0f, topLeft[0], 1e-4f)
+        assertEquals(49f, topLeft[1], 1e-4f) // (ry, h-1-rx) = (0, 49)
+
+        val topRight = EditRotation.mapAnchorToRender(49f, 0f, 49f, 0f, 1, w, h)
+        assertEquals(0f, topRight[0], 1e-4f)
+        assertEquals(0f, topRight[1], 1e-4f) // (0, 50-1-49) = (0, 0)
     }
 
     @Test
