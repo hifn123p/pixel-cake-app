@@ -2,7 +2,7 @@
 title: 像素蛋糕 App — 工程笔记（硬约束与踩坑清单）
 status: active
 created: 2026-10-06
-updated: 2026-10-30
+updated: 2026-11-14
 project: D:\AI_Project
 description: 从本地工作记忆（.workbuddy/memory）提炼的、跨会话持久有效的工程纪律——仓库与工具链约定、推送/CI/发版实操、Compose 布局陷阱、渲染/并发纪律、设置与构建。这些条目每一条都是被真机 bug 或一次返工逼出来的，改动相关代码前请先读完对应小节。
 ---
@@ -12,12 +12,16 @@ description: 从本地工作记忆（.workbuddy/memory）提炼的、跨会话�
 > **这份文档的存在理由**：本地工作记忆（`.workbuddy/memory/`）在 `.gitignore` 里，**不入库**。
 > 换机器 / 换 IDE 之后那份记忆会断档，于是把**跨会话持久有效**的部分提炼到这里，随仓库一起走。
 >
-> 阅读顺序建议：**§1 先看**（它决定了「改完谁来编译」这个根本前提），然后按需要跳到 §2~§5。
+> 阅读顺序建议：**§1 先看**（它决定了「改完谁来编译」这个根本前提），然后按需要跳到 §2~§5；
+> §7 起是按版本追加的审查 / 落地台账。
 > **本文每一条都是被一次真机 bug 或一轮返工逼出来的**，不是风格偏好 —— 看到「⚠️」请当作硬约束。
 >
-> 相关文档：[`DEV_PLAN.md`](DEV_PLAN.md)（计划）、[`PHASE_DESIGN_HISTORY.md`](PHASE_DESIGN_HISTORY.md)（阶段设计存档）、
-> [`UI_DESIGN.md`](UI_DESIGN.md)（界面规范 + 真机反馈修正表 §4.0.x）、[`TONING_DESIGN.md`](TONING_DESIGN.md)、
-> [`OBJECT_TONE_DESIGN.md`](OBJECT_TONE_DESIGN.md)、[`Github_CI.md`](Github_CI.md)（最近一次 CI 报告）。
+> 相关文档：[`DEV_PLAN.md`](DEV_PLAN.md)（计划）、[`UI_DESIGN.md`](UI_DESIGN.md)（界面规范 + §4.0.x 修正表）、
+> [`TONING_DESIGN.md`](TONING_DESIGN.md)、[`OBJECT_TONE_DESIGN.md`](OBJECT_TONE_DESIGN.md)、
+> [`Github_CI.md`](Github_CI.md)（**v0.7.0 发版 CI 报告，历史快照**）。
+> ⚠️ 阶段设计存档 `PHASE_DESIGN_HISTORY.md` **不在 `docs/`**：已按文档政策移入本地
+> `docs/archive/`（不入库，见其 `README.md`）；代码 KDoc 里的 `F01~F24` / `R01~R10` / `D01~D10`
+> 编号仍按原文引用，溯源一律去 `docs/archive/`。此处不再放相对链接（它会指向已删文件）。
 
 ## 目录
 
@@ -29,8 +33,19 @@ description: 从本地工作记忆（.workbuddy/memory）提炼的、跨会话�
 | [§4](#4-设置模型与依赖) | 设置、模型与依赖 |
 | [§5](#5-构建ci-与发版) | 构建、CI 与发版 |
 | [§6](#6-排障姿态三句话) | 排障姿态（三句话） |
-| [§7](#7-全量代码审查2026-10-07的产物与新纪律) | 第一轮全量审查（2026-10-07）的产物与新纪律 |
+| [§7](#7-全量代码审查2026-10-07的产物与新纪律) | 全量代码审查（2026-10-07）的产物与新纪律 |
 | [§8](#8-第二轮全量审查2026-10-25的产物与新纪律) | 第二轮全量审查（2026-10-25）的产物与新纪律 |
+| §9 | UI 3.0 改版审计（2026-11-01）：规范真值、三次核对、26/48dp 热区冲突 |
+| §10 | 分割对比（2026-11-01） |
+| §11 | 曲线本体（2026-11-01） |
+| §12 | 自适应亮档 + 导出回执 + 历史丝带（2026-11-01） |
+| §13 | 外部审计整改批次（v0.6.4） |
+| §14 | 审计剩余项清账批次（v0.6.5） |
+| §15 | 用户预设库（v0.6.6） |
+| §16 | 导航层 / 模型中心 / 预设分享（v0.7.0） |
+| §17 | Q5 手动旋转 + v0.7.x CI 排红 + 当前发版状态（v0.7.1） |
+
+> §9~§17 为按版本逐节追加，目录不生成锚点；用 `## §N` 全文搜索定位，避免中文锚点失效成为死链。
 
 ---
 
@@ -59,6 +74,13 @@ description: 从本地工作记忆（.workbuddy/memory）提炼的、跨会话�
 - 发版规则：CI 五个 job，其中 `Publish GitHub Release` **只在 tag 上触发**（发版两步走见 §5.4）。
 
 ### 1.3 本地静态检查（唯一可用的两道闸门）
+
+> **订正（2026-11-14）**：①② 是脚本**最初**的两道检查；后来 §14.2 又加了
+> `catch(Throwable)` 的 `CancellationException` 处理闸门，脚本另有反向引用检查
+> （`check_used_classes`，当前只报告、不计入退出码）。标题保留「两道」是为不破坏锚点，
+> 实际请以 §7.1 的 `--selftest` 输出与脚本 `main()` 为准。
+> ⚠️ 该脚本在 `.workbuddy/tools/` 下，**未入库、CI 也不调用它**；
+> 它只能证明语法树闭合与符号大致对得上，**证明不了名字解析**（`README.md` 已同步）。
 
 - **① 模板感知的栈式括号配平**：逐类型计数对 `([)]` 这种交叉错配会**假绿**；
   朴素「剥字符串再数」对 Kotlin 模板 `"${x ?: "?"}"` 也**假绿**。
@@ -488,7 +510,9 @@ GIT_SSH_COMMAND="ssh -o StrictHostKeyChecking=no -o ConnectTimeout=20 -p 443 -o 
 
 ### 5.5 已发布的 tag
 
-`v0.1.0` → `v0.5.0` **全部齐全**（`v0.4.3` / `v0.4.4` / `v0.4.5` / `v0.4.6` / `v0.4.7` / `v0.5.0` 均已发布）。
+`v0.1.0` → `v0.7.0` **全部齐全**（共 22 个 tag：`v0.5.1` / `v0.6.0`~`v0.6.6` / `v0.7.0` 均已发布）。
+⚠️ **`v0.7.1` 尚未打 tag**：`app/build.gradle.kts` 已是 `versionCode 23 / versionName 0.7.1`，
+但 `git tag --points-at HEAD` 为空、`git describe` = `v0.7.0-15-gf578559`。见 §17。
 
 - `v0.4.0` 调色批次 1~4（81 项）；`v0.4.1` 批次 5 对象作用域；
   `v0.4.4` UI Redesign v2.0；`v0.4.5` 细部位美容 + 44 套分类预设 + 追色 mono 去色 + 曲线/直方图；
@@ -508,6 +532,9 @@ A2 涂抹落点 / A1 导出内存日志 / 自动蒙版（P1p-1c）/ 人脸锚点
 预览缩放（≤8x / 平移边界 / 双击 2.5x 锚点）、调色菜单 7→6 有无漏项、LUT 是否已被「预设 → 滤镜」接管、
 RGB 直方图是否挂在「明暗」页、字号 28→24 / 18→16 在小屏是否挤、ARW 超大预览候选回退能否打开。
 **P3（NAS Docker 化 Rust 引擎）未启动**。
+
+⚠️ **本节是早期批次的历史清单，已统一收敛到 `DEV_PLAN.md` §10**：那里补了 v0.6.4 / v0.7.0 /
+v0.7.1 的验收判据。两处不要再各自维护一份，以 §10 为准。
 
 ### 5.7 CI 红了怎么读（判据 + 常见误判）
 
@@ -545,6 +572,10 @@ RGB 直方图是否挂在「明暗」页、字号 28→24 / 18→16 在小屏是
 > 也就是说下面每一条缺陷都**通过了当时所有自动化闸门**。
 
 ### 7.1 本地两道闸门现在住在 `.workbuddy/tools/kotlin_gates.py`
+
+> **订正（2026-11-14）**：除 §1.3 的两道外，脚本现含 **CE 处理闸门**（§14.2）与
+> **反向引用检查**；`README.md` 的「项目简介 → 接手者请先读」已按现状表述。
+> 脚本位于 `.workbuddy/`，**不入库、CI 不调用** —— CI 才是唯一的编译器。
 
 §1.3 要求「模板感知括号配平 + 跨文件 import / 调用点核对」，但又说脚本放在 `%TEMP%`
 会被清掉。现在固定放在 **`.workbuddy/tools/kotlin_gates.py`**（该目录已被 `.gitignore`
@@ -1043,7 +1074,12 @@ UI 层不需要再判断一次。
 2. **持久化格式的 `version` 必须全量编码**：`encodeDefaults = false` 时等于默认值的 version 不会写出，升版本后旧文档被静默解码成新版本号，迁移从根上失效。这个坑在 T1 落地当天就被单测设计阶段抓到。
 3. **「空作用域」是可用性判据不是渲染判据**：渲染侧全 0 蒙版是合法恒等层；只有 UI 入口（chip 禁用）用它。`coveredScopes` 读的是**原始概率**，与网格构建（求和→羽化→平滑）共用同一份缓存但口径独立。
 
-### 13.3 明确**没做**（后续批次，勿当作已完成）
+### 13.3 明确**没做**（v0.6.4 时点快照，勿当作当前状态）
+
+> **销账（2026-11-14 复核）**：除最后一条 M-2/T5 外，本节各项已在 v0.6.5（§14.1）落地 ——
+> B1/B2/B4 内存项、E1/E3(b) 协议项、T2/T3/T4 架构与无障碍、`catch(Throwable)` CE 静态闸门。
+> 保留原文是为了让「当时为什么没做」可追；**当前状态以 §14 / §16 / §17 为准**。
+> M-2/T5（release 变体真机性能基线）**至今仍未闭环**，见 §17。
 
 - B1/B2/B5/B6 内存项（`DEV_PLAN §6.2` 档位缓解实装、笔刷 FloatGrid 化）—— 需真机 memorySnapshot 基线；
 - E1 属性码撞码 / PTP 诊断上屏；
@@ -1092,7 +1128,11 @@ UI 层不需要再判断一次。
 - **新测试 5 组**：TetherProcessorTest(5) / EditorSessionLifecycleTest(4) / RawMemBudgetTest(4) /
   DitherTest(3) + 既有测试全绿。依赖新增 `kotlinx-coroutines-test`（仅测试）。
 
-### 14.3 明确后置（需真机/需视觉，非遗漏）
+### 14.3 明确后置（v0.6.5 时点快照，非遗漏）
+
+> **销账（2026-11-14 复核）**：Q5 手动旋转 → **v0.7.1 已落地**（§17）；T2 完整形态 +
+> 独立模型中心页 → **v0.7.0 已落地**（§16）。仍未闭环：**Q4 热区 36dp 手感**、
+> **Q7 首页渐变视觉**、**M-2/T5 release 变体性能基线** —— 这三项都需真机，不是代码缺口。
 
 - **Q4 热区** 26/36/48dp 折中档（36dp）—— 必须真机试手感；
 - **Q5 手动旋转工具** —— 需要 EditSnapshot 契约扩展 + 三条渲染入口几何化，单独立项；
@@ -1126,6 +1166,89 @@ UI 层不需要再判断一次。
 - 系留：默认修图参数 chips 加自定义项；`LaunchedEffect` 键补 `customPresets`（晚加载不漏）。
 - **删除联动**：删除当前生效的自定义预设 → `activePresetId` 回 "none"。
 
-### 15.3 单测（8 断言，`CustomPresetsTest`）
+### 15.3 单测（9 断言，`CustomPresetsTest`）
 
 round-trip / capture 剥离描迹 / asPreset 映射 / 未知键容忍 / Store 存读 / 缺文件空 / 坏文件留证 / 原子写无 tmp 残留。
+
+> 数字订正（2026-11-14）：`git grep -c @Test` 实测 9 条，原写「8 断言」是落地时的笔误。
+
+## §16 导航层、模型中心与预设分享（v0.7.0，2026-11-08）
+
+> 本节补齐此前 `Github_CI.md` 里挂着的「§16 待补」。证据 = 仓库内文件与 `git log`，
+> CI run 结论转引自 `docs/Github_CI.md`（**该文件是 v0.7.0 发版快照**），未查远端。
+
+### 16.1 三条落地
+
+| 能力 | 落点 | 口径 |
+|---|---|---|
+| **T2 导航层完整化** | `ui/nav/AppNav.kt`：`AppScreen` sealed（仅 `Workspace` / `Editor` 两值）+ `NavStack<T>`（`push`/`pop`/`replaceTop`/`resetTo`）；`MainActivity.kt:146` 建栈、`:665–668` 编辑器内再导图走 `replaceTop` 防叠层、`:774` `nav.pop()`、`:819` `BackHandler(enabled = editorOpen)` | 弹层（导出/历史/模型中心）**不进栈**；系统返回键 = 安全退出编辑器 |
+| **模型中心页** | `ui/settings/ModelCenterSheet.kt` + `SettingsScreen.kt:329/:362` | UI3.0 §N 的**只读诊断**（分割/人脸模型加载状态、加速器、OOM 计数、概率缓存）；`ModalBottomSheet`，设置 → 高级进入 |
+| **预设导入 / 导出** | `core/edit/preset/CustomPresets.kt` 的 `decode` / `encode` / `withFreshIdsWhereTaken`；`ParamPanel.kt:1068–1094`；`MainActivity.kt:876–891` | SAF 导入 + FileProvider 分享 `.pcpreset.json`；**仅与已有 id 冲突的条目才重生成 uuid** |
+
+### 16.2 CI 排红战报与两条新纪律
+
+- `docs/Github_CI.md` 记录了 v0.7.0 的 9 轮 CI：主体 `714a31a` 起连续编译错 → `e794781`
+  **4 job 全绿（338 单测）** → `v0.7.0` tag run `42490180023` **5 job 全绿**、`Publish GitHub Release` 成功。
+- **纪律 1：链条式接线收尾要整体核对调用链两端**。`onImport` 从 UI 到存储穿过 5 个签名
+  （MyPresetsSection → PresetParams → ParamPanel → EditorScreen → MainActivity），逐个修复时
+  两个调用点的参数名被交叉污染；收尾应一次 grep 验证两端，而不是「修一个跑一次」。
+- **纪律 2：CI 日志文件是「陈旧证据」**。`ci-log` 提交的 assemble/lint/unit-tests.log 在后续 run
+  里不会被更新（每个 job 只 tee 自己的那个），误读会得出与树不符的行号 —— 本轮「幻影错误」
+  即源于读到旧日志。已清理树内日志 + `.gitignore`；`8351564` 又给 workflow 加了缓存清剿步骤。
+- 单测：`ui/nav/NavStackTest.kt` **6 断言**（初始态 / 进出栈 / 栈底 pop / 编辑器再进 / replaceTop / resetTo）。
+
+## §17 Q5 手动旋转、v0.7.x CI 排红与当前发版状态（v0.7.1，2026-11-11）
+
+> 代码基线 HEAD `f578559`。**本节特别记录一个尚未闭环的发版不一致**，见 17.3。
+
+### 17.1 Q5 手动旋转（代码 + 单测已落地，真机验收未闭环）
+
+- 主体提交 `d9914a9`；新增 `core/edit/EditRotation.kt`（几何纯函数 + `RotatedMask` 装饰器）、
+  `core/decode/LinearImage.kt:29` 的 `rotateQuarter`（16-bit `ShortArray` 纯下标重排，零精度损失）。
+- **会话级旋转**：`MainActivity.kt:149–153` 持有 `pristineDecoded`（永不旋转基准）与
+  `rotationQuarterTurns`；`:780–812` 每次从基准重推导（**零累积损失**）；`:813–818` 旋转进撤销栈
+  （`EditSnapshot.rotationQuarterTurns`）；顶栏按钮 `EditorScreen.kt:1479` / 图标 `Rail.kt:138`。
+- **导出端烘焙**：sRGB 分支 `:1162–1177` 解码后预旋转；RAW 分支 `:1047–1138` 在未旋转空间渲染，
+  ML / 图层蒙版走 `RotatedMask`、画笔描迹走 `unmapNormPoint`、液化锚点走 `mapAnchorToRender`，
+  输出后再一次性旋转位图。
+- 单测：`EditRotationTest` **8** + `LinearImageRotateTest` **5**（q0/q1/q2/q3/四次回归恒等）。
+  ⚠️ 提交信息与旧版 README 写的「**3 组旋转单测**」把 v0.7.0 的 `NavStackTest` 也算进来了，
+  已在 README 版本历史订正为「2 个旋转测试类、13 断言」。
+
+### 17.2 CI 排红链（仓库内可见记录，非最终结论）
+
+`git log` 中 v0.7.1 阶段有 6 个 `ci-log` **失败**提交：
+`42845871028` / `42846478701` / `42847080783` / `42847732601` / `42849787892` / `42850816384`
+（本地 `origin/main` 引用上另有 `7a20db7` → `42851362889` unit test failure）。
+修复链依次为：补 `RotatedMask` import → 去 `return@let`（val lambda 无此标签）→
+`mapAnchorToRender` 改返回 `FloatArray`（消除 `core.edit ↔ core.edit.retouch` 跨包双向依赖
+在 K1 增量编译下的幻影 `Unresolved`）→ `MainActivity` 调用适配 → CRLF→LF 统一。
+
+- **根因与护栏**：连续 rebase 后 Gradle build cache 提供陈旧编译结果 ⇒ `088981d` 给
+  **全部 4 处 Gradle 调用加 `--no-build-cache`**（assembleDebug / testDebugUnitTest /
+  lintDebug / assembleRelease），并配合 workflow 的缓存清剿步骤。
+- ⚠️ **不要把这些失败 run 当成「最后一次 CI 的结论」**：它们只是入库的失败日志快照。
+  截至本地 HEAD，仓库内**没有 v0.7.1 的全绿 run 记录**；按项目规则本次未 fetch、未查询远端
+  CI，远端是否已有后续 run 无法从本地判定。
+
+### 17.3 当前发版状态（§5.2 四者不一致，待补）
+
+| 项 | 当前值 |
+|---|---|
+| `app/build.gradle.kts` | `versionCode = 23` / `versionName = 0.7.1` |
+| git tag | 最后为 **`v0.7.0`**；`git tag --points-at HEAD` 为空，`describe` = `v0.7.0-15-gf578559` |
+| `AboutSheet` | 读 `BuildConfig` ⇒ 显示 0.7.1（与代码一致） |
+| `docs/Github_CI.md` | 停在 **v0.7.0 / versionCode 22**（2026-11-08） |
+
+⇒ **v0.7.1 未打 tag、未发 Release、CI 报告未覆盖**。按 §5.2「四者不一致就是发版事故」，
+这是**待补的发版动作**，不是功能缺陷；是否打 tag / 是否查远端 CI 由项目所有人决定。
+另：本地 HEAD 与本地 `origin/main` 引用**各有 1 个独有提交（分叉）**，本次未 fetch 也未 push。
+
+### 17.4 仍未闭环（需真机 / 需视觉，非代码缺口）
+
+- **Q5 真机验收**：旋转 4 次回到原图、`Orientation=6` 与手动旋转叠加、旋转后描迹/锚点仍落原位、
+  RAW 导出旋转后无精度损失 —— 判据已写进 `DEV_PLAN.md` §10；
+- **Q4** 热区 26/36/48dp 手感；**Q7** 首页渐变视觉对比；
+- **M-2/T5** release 变体（R8 + 资源收缩、native 优化级别）真机性能基线；
+- `docs/Github_CI.md` 待 v0.7.1 全绿后按 §5.4 覆盖重写。
+

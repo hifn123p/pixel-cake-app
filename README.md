@@ -30,8 +30,10 @@
 - **开发方式**：本机**不装任何开发环境**，代码全部推送 GitHub，由 **GitHub Actions** 完成编译/检查/测试/打包
 
 > ⚠️ **接手者请先读这一条**：本仓库**没有**本地构建环境 —— **CI 是唯一的编译器**。
-> 本地能做的静态检查只有「模板感知的括号配平」+「跨文件 import / 调用点核对」两道闸门，
-> 它们只能证明语法树闭合，**证明不了名字解析**。
+> 本地静态闸门由会话目录内的 `kotlin_gates.py` 提供（模板感知括号配平、跨文件 import /
+> 调用点核对、`catch(Throwable)` 的 `CancellationException` 处理闸门、反向引用检查）；
+> **该脚本未入库，CI 也不调用它**，且它只能证明语法树闭合与符号大致对得上，
+> **证明不了名字解析**（详见 `docs/ENGINEERING_NOTES.md` §1.3 / §7.1 / §14.2）。
 > 相关纪律与历史踩坑全部整理在 [`docs/ENGINEERING_NOTES.md`](docs/ENGINEERING_NOTES.md)，**改代码前请先读它**。
 
 > 完整开发计划见 [`docs/DEV_PLAN.md`](docs/DEV_PLAN.md)（项目唯一有效计划文档）；
@@ -61,7 +63,8 @@ git clone --recurse-submodules https://github.com/hifn123p/pixel-cake-app.git
 ```
 
 > ⚠️ 本仓库 CI 是唯一编译器，本地不装 Android 开发环境。
-> 推送到 main 即自动触发 CI（单测 → Lint → 签名 APK → Release）。
+> 推送到 main 即触发 CI（单测 / Lint 拦门 + debug APK；配置签名 Secrets 后才产出 release APK）；
+> **`Publish GitHub Release` 仅在推送 `v*` tag 时触发**。
 
 ---
 
@@ -73,7 +76,7 @@ git clone --recurse-submodules https://github.com/hifn123p/pixel-cake-app.git
 |---|---|
 | 🖼 导入与解码 | Photo Picker / SAF；JPEG、HEIF；**EXIF 方向烘焙**（Orientation 矩阵逐像素正立，翻转类方向含镜像分量）；Sony ARW 内嵌全分辨率预览（纯 Kotlin TIFF/IFD 链遍历）与 LibRaw 全量解码（16-bit 线性） |
 | 🎚 非破坏编辑 | 白平衡、明暗（曝光/对比/高光/阴影/白点/黑点/高光恢复）、颜色（自然饱和/饱和/去雾/HSL 八通道/彩色分级）、曲线（亮度 + R/G/B 分通道）、细节与效果（锐化/降噪/清晰度/纹理/暗角/颗粒）、LUT；撤销/重做、长按对比 |
-| 🪄 **UI 3.0「Aperture」** | **One-Surface** 全屏画布（照片不被遮挡）；**双通道调节**（照片横拖调参 + deck 滑块同步，HUD 46sp 巨大读数）；**点哪修哪**（单击命中分割蒙版选作用域）；**强度环**（预设参数栈整体向中性回退）；**自动增强**（直方图启发式，零模型）；**历史丝带**（步骤跳转）；**分割对比**（逐列修前修后）；**导出回执**（尺寸/格式/预设名）；曲线本体（deck 内嵌可拖曲线+直方图底）；暖石墨+琥珀主题；自适应图标三层 |
+| 🪄 **UI 3.0「Aperture」** | **One-Surface** 全屏画布（照片不被遮挡）；**双通道调节**（照片横拖调参 + deck 滑块同步，HUD 46sp 巨大读数）；**点哪修哪**（单击命中分割蒙版选作用域）；**强度环**（把预设的整图参数向中性回退；人像精修参数不参与）；**自动增强**（直方图启发式，零模型）；**历史丝带**（步骤跳转）；**分割对比**（逐列修前修后）；**导出回执**（尺寸/格式/预设名）；曲线本体（deck 内嵌可拖曲线+直方图底）；暖石墨+琥珀主题；自适应图标三层 |
 | 🔍 预览缩放 | 双指缩放（≤8×）与平移、双击 2.5×↔1×（以点击处为锚）、画笔模式下单指恒为涂抹、未放大时按住看原图；已放大时显示「已放大 N% · 复位」胶囊 |
 | 🎨 调色预设 | **44 套**分类预设 + **用户预设库**（把当前调法存为自定义预设，编辑器应用/强度环、相机批量、系留默认参数三处复用；JSON 持久化），按当前照片生成真实缩略图 |
 | 🧴 人像精修 | 皮肤画笔与 AI 肤色蒙版、磨皮、美型液化（人脸锚点）、祛瑕、追色 |
@@ -121,11 +124,14 @@ com.hifn.pixelcake
 ├── arw/           ARW 容器解析（IFD 链择最大预览）、内嵌预览提取、全量解码编排
 ├── core/
 │   ├── decode/    JPEG/HEIF、RAW 线性解码（RawLinearSource 分带）与导出
-│   ├── edit/      参数管线（PixelProgram/ColorMath）、对象图层、预设、人像算子（retouch/）
-│   └── ml/        LiteRT 皮肤/对象分割与人脸检测；FloatGrid / 掩码 / Provider 与降级链
+│   ├── edit/      参数管线（PixelProgram/ColorMath）、对象图层、预设、EditDocument JSON、会话旋转
+│   │   ├── preset/   44 套内置预设 + 用户预设库（CustomPresets，JSON 原子写）
+│   │   └── retouch/  磨皮 / 液化 / 祛瑕 / 追色 + RetouchLayer 分带编排
+│   ├── ml/        LiteRT 皮肤/对象分割与人脸检测；FloatGrid / 掩码 / Provider 与降级链
+│   └── camera/    TetherProcessor（系留轮询纯逻辑状态机，K1/K2/K3 可测）
 ├── camera/        USB PTP（PtpProtocol/PtpData/PtpTransport）、长会话、批量处理
-├── ui/            shell（2-Tab 外壳）· home（调色台/相机面板）· editor（五段式编辑器）
-│                  · components（玻璃控件）· settings · theme（Token/玻璃/动效/静态模糊底图）
+├── ui/            shell（2-Tab 外壳）· home（调色台/相机面板）· editor（编辑器 + 生命周期）
+│                  · nav（AppScreen + NavStack）· components · settings（含模型中心）· theme
 └── diag/          DebugLog（结构化日志 + 导出分享）
 ```
 
@@ -171,9 +177,9 @@ com.hifn.pixelcake
 
 | 版本 | 内容 |
 |---|---|
-| `v0.7.1` | **Q5 手动旋转**（审计裁决「都要」）：顶栏旋转按钮（顺时针 90° 步进）；**会话级旋转**——从无损原图重推导（零累积损失），预览/对比/ML 蒙版/缩略图全链路同转；导出端烘焙（sRGB 解码预旋转；RAW 渲染后旋转 + RotatedMask 装饰器无损映射蒙版 + 液化锚点逆映射）；旋转进撤销栈；线性母版 16-bit 纯下标重排（零精度损失）+ 3 组旋转单测 |
+| `v0.7.1` | **Q5 手动旋转**（审计裁决「都要」）：顶栏旋转按钮（顺时针 90° 步进）；**会话级旋转**——从无损原图重推导（零累积损失），预览/对比/ML 蒙版/缩略图全链路同转；导出端烘焙（sRGB 解码预旋转；RAW 渲染后旋转 + RotatedMask 装饰器无损映射蒙版 + 液化锚点逆映射）；旋转进撤销栈；线性母版 16-bit 纯下标重排（零精度损失）+ 2 个旋转测试类（`EditRotationTest` 8 + `LinearImageRotateTest` 5 断言） |
 | `v0.7.0` | **架构与诊断**：**T2 导航层完整化**（sealed AppScreen + NavStack，编辑器内再导图防栈叠层，6 断言单测）；**模型中心页**（UI3.0 §N：分割/人脸模型加载状态、加速器、OOM/缓存只读诊断，设置→高级→模型中心）；**预设导入/导出**（我的预设页：SAF 导入 + FileProvider 分享 `.pcpreset.json`，id 冲突自动重生成）；.gitmodules 去浮动 branch（P3 合规） |
-| `v0.6.6` | **用户预设库**（T1 解锁的首个功能）：编辑器「预设 → 我的」把当前调法存为自定义预设（JSON 原子写 + 坏文件留证 + 8 断言单测），应用/强度环与内置同型；**相机批量与系留默认参数均可选自定义预设**；瑕疵描迹按语义不入预设 |
+| `v0.6.6` | **用户预设库**（T1 解锁的首个功能）：编辑器「预设 → 我的」把当前调法存为自定义预设（JSON 原子写 + 坏文件留证 + 9 断言单测），应用/强度环与内置同型；**相机批量与系留默认参数均可选自定义预设**；瑕疵描迹按语义不入预设 |
 | `v0.6.5` | **审计剩余项全量清账**（hy4 阶段 2/3 + Q 决策）：**协议** E1 属性码撞码修正（0x5007/0x5008/0x5009 按 PTP 标准）+ datatype 校验 + 数据阶段事务号校验对称 + E2 SessionID 存档 + E3(b) 诊断上屏 + E5 注释修正；**并发** A4 帧栅栏回收 / A5 进度回调切主线程 / A6 缩略图去锁不堵首帧；**无响应** D1 后台线程释放 USB / D2 busy 进 finally×4 / D3 日志攒批刷盘 / D4 缓存清理进 IO / D5 渲染分片等待加超时；**内存** B1 导出即回收底图+6-8GB 档收敛 / B2 笔刷蒙版网格化（131MB→≤4MB）/ B4 openLinear 内存预算；**质量** M-3 Bayer 有序抖动（16-bit→8-bit）/ M-4 thermal headroom 进日志；**诚实界面** U2 强度 0 禁用修饰量 / U3 分级色相 chip / U6 重置接线 + 磨皮阈值滑块 / 横滑 chips 截断渐隐；**架构** T2 BackHandler（系统返回=安全退出编辑器）+ 生命周期决策可测化 + TetherProcessor 抽取（K1/K2/K3 回归测试）/ **T3 横屏最小可用**（Deck 右侧栏）/ **T4 无障碍语义清单**；**护栏** `catch(Throwable)` CE 闸门进 kotlin_gates.py；Q1/Q2/Q3/Q6 决策落地；死代码清理。+5 组新测试 |
 | `v0.6.4` | **外部审计整改批次**（qwen3.8 + hy4 双审）：P0-2 **EXIF/方向层落地**（解码烘焙 Orientation 矩阵、导出回写最小 EXIF 集）；P1-3 **导出可取消**（sRGB 逐带取消 + 幽灵文件删除 + CE 重抛）；P1-2 **直方图按带累加**（19MB/帧垃圾清零、进 renderMutex、isActive 检查点）；P1-5 **系留健壮化**（开系留播种基线、坏对象记账、位图回收进 finally、renderIntoSrgb 返回值消费）；U4 **空作用域禁用**（`coveredScopes` 判空 + chip 禁用 + 说明）；U1 滤镜强度空转修复；P1-15 悬空 rawCachePath / NotApplicable Hint 矛盾修正；**T1 参数栈 JSON 序列化**（`EditDocument` + 版本迁移骨架，解锁另存预设/项目/P3 契约）+ 3 组新单测 |
 | `v0.6.3` | P0 三项修复（系留 ARW 走 LibRaw 管线、陈旧直方图清位、exifinterface 依赖）+ 两份审计报告入库 |
@@ -188,7 +194,8 @@ com.hifn.pixelcake
 | `v0.4.4` | UI Redesign v2.0 |
 | `v0.4.0` / `v0.4.1` | 调色批次 1~4（81 项）/ 批次 5 对象作用域 |
 
-（`v0.1.0` → `v0.7.1` tag 齐全，Release 页可下载签名 APK。）
+（`v0.1.0` → `v0.7.0` tag 齐全，Release 页可下载签名 APK；
+`v0.7.1` 代码已合入 main（`versionCode = 23`），**tag / Release 尚未发布**，CI 无全绿记录。）
 
 ---
 
@@ -209,13 +216,18 @@ com.hifn.pixelcake
 git push origin main        # 推送后 GitHub Actions 自动接管
 ```
 
-`.github/workflows/android.yml` 会依次执行：
+`.github/workflows/android.yml` 有 **5 个 job**（不是单条串行流水线）：
 
-1. `testDebugUnitTest`（单元测试 **拦门**）
-2. `lintDebug`（Android Lint **拦门**，无 `continue-on-error`）
-3. `assembleRelease`（`KEYSTORE_BASE64` secret 签名）
-4. 上传 artifact（保留 90 天）+ 写 `$GITHUB_STEP_SUMMARY`
-5. **仅在打 tag 时**触发 `Publish GitHub Release`
+| Job | 职责 / 依赖 |
+|---|---|
+| `build` | `assembleDebug` → `testDebugUnitTest`（**拦门**）→ 上传 debug APK + 构建摘要 |
+| `lint` | `lintDebug`（Android Lint **拦门**，无 `continue-on-error`），与 `build` 并行 |
+| `check-signing` | 探测 `KEYSTORE_BASE64` 是否存在 |
+| `release` | `needs: [build, lint, check-signing]` 且 Secrets 已配 ⇒ `assembleRelease` 签名 |
+| `publish` | `needs: [build, lint, release]` 且 **仅 ref 为 `v*` tag** ⇒ 发 GitHub Release |
+
+所有 Gradle 调用都带 `--no-build-cache`（连续 rebase 后 build cache 会提供陈旧编译结果，
+曾由此产生「幻影编译错」，见 `docs/ENGINEERING_NOTES.md` §5.7 与 `docs/Github_CI.md`）。
 
 ktlint / detekt **未引入** —— 无本地构建环境时盲开容易让 CI 误红，待本地验证后再加。
 
@@ -252,13 +264,13 @@ App 内置调试日志（`diag/DebugLog.kt`）：
 | 文档 | 作用 |
 |---|---|
 | [`docs/DEV_PLAN.md`](docs/DEV_PLAN.md) | **开发计划（唯一有效）**：项目介绍 / 功能矩阵 / 核心原理 / 技术路线 / 代码架构 / 设备要求 / 风险 / 文档索引 |
-| [`docs/ENGINEERING_NOTES.md`](docs/ENGINEERING_NOTES.md) | **工程笔记（改代码前必读）**：仓库与协作约定、Compose 布局陷阱、渲染/并发纪律、构建与发版、历史审查整改台账（§7~§13）。**每一条都是被真机 bug 逼出来的** |
+| [`docs/ENGINEERING_NOTES.md`](docs/ENGINEERING_NOTES.md) | **工程笔记（改代码前必读）**：仓库与协作约定、Compose 布局陷阱、渲染/并发纪律、构建与发版、历史审查整改台账（§7~§17）。**每一条都是被真机 bug 逼出来的** |
 | [`docs/UI3.0.html`](docs/UI3.0.html) | **UI 3.0「Aperture」设计稿（当前唯一真值）**：14 屏 + 2 横屏 + 动效系统 + 性能字号审计 + token 真值 |
 | [`docs/UI_DESIGN.md`](docs/UI_DESIGN.md) | UI 规范与编号锚点：设计语言五支柱 / Token / §8 设计决策点 / §4.0.x 真机反馈修正表（编号被代码 KDoc 引用，数值已由 UI3.0 接管） |
 | [`docs/TONING_DESIGN.md`](docs/TONING_DESIGN.md) | 调色参数体系：参数全表、管线顺序、分批实施与落地记录（批次 1~4） |
 | [`docs/OBJECT_TONE_DESIGN.md`](docs/OBJECT_TONE_DESIGN.md) | 对象作用域调色（批次 5）：作用域全表、数据模型、单趟逐层 lerp、验收方式 |
 | [`docs/ONDEVICE_MODEL_PLAN.md`](docs/ONDEVICE_MODEL_PLAN.md) | **端侧模型规划**：P6/P7 候选模型表 + 体积延迟预算 + 接入架构 |
-| [`docs/Github_CI.md`](docs/Github_CI.md) | 最近一次 CI 运行的完整报告（**每次 CI 后覆盖重写**，工具性文档） |
+| [`docs/Github_CI.md`](docs/Github_CI.md) | **v0.7.0 发版 CI 报告（历史快照）** + v0.7.1 可见失败 run 记录；全绿后覆盖重写 |
 | [`docs/app_icon.svg`](docs/app_icon.svg) | App 图标资产（自适应三层：背景/前景/单色） |
 | `docs/archive/` | **本地历史存档（不入库）**：早期规划稿、UI2.0 备选稿、阶段设计存档（`PHASE_DESIGN_HISTORY.md`，KDoc 编号引用的溯源处）、两份外部审计报告。**被 `.gitignore` 屏蔽 ⇒ 克隆仓库看不到**；入库过的原件可 `git show v0.6.4:docs/<文件名>` 取回 |
 

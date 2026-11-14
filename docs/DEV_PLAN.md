@@ -2,7 +2,7 @@
 title: 像素蛋糕 App — 开发计划（唯一有效文档 v3.1）
 status: active
 created: 2026-09-05
-updated: 2026-11-07
+updated: 2026-11-14
 project: D:\AI_Project
 replaces: [PLAN.md, FEASIBILITY_REPORT.md, P1_MVP_DESIGN.md, PLAN_REVIEW.md]
 description: 像素蛋糕（AI 人像精修）安卓应用的唯一开发计划：项目介绍、功能矩阵、核心原理、技术路线、代码架构（当前真实模块树）、设备要求、交付调试与风险、文档索引。历史设计（阶段稿 / UI2.0 备选稿 / 外部审计快照）已移至本地 docs/archive/（不入库），原件可 git show 取回。
@@ -17,7 +17,10 @@ description: 像素蛋糕（AI 人像精修）安卓应用的唯一开发计划�
 > `docs/archive/README.md`）、`UI2.0.html` 备选稿、两份外部审计报告（整改结论已沉淀进
 > `ENGINEERING_NOTES.md` §13）。
 > v3.1 相对 v3.0 的关键变更：
-> 1. **进度更新到 v0.6.4**：UI 3.0「Aperture」全量改版 + 外部审计整改批次（EXIF 层 / 导出取消 / 系留健壮化 / 空作用域禁用 / T1 参数栈 JSON）。
+> 1. **进度更新到 v0.7.1**：UI 3.0「Aperture」全量改版（v0.6.2）→ 外部审计整改（v0.6.3~v0.6.4）
+>    → 审计剩余项清账（v0.6.5）→ 用户预设库（v0.6.6）→ 导航层 / 模型中心 / 预设分享（v0.7.0）
+>    → Q5 手动旋转（v0.7.1）。逐版本明细见根 `README.md` 的版本历史表；
+>    工程台账见 `ENGINEERING_NOTES.md` §13~§17。
 > 2. **§5.2 代码架构树改为当前真实模块**（v3.0 的「规划未建」占位已全部兑付或删除）。
 > 3. **§9 文档索引只列现行文档**；历史文档的溯源方式集中在 `docs/archive/README.md`。
 >
@@ -28,10 +31,13 @@ description: 像素蛋糕（AI 人像精修）安卓应用的唯一开发计划�
 
 ---
 
-## 0. 当前进度（2026-11-07）
+## 0. 当前进度（2026-11-14 核对 · 代码基线 HEAD `f578559` @ 2026-11-11）
 
-> **已发布到 `v0.7.1`**（`versionCode = 23`；`v0.1.0` → `v0.7.1` tag 齐全，5 个 CI job 含 `Publish GitHub Release`；
-> 最新 run 全绿报告见 `docs/Github_CI.md`）。逐版本明细见根 `README.md` 的「版本历史」表。
+> **代码已到 `v0.7.1`**（`versionCode = 23`；`v0.1.0` → `v0.7.0` tag 齐全，5 个 CI job 含 `Publish GitHub Release`）。
+> ⚠️ **`v0.7.1` 尚未打 tag / 发 Release，且仓库内无全绿 run 记录** —— 按 `ENGINEERING_NOTES.md` §5.2
+> 「发版四者必须同时改」，当前 `build.gradle.kts`（23 / 0.7.1）、git tag（v0.7.0）、
+> CI 报告（v0.7.0）三者不一致，是待补的发版动作（是否打 tag 由项目所有人决定）。
+> v0.7.0 发版 CI 报告与 v0.7.1 可见记录见 `docs/Github_CI.md`；逐版本明细见根 `README.md` 的版本历史表。
 >
 > | 阶段 | 状态 | 说明 |
 > |---|---|---|
@@ -39,10 +45,10 @@ description: 像素蛋糕（AI 人像精修）安卓应用的唯一开发计划�
 > | 调色批次 1~5 | ✅ | 参数体系 **81 项** + 对象作用域图层（8 作用域）。设计见 `TONING_DESIGN.md` / `OBJECT_TONE_DESIGN.md` |
 > | **UI 3.0「Aperture」** | ✅（v0.6.2） | **One-Surface** 全屏画布 / 双通道调节 / 点哪修哪 / 强度环 / 自动增强 / 历史丝带 / 分割对比 / 导出回执 / 曲线本体 / 系留出片 v2 / 暖石墨琥珀主题 / 自适应图标。设计见 `UI3.0.html`（唯一真值） |
 > | **Q5 手动旋转** | ✅（v0.7.1） | 顶栏旋转按钮（90° 步进）；会话级旋转从无损原图重推导（零累积损失）；预览/对比/ML/缩略图全链路同转；导出端烘焙（sRGB 解码预旋转；RAW 输出后旋转 + RotatedMask 装饰器 + 锚点逆映射）；旋转进撤销栈；16-bit 线性纯下标重排 |
-| **导航层 + 模型中心 + 预设分享** | ✅（v0.7.0） | T2 完整形态（sealed AppScreen + NavStack 可测栈；编辑器内再导图 replaceTop 防栈叠层）；**模型中心页**（UI3.0 §N 只读诊断：分割/人脸模型状态、加速器、OOM、缓存，设置→高级进入）；**预设导入/导出**（SAF 导入 + FileProvider 分享，id 冲突自动重生成）|
-| **用户预设库** | ✅（v0.6.6） | 另存当前调法为自定义预设（整图参数 + 人像精修；瑕疵描迹按语义不入预设）；编辑器「预设 → 我的」应用/强度环/管理删除；**相机批量与系留默认参数复用**；JSON 持久化（原子写 + 坏文件留证 + 8 断言单测）。T1 序列化解锁的首个功能 |
-| **审计剩余项清账** | ✅（v0.6.5） | hy4 阶段 2/3 全量落定：E1 属性码/datatype、A4-A7、D1-D5、B1/B2/B4、M-3/M-4、U2/U3/U6、T2 BackHandler+生命周期可测化、**T3 横屏最小可用**、**T4 无障碍语义**、TetherProcessor 可测化（K1/K2/K3 回归测试）、CE 静态闸门；Q1/Q2/Q3/Q6 决策落地。台账见 `ENGINEERING_NOTES.md` §14 |
-| **外部审计整改** | ✅（v0.6.3~v0.6.4） | 双模型审计（qwen3.8 + hy4）→ 3 个 P0（系留 ARW 必失败 / EXIF 层缺失 / 陈旧直方图）+ P1 批次（导出可取消 / 直方图进锁按带 / 系留基线播种 / 空作用域禁用 / 滤镜强度空转 / 悬空缓存路径 / Hint 矛盾）+ **T1 参数栈 JSON 序列化**。台账见 `ENGINEERING_NOTES.md` §13；判级以 hy4 报告为权威（已归档） |
+> | **导航层 + 模型中心 + 预设分享** | ✅（v0.7.0） | T2 完整形态（sealed AppScreen + NavStack 可测栈；编辑器内再导图 replaceTop 防栈叠层）；**模型中心页**（UI3.0 §N 只读诊断：分割/人脸模型状态、加速器、OOM、缓存，设置→高级进入）；**预设导入/导出**（SAF 导入 + FileProvider 分享，id 冲突自动重生成）|
+> | **用户预设库** | ✅（v0.6.6） | 另存当前调法为自定义预设（整图参数 + 人像精修；瑕疵描迹按语义不入预设）；编辑器「预设 → 我的」应用/强度环/管理删除；**相机批量与系留默认参数复用**；JSON 持久化（原子写 + 坏文件留证 + 9 断言单测）。T1 序列化解锁的首个功能 |
+> | **审计剩余项清账** | ✅（v0.6.5） | hy4 阶段 2/3 全量落定：E1 属性码/datatype、A4-A7、D1-D5、B1/B2/B4、M-3/M-4、U2/U3/U6、T2 BackHandler+生命周期可测化、**T3 横屏最小可用**、**T4 无障碍语义**、TetherProcessor 可测化（K1/K2/K3 回归测试）、CE 静态闸门；Q1/Q2/Q3/Q6 决策落地。台账见 `ENGINEERING_NOTES.md` §14 |
+> | **外部审计整改** | ✅（v0.6.3~v0.6.4） | 双模型审计（qwen3.8 + hy4）→ 3 个 P0（系留 ARW 必失败 / EXIF 层缺失 / 陈旧直方图）+ P1 批次（导出可取消 / 直方图进锁按带 / 系留基线播种 / 空作用域禁用 / 滤镜强度空转 / 悬空缓存路径 / Hint 矛盾）+ **T1 参数栈 JSON 序列化**。台账见 `ENGINEERING_NOTES.md` §13；判级以 hy4 报告为权威（已归档） |
 > | P3 | 🔜 | NAS Docker 化 Rust 引擎 —— 未启动 |
 > | 端侧模型 P6/P7 | 🔜 | 见 `ONDEVICE_MODEL_PLAN.md`（M1 交互分割 / M2 关键点 / M4 超分 / M5 深度…） |
 
@@ -228,7 +234,7 @@ P3   NAS Docker 化 + axum API（注意 API 37 本地网络权限）
 
 > P3 需"去 Tauri 化"：新增 `axum` HTTP 层替换 Tauri IPC，ONNX EP 从 CUDA/DirectML 改为 **OpenVINO / Vulkan / CPU**。
 
-### 5.2 代码架构（当前真实模块树，2026-11-07）
+### 5.2 代码架构（当前真实模块树，2026-11-14 复核）
 
 ```
 com.hifn.pixelcake
@@ -272,7 +278,7 @@ com.hifn.pixelcake
     └── theme/                              #   Color / Type / Spacing / Radius / Glass / Motion / Theme / Backdrop（暖石墨+琥珀）
 ```
 
-**依赖现状**（2026-11-07）：`androidx.core-ktx` / `activity-compose` / `lifecycle-runtime-ktx` /
+**依赖现状**（2026-11-14 复核）：`androidx.core-ktx` / `activity-compose` / `lifecycle-runtime-ktx` /
 Compose BOM(Material3 + animation) / **`com.google.ai.edge.litert:litert` 2.2.0** /
 **`androidx.exifinterface` 1.3.7（P0-2 EXIF 层）** / **`kotlinx-serialization-json` 1.7.3 +
 `kotlin.plugin.serialization` 编译器插件（T1）** / JUnit(测试)。
@@ -373,26 +379,33 @@ NDK pin `30.0.16248370`；LibRaw 子模块静态链接。
 | 文档 | 作用 | 何时读 |
 |---|---|---|
 | [`DEV_PLAN.md`](DEV_PLAN.md) | **本文**：唯一有效计划 | 想了解「要做什么、做到哪了」 |
-| [`ENGINEERING_NOTES.md`](ENGINEERING_NOTES.md) | **工程纪律**：仓库与协作约定（CI 是唯一编译器）、Compose 布局陷阱、渲染/并发纪律、构建与发版、§7~§13 历史审查整改台账 | **动代码之前必读** |
+| [`ENGINEERING_NOTES.md`](ENGINEERING_NOTES.md) | **工程纪律**：仓库与协作约定（CI 是唯一编译器）、Compose 布局陷阱、渲染/并发纪律、构建与发版、§7~§17 历史审查整改台账 | **动代码之前必读** |
 | [`UI3.0.html`](UI3.0.html) | **UI 3.0 规范（当前唯一真值来源）**：One-Surface 骨架、token 真值（`:root` 与 CSS）、Rail/Deck/顶栏规格、动效与字号红线、launcher 图标规范 | **改 UI 前先看这份** |
 | [`UI_DESIGN.md`](UI_DESIGN.md) | UI 规范与**编号锚点**：§1 竞品基线 / §2 设计语言五支柱 / §5 动效 / §6 无障碍 / §8 设计决策点 / §11 UI3.0 落地对照；§4.0.x 修正表的**编号**被代码 KDoc 引用（数值已由 UI3.0 接管） | 查一个被 KDoc 引用的编号、或改动效/无障碍时 |
 | [`TONING_DESIGN.md`](TONING_DESIGN.md) | 调色参数体系：参数全表 / 管线顺序 / 批次 1~4 落地记录 | 改 tonal 参数或管线顺序时 |
 | [`OBJECT_TONE_DESIGN.md`](OBJECT_TONE_DESIGN.md) | 对象作用域调色（批次 5）：作用域全表 / 数据模型 / 单趟逐层 lerp / 哪些参数不能进层 / 验收方式 | 改对象图层或蒙版作用域时 |
 | [`ONDEVICE_MODEL_PLAN.md`](ONDEVICE_MODEL_PLAN.md) | 端侧模型规划：P6/P7 候选模型表 + 体积延迟预算 + 接入架构 | 接入新端侧模型时 |
-| [`Github_CI.md`](Github_CI.md) | 最近一次 CI 运行的完整报告（**每次 CI 后覆盖重写**，工具性文档） | 想知道上一次 CI 红/绿与原因 |
+| [`Github_CI.md`](Github_CI.md) | **v0.7.0 发版 CI 报告（历史快照）** + v0.7.1 可见失败 run 记录；全绿后覆盖重写 | 想知道上一次 CI 红/绿与原因 |
 | `docs/archive/` | **本地历史存档（不入库）**：`PLAN.md` 等最早规划 + `PHASE_DESIGN_HISTORY.md`（KDoc 编号 `F01~F24`/`R01~R10`/`D01~D10` 溯源处）+ `UI2.0.html` + 两份外部审计报告 | 追历史决策或审计证据链时（取回命令见其 README） |
 
 ## 10. 当前版本与待验收
 
 - **当前版本**：`v0.7.1`（`versionCode = 23`）。**发版四者必须同时改**：`build.gradle.kts` 的
   `versionCode`/`versionName` → git tag → `AboutSheet` 显示 → CI 报告记录。
+  ⚠️ **当前不一致**：git tag 停在 `v0.7.0`、CI 报告停在 `v0.7.0 / 22`，而代码已是 `23 / 0.7.1`
+  ⇒ 按 §5.2 的定义属待补发版动作（见 `ENGINEERING_NOTES.md` §17）。
   ⚠️ 任何「记忆里的版本号 / 尺寸」用前先 `git grep` 复核（`ENGINEERING_NOTES.md` §5.5）。
 - **待真机验收（至今未闭环）**：A2 涂抹落点 / A1 导出内存日志 / 自动蒙版（P1p-1c）/ 人脸锚点（P1p-2c）/
   A7C2 直连（P2）/ 批次 3 预览↔导出一致性 / 批次 4 锐化必须晚于磨皮 /
-  批次 5 的 6 条 / 预览缩放手势 / UI3.0 逐屏（`UI_DESIGN.md` §11 已知偏离）；
+  批次 5 的 6 条 / 预览缩放手势 / UI3.0 逐屏（`UI_DESIGN.md` §11 **2026-11-01 历史快照**的已知偏离）；
   **v0.6.4 新增（hy4 整改判据，`ENGINEERING_NOTES.md` §13.1）**：
   `Orientation=6` 竖拍片进 App 是正的、导出也是正的（同名 ARW/JPEG 方向一致）/
   导出中点取消后相册**没有**该文件 / 卡上有旧片时打开系留**不产生任何下载** /
   混有目录对象时轮询仍能推进 / 拖滑块时直方图与画面同代、GC 抖动消失 /
   图里没有的对象作用域 chip 呈禁用态。
+  **v0.7.0 新增（`ENGINEERING_NOTES.md` §16）**：系统返回键 = 安全退出编辑器（BackHandler）/
+  编辑器内再次导图不叠栈 / 模型中心页能读到加速器与 OOM 计数 / 预设导入后 id 冲突重生成。
+  **v0.7.1 新增（`ENGINEERING_NOTES.md` §17）**：旋转 4 次回到原图（零累积损失）/
+  `Orientation=6` 与手动旋转叠加结果正确 / 旋转后画笔描迹与人脸锚点仍落在原位 /
+  RAW 导出旋转后 16-bit 线性无精度损失 / **release 变体跑一次性能基线**（M-2/T5 仍未闭环）。
 - **未启动**：P3（NAS Docker 化 Rust 引擎）；端侧模型 P6/P7（`ONDEVICE_MODEL_PLAN.md`）。
