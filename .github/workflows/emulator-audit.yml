@@ -66,7 +66,11 @@ jobs:
         run: |
           git config user.name "ci-log-bot"
           git config user.email "ci-log-bot@users.noreply.github.com"
-          git add -f build-and-test.log emulator-boot.log 2>/dev/null || true
+          # ⚠️ add 必须逐个文件（多 pathspec 任一不匹配 ⇒ 整条 add 原子失败 —— 前两轮
+          # emulator-boot.log 不存在把 build-and-test.log 一起吞了，这就是 246 字节之外
+          # 「提交成功却什么都没有」的根因）
+          git add -f build-and-test.log || true
+          git add -f emulator-boot.log || true
           git commit -m "ci-log: emulator-audit failure (run ${{ github.run_id }})" || true
           git push origin HEAD:emulator-audit || true
 
