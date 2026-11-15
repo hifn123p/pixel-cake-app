@@ -236,9 +236,10 @@ fun ParamSlider(
             thumb = {
                 // 圆用 Radius.pill 表达而不是 CircleShape：圆角阶梯只允许「四档 + 胶囊」，
                 // 给等宽高的方块套胶囊就是正圆（与 GlassCircleButton 同一套约定）。
+                // 规范 `.sl-thumb` 18px（v0.7.2 从 20dp 收一档，审计 A-P3-4；触控热区不变）。
                 Box(
                     modifier = Modifier
-                        .size(20.dp)
+                        .size(18.dp)
                         .alpha(if (enabled) 1f else 0.38f)
                         .shadow(
                             elevation = 4.dp,  // 从 3.dp 提升到 4.dp，增强立体感

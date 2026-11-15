@@ -30,6 +30,8 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import com.hifn.pixelcake.arw.ArwFullDecoder
 import com.hifn.pixelcake.core.decode.DecodedImage
 import com.hifn.pixelcake.core.decode.Decoder
@@ -125,7 +127,19 @@ class MainActivity : ComponentActivity() {
             val settings = rememberAppSettings()
             PixelCakeTheme(darkTheme = settings.themeMode.isDark(isSystemInDarkTheme())) {
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    AppRoot(settings = settings)
+                    // 「放大文本」（UI3.0 §6.1 红线，设置页有同名开关）：生效字号 =
+                    // max(系统字号, 1.3×)。用 CompositionLocalProvider 覆写 LocalDensity，
+                    // 全 App 的 sp 值与 fontScale 派生量（Deck 的 deckScale 等）一并跟随；
+                    // 布局侧「只能长高不许裁」的 heightIn(min) 纪律保证不裁切。
+                    val sysDensity = LocalDensity.current
+                    val effDensity = if (settings.largeText && sysDensity.fontScale < 1.3f) {
+                        Density(sysDensity.density, fontScale = 1.3f)
+                    } else {
+                        sysDensity
+                    }
+                    CompositionLocalProvider(LocalDensity provides effDensity) {
+                        AppRoot(settings = settings)
+                    }
                 }
             }
         }
@@ -630,8 +644,14 @@ private fun AppRoot(settings: AppSettings) {
                 if (staleBase != null) {
                     // 回收进 `renderMutex`：它可能与上一批在途渲染并发（读者是主线程的预览绘制，
                     // 但写者仍是渲染协程，所以口径与 `onBack` 一致）。
-                    // 正常路径上 `compareBase` 早已被 `onBack` 清成 null，这里是兜底。
-                    scope.launch { renderMutex.withLock { staleBase.recycle() } }
+                    // ⚠️ 与 onBack 的 A4 修复**同口径**补上 `withFrameNanos`（审计 B-6）：
+                    // `asImageBitmap` 包装可能还留在「换图那一帧」的最后组合里 —— 无锁竞争时
+                    // `withLock` 不挂起，同步回收会抢在重组应用之前。先等当前帧结束再进锁，
+                    // 与退出编辑器的回收顺序完全一致。
+                    scope.launch {
+                        withFrameNanos { }
+                        renderMutex.withLock { staleBase.recycle() }
+                    }
                 }
                 withContext(Dispatchers.Default) {
                     MlMaskProvider.invalidate()
@@ -664,6 +684,9 @@ private fun AppRoot(settings: AppSettings) {
                 // brushRadius 与 inpaintRadius 同口径复位（编辑器内再导图时同样适用）
                 brushRadius = 0.04f
                 activePresetId = "none"
+                // 预设缩略图同 editorOnBack 的口径：换图后、新缩略图算完前，
+                // 不能让旧图的缩略图顶着新预设的名字显示（审计 B-5）
+                presetThumbs = emptyMap()
                 autoMaskNote = ""
                 liquifyNote = ""
                 // 上一张的导出回执不能带进新会话：卡片盖在新照片上、分享的还是旧图 uri
@@ -786,6 +809,11 @@ private fun AppRoot(settings: AppSettings) {
                         // 上一张调过的值，是新会话里「一上来画笔粗细就不对」的来源。
                         brushRadius = 0.04f
                         activePresetId = "none"
+                        // 预设缩略图也是**会话态**（审计 B-5）：44 张按上一张照片渲染的 192px
+                        // 位图 (~6.5MB) 若不释放，回首页后一直被引用着；且下一张照片导入后、
+                        // 新缩略图算完前，`PresetThumbRow` 会按 id 把**旧图**的缩略图显示成新预设的
+                        // 预览 —— 「所见非所得」。与 exportReceipt 同一道复位工序。
+                        presetThumbs = emptyMap()
                         autoMaskNote = ""
                         liquifyNote = ""
                         renderStamp = 0
@@ -850,6 +878,11 @@ private fun AppRoot(settings: AppSettings) {
     }
     BackHandler(enabled = editorOpen) { editorOnBack() }
 
+    // 「降低透明度」的 provide 提升到**两个分支之外**（审计 C-F11）：原版只包住
+    // Workspace 分支，编辑器（文本最密、玻璃面最多的一屏）反而收不到 ——
+    // AppSettings 的 KDoc 写的是「全 App 生效」，文档必须与实现一致。
+    // 编辑页是强制深色 + 自画 Surface，玻璃 tint 经 rememberGlassTint 读这个开关。
+    CompositionLocalProvider(LocalLowTransparency provides settings.lowTransparency) {
     if (editorOpen) {
         val src = imported
         // `val src = imported` 后必须再判一次 null：`imported` 是被多个 lambda 捕获并修改的
@@ -1335,8 +1368,14 @@ private fun AppRoot(settings: AppSettings) {
                     },
                     onAutoEnhance = { h ->
                         if (h != null) {
+                            // 代次护栏（审计 B-7，§18.4 纪律 4 的同口径应用）：
+                            // `suggest` 是异步纯计算 —— 若用户在它算完前退出编辑器（或退出后又
+                            // 导入新图），晚到的写回会把「已自动增强」漏进首页 message、把旧会话的
+                            // 快照推进 history。发起时记下代次，写回前验一次；换图/退出都会推进它。
+                            val epochAtStart = imageEpoch.get()
                             scope.launch {
                                 val suggestion = withContext(Dispatchers.Default) { AutoEnhance.suggest(h) }
+                                if (imageEpoch.get() != epochAtStart) return@launch
                                 activePresetId = "none"
                                 params = suggestion
                                 history.push(EditSnapshot(suggestion, retouch, layers, rotationQuarterTurns))
@@ -1363,26 +1402,25 @@ private fun AppRoot(settings: AppSettings) {
         }
     } else {
         // 外壳：底部 2-Tab + 页面转场。编辑器**不套在这一层**（全屏工作台）。
-        CompositionLocalProvider(LocalLowTransparency provides settings.lowTransparency) {
-            AppShell(current = tab, onSelect = { tab = it }) { currentTab ->
-                when (currentTab) {
-                    PixelCakeTab.Darkroom -> HomeScreen(
-                        onImportPhoto = { photoLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
-                        onImportArw = { arwLauncher.launch(arrayOf("*/*")) },
-                        loading = loading,
-                        // 首屏状态是**纯文案**（无类别取色需求）→ 取 .text 即可。
-                        message = status.text,
-                        // P2：相机直连拉取的缓存文件（file:// 于本进程内可读，ARW 由后缀路由到线性管线）
-                        onOpenLocalFile = { file -> openInEditor(Uri.fromFile(file)) }
-                    )
+        AppShell(current = tab, onSelect = { tab = it }) { currentTab ->
+            when (currentTab) {
+                PixelCakeTab.Darkroom -> HomeScreen(
+                    onImportPhoto = { photoLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+                    onImportArw = { arwLauncher.launch(arrayOf("*/*")) },
+                    loading = loading,
+                    // 首屏状态是**纯文案**（无类别取色需求）→ 取 .text 即可。
+                    message = status.text,
+                    // P2：相机直连拉取的缓存文件（file:// 于本进程内可读，ARW 由后缀路由到线性管线）
+                    onOpenLocalFile = { file -> openInEditor(Uri.fromFile(file)) }
+                )
 
-                    // 设置页直接持有 `AppSettings`：读写都走同一份状态，写即持久化。
-                    // 逐项展开成参数的话，每加一个设置项都要改三处（AppRoot / 签名 / 调用点），
-                    // 而它们之间没有任何语义差别 —— 属于会被遗忘的机械改动。
-                    PixelCakeTab.Settings -> SettingsScreen(settings = settings)
-                }
+                // 设置页直接持有 `AppSettings`：读写都走同一份状态，写即持久化。
+                // 逐项展开成参数的话，每加一个设置项都要改三处（AppRoot / 签名 / 调用点），
+                // 而它们之间没有任何语义差别 —— 属于会被遗忘的机械改动。
+                PixelCakeTab.Settings -> SettingsScreen(settings = settings)
             }
         }
+    }
     }
 }
 

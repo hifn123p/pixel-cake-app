@@ -97,8 +97,8 @@ val SegmentEdgeLight = Color(0xE6FFFFFF) // α 0.90，浅色下顶部亮线改�
 val SegmentShadowLight = Color(0x1A000000) // α 0.10
 
 /** 滑块轨道。深色下压亮档：轨道要比面板**略亮**才看得出来，但又不能抢过拇指 */
-val SliderTrackDark = Color(0x1CFFFFFF) // α 0.11
-val SliderTrackLight = Color(0x17000000) // α 0.09
+val SliderTrackDark = Color(0x21FFFFFF) // α 0.13（规范 .sl-track α .13，v0.7.2 从 0.11 对齐）
+val SliderTrackLight = Color(0x21000000) // α 0.13（规范 .sl-track α .13，v0.7.2 从 0.09 对齐）
 
 /** 白色拇指的投影。拇指是纯白实心圆，没有它会在浅色轨道上「飘」起来 */
 val SliderThumbShadow = Color(0x70000000) // α 0.44
@@ -154,3 +154,6 @@ val HeroCardTop = Color(0xFF241833)
 val HeroCardMid = Color(0xFF5C3450)
 val HeroCardWarm = Color(0xFFB96A4C)
 val HeroCardBottom = Color(0xFFE9A25C)
+val HeroCardGlow = Color(0xFFF2C078) // v0.7.2：补齐规范第 5 停靠点（.ph-golden 100%），Q7 对齐
+// 首页成片卡上的入口胶囊底（.hc-act：rgba(16,14,17,.45)，v0.7.2 从硬编码 0xB8121014 收编）
+val HeroActBg = Color(0x73100E11)

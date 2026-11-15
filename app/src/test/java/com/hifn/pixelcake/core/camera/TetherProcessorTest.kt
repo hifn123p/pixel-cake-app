@@ -91,4 +91,31 @@ class TetherProcessorTest {
         //（decodeFullRes 对 .arw 设计上返回 null —— 路由错就是 P0-1 复发）。
         assertTrue("RAW 对象必须以 isRaw=true 交付（K1）", out[0].isRaw)
     }
+
+    // ---- v0.7.2（审计 C-F3）：下载失败的交还重试 ----
+
+    @Test
+    fun releaseForRetry_requeuesPhotoNextRound() = runTest {
+        val p = processor()
+        val info = fakeInfoOf(5 to info("DSC00005.JPG"))
+        val first = p.collectNewPhotos(listOf(5), info)
+        assertEquals(listOf(5), first.map { it.handle })
+        // 模拟一次 USB 抖动：交还重试 ⇒ 下轮它必须再次成为新片（而不是永久漏导）
+        p.releaseForRetry(5)
+        val second = p.collectNewPhotos(listOf(5), info)
+        assertEquals("交还后的句柄必须重新进入候选（C-F3）", listOf(5), second.map { it.handle })
+    }
+
+    @Test
+    fun releaseForRetry_stopsAfterMaxRetries() = runTest {
+        val p = processor()
+        val info = fakeInfoOf(6 to info("DSC00006.JPG"))
+        p.collectNewPhotos(listOf(6), info)
+        // 连续失败到上限：此后保持记账，不再占每轮名额（K3 同源的饿星防护）
+        repeat(TetherProcessor.MAX_RETRY_PER_PHOTO) { p.releaseForRetry(6) }
+        val out = p.collectNewPhotos(listOf(6), info)
+        assertTrue("记满重试上限后必须停止重试", out.isEmpty())
+        assertEquals(1, p.knownCount)
+        assertTrue(logs.any { it.contains("停止自动重试") })
+    }
 }

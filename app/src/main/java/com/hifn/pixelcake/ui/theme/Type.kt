@@ -20,9 +20,11 @@ import androidx.compose.ui.unit.sp
  * - 系统字体缩放 fontScale 1.0–1.3 全量适配；≥1.3 在设置提供「放大文本」开关。
  */
 val Typography = Typography(
+    // v0.7.2 对齐规范 §2.3 真值表「display · 28/36 · Bold」（审计 A-P3-10：原 SemiBold 偏轻，
+    // 首页/设置页的大标题压不住）。
     displaySmall = TextStyle(
         fontFamily = FontFamily.Default,
-        fontWeight = FontWeight.SemiBold,
+        fontWeight = FontWeight.Bold,
         fontSize = 28.sp,
         lineHeight = 36.sp
     ),
@@ -36,14 +38,19 @@ val Typography = Typography(
         fontFamily = FontFamily.Default,
         fontWeight = FontWeight.Normal,
         fontSize = 15.sp,
-        lineHeight = 22.sp
+        lineHeight = 22.sp,
+        // 「一切数值 tabular-nums」（§2.3 明文）：回执/读数行多在这一档，
+        // 拖滑块时数字不再左右横跳（审计 A-P2-3：此前只有 HUD 一处生效）。
+        fontFeatureSettings = "tnum"
     ),
     labelMedium = TextStyle(
         fontFamily = FontFamily.Default,
         fontWeight = FontWeight.Medium,
         fontSize = 13.sp,
         lineHeight = 18.sp,
-        letterSpacing = 0.3.sp
+        letterSpacing = 0.3.sp,
+        // 同上：滑块数值/分组读数集中在 labelMedium（CJK 字形无 tnum 变体时原样渲染，无副作用）。
+        fontFeatureSettings = "tnum"
     ),
     // 第 5 档（caption）：**下限**，只用于「辅助说明 / 状态回显」这类一句话的文字。
     labelSmall = TextStyle(

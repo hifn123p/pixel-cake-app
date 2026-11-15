@@ -98,10 +98,20 @@ object MlMaskProvider {
     /** 已缓存概率的边长；0 = 当前这张图还没推理过。 */
     val cachedSideForUi: Int get() = cacheSide
 
+    /**
+     * 模型**创建失败**的原因（v0.7.2，审计 C-F5）：`LiteRtSkinMaskModel.createOrNull`
+     * 返回 null 时留下的最近一次异常摘要。null = 尚未尝试加载或加载成功 ——
+     * 它与「未加载」的区别是诊断页的核心价值：用户与开发者必须能区分
+     * 「还没预热」与「预热过了但坏了」。
+     */
+    var lastLoadErrorForUi: String? = null
+        private set
+
     /** 模型中心（UI 3.0 §N）的行数据：键 = 展示名，值 = 展示值。只读快照。 */
     fun diagnostics(): Map<String, String> = mapOf(
         "模型已加载" to (model != null).toString(),
         "加速器" to (accelerator ?: "未加载"),
+        "加载失败" to (lastLoadErrorForUi ?: "—"),
         "本会话禁用" to disabled.toString(),
         "永久关闭" to permanentlyDisabled.toString(),
         "OOM 计数" to oomCount.toString(),
@@ -238,7 +248,12 @@ object MlMaskProvider {
                     DebugLog.TAG_ML,
                     "auto mask unavailable -> callers fall back to brush/FullMask",
                 )
+                // v0.7.2（审计 C-F5）：诊断页要能回答「为什么失败」。
+                // createOrNull 内部吞掉异常只留 DebugLog —— 这里取不到堆栈摘要时
+                // 至少标记「创建返回 null（资产缺失 / 委托初始化失败）」。
+                lastLoadErrorForUi = "createOrNull 返回 null（资产缺失或加速器初始化失败，详见日志）"
             } else {
+                lastLoadErrorForUi = null
                 DebugLog.i(
                     DebugLog.TAG_ML,
                     "skin mask model loaded",

@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -91,6 +92,16 @@ fun <T> GlassChipRow(
 ) {
     // ⚠️ chip 的生成逻辑必须只有一份：`singleRow` 只换容器，不换内容。
     // 两处各写一遍 forEach 迟早会漂移（一边记得传 `itemEnabled`、另一边忘了）。
+    //
+    // ⚠️ 选中态配色必须显式给（审计 A-P1-1，v0.7.2）：不传 `colors` 时 M3 用
+    // `secondaryContainer`（基线紫灰）—— 全 App 的「选中 chip」因此与整套
+    // 「暗房 + 安全灯」的琥珀语言脱节。规范 `.g.on` 是 `amber-soft(14%)` 底 + 琥珀字，
+    // 与 Rail / 导出胶囊手工写的 `primary.copy(alpha = 0.14f)` 同口径；此处收敛后
+    // 全部调用点（分组 / 二级 / 作用域 / LUT / 设置 / 导出格式 / 相机预设）一并生效。
+    val selectedChipColors = FilterChipDefaults.filterChipColors(
+        selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+        selectedLabelColor = MaterialTheme.colorScheme.primary
+    )
     val chipRow: @Composable () -> Unit = {
         items.forEach { item ->
             FilterChip(
@@ -98,6 +109,7 @@ fun <T> GlassChipRow(
                 onClick = { onSelect(item) },
                 enabled = enabled && (itemEnabled?.invoke(item) ?: true),
                 shape = Radius.chip,
+                colors = selectedChipColors,
                 label = {
                     Row(
                         modifier = Modifier.padding(
