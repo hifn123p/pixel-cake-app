@@ -63,15 +63,22 @@ jobs:
 
       - name: Create AVD
         run: |
+          # ⚠️ ANDROID_AVD_HOME 必须在「创建」与「启动」两步显式一致：setup-android 会把
+          # ANDROID_AVD_HOME 指到它自己的临时目录，而 emulator 默认只搜
+          # $ANDROID_AVD_HOME / $ANDROID_SDK_HOME/avd / $HOME/.android/avd ——
+          # 上一轮「Unknown AVD name」就是两边口径分裂
+          export ANDROID_AVD_HOME="$HOME/.android/avd"
+          mkdir -p "$ANDROID_AVD_HOME"
           echo no | avdmanager create avd --force -n pixelcake-audit \
             -k "system-images;android-36;google_apis;x86_64" -d pixel_6
-          # 预热磁盘足够（冷启动 AVD 首次写 userdata）；关掉动画链路加快走查
           printf 'hw.ramSize=4096\nhw.mainKeys=no\n' >> "$ANDROID_AVD_HOME/pixelcake-audit.avd/config.ini" || true
+          ls "$ANDROID_AVD_HOME"
 
       - name: Boot emulator (headless, software GPU)
+        env:
+          ANDROID_AVD_HOME: /home/runner/.android/avd
         run: |
           # ⚠️ setup-android 不把 $ANDROID_HOME/emulator 加进 PATH —— 必须全路径调用
-          #（前几轮 boot 失败 20 分钟的唯一原因就这一行 `emulator: command not found`）
           EMU="$ANDROID_HOME/emulator/emulator"
           "$EMU" -accel-check || true
           "$EMU" -avd pixelcake-audit \
