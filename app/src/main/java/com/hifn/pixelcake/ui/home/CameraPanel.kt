@@ -891,9 +891,10 @@ fun CameraPanel(
         // 单张拉取（下载无取消参数）不显示这个按钮 —— 显示一个点了没反应的取消
         // 比没有取消更糟（诚实界面纪律）。
         if (busy && progress != null && batchRunning) {
-            TextButton(modifier = Modifier.heightIn(min = 44.dp), 
+            TextButton(
                 onClick = { batchCancel.set(true) },
-                modifier = Modifier.padding(top = Spacing.xs)
+                modifier = Modifier.heightIn(min = 44.dp).then(Modifier.padding(top = Spacing.xs)
+            )
             ) {
                 Text("取消（当前文件处理完即停）")
             }
