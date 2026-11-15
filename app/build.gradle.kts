@@ -8,6 +8,11 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
+// v0.7.3：release 签名闸门的判定布尔（android{} 内赋值；声明必须在顶部 —— 顶层属性
+// 初始化按声明序执行，声明在后会把赋值覆盖回 false）
+var releaseSigningPresent = false
+
+
 android {
     namespace = "com.hifn.pixelcake"
     compileSdk = libs.versions.compileSdk.get().toInt()
@@ -156,7 +161,6 @@ kotlin {
 // 本地实验显式传 -PallowDebugSignedRelease=true。
 // ⚠️ .kts 里 `gradle.taskGraph.whenReady { }` 的 receiver 推断不过（首轮 CI 实证），
 // 改用 whenTaskAdded：task 在 android{} 求值后才注册，届时布尔已定。
-var releaseSigningPresent = false
 tasks.whenTaskAdded {
     val wantsReleaseArtifact = name.startsWith("assembleRelease") || name.startsWith("bundleRelease")
     if (wantsReleaseArtifact &&
