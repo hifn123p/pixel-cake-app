@@ -1,11 +1,35 @@
 
+> Configure project :app
+e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/build.gradle.kts:155:28: Type mismatch: inferred type is ([Error type: Cannot infer a lambda parameter type]) -> Unit but Closure<(raw) Any!>! was expected
+e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/build.gradle.kts:155:30: Cannot infer a type for this parameter. Please specify it explicitly.
+e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/build.gradle.kts:157:9: Unresolved reference: it
+e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/build.gradle.kts:157:50: Unresolved reference: it
+e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/build.gradle.kts:160:9: Unresolved reference: signingConfigs
+
 FAILURE: Build failed with an exception.
 
 * Where:
-Build file '/home/runner/work/pixel-cake-app/pixel-cake-app/app/build.gradle.kts' line: 116
+Build file '/home/runner/work/pixel-cake-app/pixel-cake-app/app/build.gradle.kts' line: 155
 
 * What went wrong:
-assembleRelease 需要签名配置（KEYSTORE_PATH 等）；拒绝用公开的 debug 密钥签名 release（本地实验请加 -PallowDebugSignedRelease=true）
+Script compilation errors:
+
+  Line 155: gradle.taskGraph.whenReady { graph ->
+                                       ^ Type mismatch: inferred type is ([Error type: Cannot infer a lambda parameter type]) -> Unit but Closure<(raw) Any!>! was expected
+
+  Line 155: gradle.taskGraph.whenReady { graph ->
+                                         ^ Cannot infer a type for this parameter. Please specify it explicitly.
+
+  Line 157:         it.name.startsWith("assembleRelease") || it.name.startsWith("bundleRelease")
+                    ^ Unresolved reference: it
+
+  Line 157:         it.name.startsWith("assembleRelease") || it.name.startsWith("bundleRelease")
+                                                             ^ Unresolved reference: it
+
+  Line 160:         signingConfigs.findByName("release") == null &&
+                    ^ Unresolved reference: signingConfigs
+
+5 errors
 
 * Try:
 > Run with --info or --debug option to get more log output.
@@ -13,27 +37,93 @@ assembleRelease 需要签名配置（KEYSTORE_PATH 等）；拒绝用公开的 d
 > Get more help at https://help.gradle.org.
 
 * Exception is:
-org.gradle.api.GradleException: assembleRelease 需要签名配置（KEYSTORE_PATH 等）；拒绝用公开的 debug 密钥签名 release（本地实验请加 -PallowDebugSignedRelease=true）
-	at Build_gradle$1$4$2.invoke(build.gradle.kts:116)
-	at Build_gradle$1$4$2.invoke(build.gradle.kts:107)
-	at com.android.build.gradle.internal.dsl.CommonExtensionImpl$sam$org_gradle_api_Action$0.execute(CommonExtensionImpl.kt)
-	at org.gradle.api.internal.DefaultNamedDomainObjectCollection.getByName(DefaultNamedDomainObjectCollection.java:373)
-	at com.android.build.gradle.internal.dsl.CommonExtensionImpl.release(CommonExtensionImpl.kt:234)
-	at com.android.build.gradle.internal.dsl.BaseAppModuleExtension.release(BaseAppModuleExtension.kt)
-	at Build_gradle$1$4.invoke(build.gradle.kts:107)
-	at Build_gradle$1$4.invoke(build.gradle.kts:102)
-	at com.android.build.gradle.internal.dsl.CommonExtensionImpl.buildTypes(CommonExtensionImpl.kt:226)
-	at com.android.build.gradle.internal.dsl.BaseAppModuleExtension.buildTypes(BaseAppModuleExtension.kt)
-	at Build_gradle$1.execute(build.gradle.kts:102)
-	at Build_gradle$1.execute(build.gradle.kts:11)
-	at org.gradle.internal.extensibility.ExtensionsStorage$ExtensionHolder.configure(ExtensionsStorage.java:177)
-	at org.gradle.internal.extensibility.ExtensionsStorage.configureExtension(ExtensionsStorage.java:64)
-	at org.gradle.internal.extensibility.DefaultConvention.configure(DefaultConvention.java:207)
-	at org.gradle.kotlin.dsl.Accessors377twfxlhpj2n65rquy9ybeqsKt.android(Unknown Source)
-	at Build_gradle.<init>(build.gradle.kts:11)
-	at Program.execute(Unknown Source)
-	at org.gradle.kotlin.dsl.execution.Interpreter$ProgramHost.eval(Interpreter.kt:516)
-	at org.gradle.kotlin.dsl.execution.Interpreter$ProgramHost.evaluateSecondStageOf(Interpreter.kt:428)
+ScriptCompilationException(scriptCompilationErrors=[ScriptCompilationError(message=Type mismatch: inferred type is ([Error type: Cannot infer a lambda parameter type]) -> Unit but Closure<(raw) Any!>! was expected, location=/home/runner/.gradle/.tmp/gradle-kotlin-dsl-18215064874473051948.tmp/build.gradle.kts (155:28)), ScriptCompilationError(message=Cannot infer a type for this parameter. Please specify it explicitly., location=/home/runner/.gradle/.tmp/gradle-kotlin-dsl-18215064874473051948.tmp/build.gradle.kts (155:30)), ScriptCompilationError(message=Unresolved reference: it, location=/home/runner/.gradle/.tmp/gradle-kotlin-dsl-18215064874473051948.tmp/build.gradle.kts (157:9)), ScriptCompilationError(message=Unresolved reference: it, location=/home/runner/.gradle/.tmp/gradle-kotlin-dsl-18215064874473051948.tmp/build.gradle.kts (157:50)), ScriptCompilationError(message=Unresolved reference: signingConfigs, location=/home/runner/.gradle/.tmp/gradle-kotlin-dsl-18215064874473051948.tmp/build.gradle.kts (160:9))])
+	at org.gradle.kotlin.dsl.support.KotlinCompilerKt.reportToMessageCollectorAndThrowOnErrors(KotlinCompiler.kt:277)
+	at org.gradle.kotlin.dsl.support.KotlinCompilerKt.compileKotlinScriptModuleTo(KotlinCompiler.kt:246)
+	at org.gradle.kotlin.dsl.support.KotlinCompilerKt.compileKotlinScriptToDirectory(KotlinCompiler.kt:198)
+	at org.gradle.kotlin.dsl.execution.ResidualProgramCompiler$compileScript$1.invoke(ResidualProgramCompiler.kt:713)
+	at org.gradle.kotlin.dsl.execution.ResidualProgramCompiler$compileScript$1.invoke(ResidualProgramCompiler.kt:712)
+	at org.gradle.kotlin.dsl.provider.StandardKotlinScriptEvaluator$InterpreterHost$runCompileBuildOperation$1.call(KotlinScriptEvaluator.kt:209)
+	at org.gradle.kotlin.dsl.provider.StandardKotlinScriptEvaluator$InterpreterHost$runCompileBuildOperation$1.call(KotlinScriptEvaluator.kt:206)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:210)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:205)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:67)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:60)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:167)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:60)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.call(DefaultBuildOperationRunner.java:54)
+	at org.gradle.kotlin.dsl.provider.StandardKotlinScriptEvaluator$InterpreterHost.runCompileBuildOperation(KotlinScriptEvaluator.kt:206)
+	at org.gradle.kotlin.dsl.execution.Interpreter$ProgramHost$compileSecondStageOf$cacheDir$1$1$1$1$1.invoke(Interpreter.kt:492)
+	at org.gradle.kotlin.dsl.execution.Interpreter$ProgramHost$compileSecondStageOf$cacheDir$1$1$1$1$1.invoke(Interpreter.kt:492)
+	at org.gradle.kotlin.dsl.execution.ResidualProgramCompiler.compileScript-C5AE47M(ResidualProgramCompiler.kt:712)
+	at org.gradle.kotlin.dsl.execution.ResidualProgramCompiler.compileScript-C5AE47M$default(ResidualProgramCompiler.kt:705)
+	at org.gradle.kotlin.dsl.execution.ResidualProgramCompiler.emitStage2ProgramFor(ResidualProgramCompiler.kt:364)
+	at org.gradle.kotlin.dsl.execution.Interpreter$ProgramHost$compileSecondStageOf$cacheDir$1.invoke(Interpreter.kt:493)
+	at org.gradle.kotlin.dsl.execution.Interpreter$ProgramHost$compileSecondStageOf$cacheDir$1.invoke(Interpreter.kt:469)
+	at org.gradle.kotlin.dsl.provider.StandardKotlinScriptEvaluator$KotlinScriptCompilationAndInstrumentation.compile(KotlinScriptEvaluator.kt:440)
+	at org.gradle.internal.scripts.BuildScriptCompilationAndInstrumentation.execute(BuildScriptCompilationAndInstrumentation.java:136)
+	at org.gradle.internal.execution.steps.ExecuteStep.executeInternal(ExecuteStep.java:105)
+	at org.gradle.internal.execution.steps.ExecuteStep.access$000(ExecuteStep.java:44)
+	at org.gradle.internal.execution.steps.ExecuteStep$1.call(ExecuteStep.java:59)
+	at org.gradle.internal.execution.steps.ExecuteStep$1.call(ExecuteStep.java:56)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:210)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:205)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:67)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:60)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:167)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:60)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.call(DefaultBuildOperationRunner.java:54)
+	at org.gradle.internal.execution.steps.ExecuteStep.execute(ExecuteStep.java:56)
+	at org.gradle.internal.execution.steps.ExecuteStep.execute(ExecuteStep.java:44)
+	at org.gradle.internal.execution.steps.CancelExecutionStep.execute(CancelExecutionStep.java:42)
+	at org.gradle.internal.execution.steps.TimeoutStep.executeWithoutTimeout(TimeoutStep.java:75)
+	at org.gradle.internal.execution.steps.TimeoutStep.execute(TimeoutStep.java:55)
+	at org.gradle.internal.execution.steps.PreCreateOutputParentsStep.execute(PreCreateOutputParentsStep.java:50)
+	at org.gradle.internal.execution.steps.PreCreateOutputParentsStep.execute(PreCreateOutputParentsStep.java:28)
+	at org.gradle.internal.execution.steps.BroadcastChangingOutputsStep.execute(BroadcastChangingOutputsStep.java:61)
+	at org.gradle.internal.execution.steps.BroadcastChangingOutputsStep.execute(BroadcastChangingOutputsStep.java:26)
+	at org.gradle.internal.execution.steps.NoInputChangesStep.execute(NoInputChangesStep.java:30)
+	at org.gradle.internal.execution.steps.NoInputChangesStep.execute(NoInputChangesStep.java:21)
+	at org.gradle.internal.execution.steps.CaptureOutputsAfterExecutionStep.execute(CaptureOutputsAfterExecutionStep.java:69)
+	at org.gradle.internal.execution.steps.CaptureOutputsAfterExecutionStep.execute(CaptureOutputsAfterExecutionStep.java:46)
+	at org.gradle.internal.execution.steps.BuildCacheStep.executeWithoutCache(BuildCacheStep.java:189)
+	at org.gradle.internal.execution.steps.BuildCacheStep.lambda$execute$1(BuildCacheStep.java:75)
+	at org.gradle.internal.Either$Right.fold(Either.java:175)
+	at org.gradle.internal.execution.caching.CachingState.fold(CachingState.java:62)
+	at org.gradle.internal.execution.steps.BuildCacheStep.execute(BuildCacheStep.java:73)
+	at org.gradle.internal.execution.steps.BuildCacheStep.execute(BuildCacheStep.java:48)
+	at org.gradle.internal.execution.steps.NeverUpToDateStep.execute(NeverUpToDateStep.java:34)
+	at org.gradle.internal.execution.steps.NeverUpToDateStep.execute(NeverUpToDateStep.java:22)
+	at org.gradle.internal.execution.steps.legacy.MarkSnapshottingInputsFinishedStep.execute(MarkSnapshottingInputsFinishedStep.java:37)
+	at org.gradle.internal.execution.steps.legacy.MarkSnapshottingInputsFinishedStep.execute(MarkSnapshottingInputsFinishedStep.java:27)
+	at org.gradle.internal.execution.steps.ResolveNonIncrementalCachingStateStep.executeDelegate(ResolveNonIncrementalCachingStateStep.java:50)
+	at org.gradle.internal.execution.steps.AbstractResolveCachingStateStep.execute(AbstractResolveCachingStateStep.java:71)
+	at org.gradle.internal.execution.steps.AbstractResolveCachingStateStep.execute(AbstractResolveCachingStateStep.java:39)
+	at org.gradle.internal.execution.steps.ValidateStep.execute(ValidateStep.java:107)
+	at org.gradle.internal.execution.steps.ValidateStep.execute(ValidateStep.java:56)
+	at org.gradle.internal.execution.steps.AbstractCaptureStateBeforeExecutionStep.execute(AbstractCaptureStateBeforeExecutionStep.java:64)
+	at org.gradle.internal.execution.steps.AbstractCaptureStateBeforeExecutionStep.execute(AbstractCaptureStateBeforeExecutionStep.java:43)
+	at org.gradle.internal.execution.steps.legacy.MarkSnapshottingInputsStartedStep.execute(MarkSnapshottingInputsStartedStep.java:38)
+	at org.gradle.internal.execution.steps.AssignImmutableWorkspaceStep.lambda$executeInTemporaryWorkspace$3(AssignImmutableWorkspaceStep.java:209)
+	at org.gradle.internal.execution.workspace.impl.CacheBasedImmutableWorkspaceProvider$1.withTemporaryWorkspace(CacheBasedImmutableWorkspaceProvider.java:116)
+	at org.gradle.internal.execution.steps.AssignImmutableWorkspaceStep.executeInTemporaryWorkspace(AssignImmutableWorkspaceStep.java:199)
+	at org.gradle.internal.execution.steps.AssignImmutableWorkspaceStep.lambda$execute$0(AssignImmutableWorkspaceStep.java:121)
+	at org.gradle.internal.execution.steps.AssignImmutableWorkspaceStep.execute(AssignImmutableWorkspaceStep.java:121)
+	at org.gradle.internal.execution.steps.AssignImmutableWorkspaceStep.execute(AssignImmutableWorkspaceStep.java:90)
+	at org.gradle.internal.execution.steps.ChoosePipelineStep.execute(ChoosePipelineStep.java:38)
+	at org.gradle.internal.execution.steps.ChoosePipelineStep.execute(ChoosePipelineStep.java:23)
+	at org.gradle.internal.execution.steps.ExecuteWorkBuildOperationFiringStep.lambda$execute$2(ExecuteWorkBuildOperationFiringStep.java:67)
+	at org.gradle.internal.execution.steps.ExecuteWorkBuildOperationFiringStep.execute(ExecuteWorkBuildOperationFiringStep.java:67)
+	at org.gradle.internal.execution.steps.ExecuteWorkBuildOperationFiringStep.execute(ExecuteWorkBuildOperationFiringStep.java:39)
+	at org.gradle.internal.execution.steps.IdentityCacheStep.execute(IdentityCacheStep.java:46)
+	at org.gradle.internal.execution.steps.IdentityCacheStep.execute(IdentityCacheStep.java:34)
+	at org.gradle.internal.execution.steps.IdentifyStep.execute(IdentifyStep.java:48)
+	at org.gradle.internal.execution.steps.IdentifyStep.execute(IdentifyStep.java:35)
+	at org.gradle.internal.execution.impl.DefaultExecutionEngine$1.execute(DefaultExecutionEngine.java:61)
+	at org.gradle.kotlin.dsl.provider.StandardKotlinScriptEvaluator$InterpreterHost.cachedDirFor(KotlinScriptEvaluator.kt:304)
+	at org.gradle.kotlin.dsl.execution.Interpreter$ProgramHost.compileSecondStageOf(Interpreter.kt:469)
+	at Program.loadSecondStageFor(Unknown Source)
+	at org.gradle.kotlin.dsl.execution.Interpreter$ProgramHost.evaluateSecondStageOf(Interpreter.kt:433)
 	at Program.execute(Unknown Source)
 	at org.gradle.kotlin.dsl.execution.Interpreter$ProgramHost.eval(Interpreter.kt:516)
 	at org.gradle.kotlin.dsl.execution.Interpreter.eval(Interpreter.kt:194)
@@ -198,4 +288,4 @@ org.gradle.api.GradleException: assembleRelease 需要签名配置（KEYSTORE_PA
 	at org.gradle.internal.concurrent.AbstractManagedExecutor$1.run(AbstractManagedExecutor.java:48)
 
 
-BUILD FAILED in 800ms
+BUILD FAILED in 2s
