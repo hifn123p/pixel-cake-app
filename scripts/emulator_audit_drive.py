@@ -330,6 +330,13 @@ shot("61_home_after_back")
 # ———— K. 设置页走查 ————
 tap("text", "设置", "62_open_settings", wait=2.0)
 shot("63_settings")
+# 滚动到设置页下半部（相机直连组 / 模型统计行在 LazyColumn 更下方）
+swipe(int(W * 0.5), int(H * 0.75), int(W * 0.5), int(H * 0.22), ms=500, wait=1.0)
+swipe(int(W * 0.5), int(H * 0.75), int(W * 0.5), int(H * 0.22), ms=500, wait=1.0)
+shot("63b_settings_scrolled")
+root, st = dump("settings_scrolled")
+results.append(f"CAMERA GROUP VISIBLE: {'相机直连' in st}")
+results.append(f"MODEL STATS ROW: {'推理次数' in st}")
 tap("text", "查看", "64_model_center", wait=2.0, allow_missing=True)
 shot("65_model_center")
 back()
