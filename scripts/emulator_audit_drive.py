@@ -160,24 +160,52 @@ wake_and_start_app()
 root, txt = dump("home")
 shot("01_home")
 
-# B. 相册导入（Photo Picker）
-tap("text", "相册", "02_tap_gallery", wait=3.0)
-root, txt = dump("picker")
-shot("03_photo_picker")
-# Photo Picker 的条目 desc 是「Photo taken on …」（无文件名）—— 按前缀取**第一格**：
-# 推送顺序决定了最左是 portrait_test（人像 + 色块，走查主素材）。
-root, _ = dump("04_pick_image")
-photo_nodes = find_contains(root, "content-desc", "Photo taken on")
-picked = False
-if photo_nodes:
-    c = bounds_center(photo_nodes[0])
-    if c:
-        run(["shell", "input", "tap", str(c[0]), str(c[1])])
-        results.append(f"picker tap first 'Photo taken on' at {c}")
-        picked = True
-        time.sleep(2.0)
-if not picked:
-    results.append("PICK: no 'Photo taken on' nodes")
+# B. 导入（主路：SAF「文件 ARW」—— 直接文件系统，绕开 MediaStore 惰性扫描；
+#     后备：Photo Picker）。SAF 的 */* 接受 jpg：openInEditor 按 mime/后缀路由解码。
+def import_via_saf(tag):
+    """打开「文件 ARW」→ Recent 直接点目标文件；不在 Recent 就走根目录导航。"""
+    if not tap("text", "文件 ARW", f"{tag}_saf_open", wait=3.0):
+        return False
+    root, _ = dump(f"{tag}_saf")
+    node = find_contains(root, "text", "portrait_test.jpg")
+    if not node:
+        # Recent 没有 → 抽屉 → 根目录 → Pictures
+        tap("content-desc", "Show roots", f"{tag}_roots", wait=1.5, allow_missing=True)
+        if not tap("text", "Pictures", f"{tag}_pictures", wait=2.0, allow_missing=True):
+            swipe(int(W * 0.5), int(H * 0.75), int(W * 0.5), int(H * 0.35), ms=500, wait=1.0)
+            tap("text", "Pictures", f"{tag}_pictures2", wait=2.0, allow_missing=True)
+        node_root, _ = dump(f"{tag}_pics_dir")
+        node = find_contains(node_root, "text", "portrait_test.jpg")
+    if not node:
+        results.append(f"{tag}: SAF navigation failed (portrait_test.jpg not found)")
+        back()  # 关掉 SAF，回到首页让 fallback 接手
+        time.sleep(1.5)
+        return False
+    c = bounds_center(node[0])
+    if not c:
+        return False
+    run(["shell", "input", "tap", str(c[0]), str(c[1])])
+    results.append(f"{tag}: SAF tapped portrait_test.jpg at {c}")
+    time.sleep(2.0)
+    return True
+
+
+saf_ok = import_via_saf("B")
+if not saf_ok:
+    # 后备：Photo Picker（MediaStore 就绪时才有效）
+    tap("text", "相册", "02_tap_gallery", wait=3.0)
+    root, txt = dump("picker")
+    shot("03_photo_picker")
+    root, _ = dump("04_pick_image")
+    photo_nodes = find_contains(root, "content-desc", "Photo taken on")
+    if photo_nodes:
+        c = bounds_center(photo_nodes[0])
+        if c:
+            run(["shell", "input", "tap", str(c[0]), str(c[1])])
+            results.append(f"picker tap first 'Photo taken on' at {c}")
+            time.sleep(2.0)
+    else:
+        results.append("PICK: no 'Photo taken on' nodes")
 # 选定后编辑器渲染需要时间（解码 + 首帧 + ML 探测）
 time.sleep(6.0)
 root, txt = dump("editor")
@@ -289,16 +317,23 @@ tap("text", "取消", "69_reset_cancel", wait=1.0, allow_missing=True)
 
 # ———— L. 边界：tiny.jpg ————
 tap("text", "调色台", "70_back_darkroom", wait=1.5, contains=True, allow_missing=True)
-tap("text", "相册", "71_open_gallery2", wait=3.0, allow_missing=True)
-# tiny 的 desc 同样不带文件名：取**最后一格**（与首页第一格区分；顺序按扫描序）
-root, _ = dump("72_pick_tiny")
-tnodes = find_contains(root, "content-desc", "Photo taken on")
-if tnodes:
-    c = bounds_center(tnodes[-1])
-    if c:
-        run(["shell", "input", "tap", str(c[0]), str(c[1])])
-        results.append(f"tiny tap last 'Photo taken on' at {c}")
-time.sleep(5.0)
+# tiny 走同一条 SAF 路：Pictures 里点 tiny.jpg（文件名可点，无歧义）
+if not tap("text", "文件 ARW", "71_saf_open", wait=3.0, allow_missing=True):
+    tap("text", "相册", "71_open_gallery2", wait=3.0, allow_missing=True)
+root, _ = dump("72_saf_tiny")
+t_node = find_contains(root, "text", "tiny.jpg")
+if not t_node:
+    tap("content-desc", "Show roots", "72_roots", wait=1.5, allow_missing=True)
+    tap("text", "Pictures", "72_pictures", wait=2.0, allow_missing=True)
+    root, _ = dump("72_pics_dir")
+    t_node = find_contains(root, "text", "tiny.jpg")
+if t_node:
+    c = bounds_center(t_node[0])
+    run(["shell", "input", "tap", str(c[0]), str(c[1])])
+    results.append(f"tiny SAF tap at {c}")
+else:
+    results.append("TINY: saf navigation failed")
+time.sleep(6.0)
 root, ttxt = dump("tiny_editor")
 shot("73_tiny_editor")
 results.append(f"TINY EDITOR OPEN: {'导出' in ttxt or '撤销' in ttxt}")
