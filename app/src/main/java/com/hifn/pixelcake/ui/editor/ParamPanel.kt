@@ -694,11 +694,11 @@ private fun WholeImageStageNotice(scope: ObjectScope) {
 private fun PortraitParams(
     retouch: RetouchState,
     tool: String,
-    selection: PanelSelection,
-    onSelectionChange: (PanelSelection) -> Unit,
     brushRadius: Float,
     inpaintRadius: Float,
     inpaintCount: Int,
+    selection: PanelSelection,
+    onSelectionChange: (PanelSelection) -> Unit,
     autoMaskEnabled: Boolean,
     onRetouchChange: (RetouchState) -> Unit,
     onRetouchCommit: () -> Unit,
@@ -1768,5 +1768,8 @@ private fun Hint(text: String) {
 /** 面板内的次要动作用文字按钮，不用实心按钮 —— 实心按钮会把视线从预览图抢走。 */
 @Composable
 private fun ClearButton(text: String, onClick: () -> Unit) {
-    TextButton(modifier = Modifier.heightIn(min = 44.dp), onClick = onClick, modifier = Modifier.fillMaxWidth()) { Text(text) }
+    TextButton(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp)
+    ) { Text(text) }
 }

@@ -1040,7 +1040,8 @@ fun EditorScreen(
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(
-                                    horizontal = Spacing.cardInner,
+                                    start = Spacing.cardInner,
+                                    end = Spacing.cardInner,
                                     bottom = Spacing.xs
                                 )
                             )

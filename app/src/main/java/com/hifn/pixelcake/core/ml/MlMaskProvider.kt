@@ -3,6 +3,9 @@ package com.hifn.pixelcake.core.ml
 import android.content.Context
 import android.os.SystemClock
 import android.graphics.Bitmap
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import com.hifn.pixelcake.diag.DebugLog
 
 /**
