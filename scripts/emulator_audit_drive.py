@@ -177,7 +177,13 @@ def import_via_saf(tag):
     if not tap("text", "文件 ARW", f"{tag}_saf_open", wait=3.0):
         return False
     root, _ = dump(f"{tag}_saf")
-    node = find_contains(root, "text", "portrait_test.jpg")
+    # v0.7.3 复测修正：Recent 列表顺序不定 —— 接受**任意**测试图（都走同一条编辑链）
+    node = None
+    for want in ("portrait_test.jpg", "landscape_test.jpg", "tiny.jpg"):
+        node = find_contains(root, "text", want)
+        if node:
+            results.append(f"{tag}: SAF found {want}")
+            break
     if not node:
         # Recent 没有 → 抽屉 → 根目录 → Pictures
         tap("content-desc", "Show roots", f"{tag}_roots", wait=1.5, allow_missing=True)
@@ -185,7 +191,11 @@ def import_via_saf(tag):
             swipe(int(W * 0.5), int(H * 0.75), int(W * 0.5), int(H * 0.35), ms=500, wait=1.0)
             tap("text", "Pictures", f"{tag}_pictures2", wait=2.0, allow_missing=True)
         node_root, _ = dump(f"{tag}_pics_dir")
-        node = find_contains(node_root, "text", "portrait_test.jpg")
+        node = None
+        for want in ("portrait_test.jpg", "landscape_test.jpg", "tiny.jpg"):
+            node = find_contains(node_root, "text", want)
+            if node:
+                break
     if not node:
         results.append(f"{tag}: SAF navigation failed (portrait_test.jpg not found)")
         back()  # 关掉 SAF，回到首页让 fallback 接手
@@ -339,24 +349,21 @@ if t and "导出到系统相册" in t:
     results.append("export sheet still open -> back()")
 
 # ———— J. 退出编辑器 → 首页 ————
+# —— v0.7.3 复测：进程死亡会话恢复 —— 此刻编辑器仍开着、会话已由防抖落盘
+# （导出+自动增强+旋转都发生过）；强杀重启应无缝续上（v0.7.2 新能力的运行时验收）。
+run(["shell", "am", "force-stop", "com.hifn.pixelcake.debug"])
+time.sleep(1.5)
+run(["shell", "am", "start", "-n", "com.hifn.pixelcake.debug/com.hifn.pixelcake.MainActivity"])
+time.sleep(9.0)
+root, t = dump("61b_session_restore")
+restored = "导出" in t and "撤销" in t
+results.append(f"SESSION RESTORED: {restored}")
+shot("61b_session_restored")
 # 退出编辑器用系统返回键：回执已关（showExport=false）⇒ BackHandler 链落到
 # editorOnBack —— 与顶栏「返回」完全同一条路径，且不依赖动画期的 uiautomator dump。
 run(["shell", "input", "keyevent", "4"])
 time.sleep(2.5)
 results.append(f"focus after back={foreground()!r}")
-
-# —— v0.7.3 复测：进程死亡会话恢复 —— 编辑态刚落盘（导出+调整），强杀重启应无缝续上
-run(["shell", "am", "force-stop", "com.hifn.pixelcake.debug"])
-time.sleep(1.5)
-run(["shell", "am", "start", "-n", "com.hifn.pixelcake.debug/com.hifn.pixelcake.MainActivity"])
-time.sleep(8.0)
-root, t = dump("61b_session_restore")
-restored = "导出" in t and "撤销" in t
-results.append(f"SESSION RESTORED: {restored}")
-shot("61b_session_restored")
-# 退出恢复出来的编辑器（清档，保持后续步骤干净）
-run(["shell", "input", "keyevent", "4"])
-time.sleep(2.0)
 
 # —— v0.7.3 复测：fontScale 1.3 人体工学（Rail heightIn / deck scale / 布局不裁切）——
 run(["shell", "settings", "put", "system", "font_scale", "1.3"])
