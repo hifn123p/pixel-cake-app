@@ -13,14 +13,15 @@ import org.junit.Test
  */
 class SessionPersistenceTest {
 
+    private fun snap(ev: Float): EditSnapshot = EditSnapshot(params = EditParams(exposureEv = ev))
     private fun doc(ev: Float): EditDocument = EditDocument(params = EditParams(exposureEv = ev))
 
     @Test
     fun timeline_roundTrip_preservesUndoRedoPosition() {
-        val h = EditHistory(doc(0.0f))
-        h.push(doc(0.5f))
-        h.push(doc(1.0f))
-        h.push(doc(1.5f))
+        val h = EditHistory(snap(0.0f))
+        h.push(snap(0.5f))
+        h.push(snap(1.0f))
+        h.push(snap(1.5f))
         h.undo() // current = 1.0，redo 栈里有 1.5
         assertEquals(1, h.step)
         assertEquals(0.5f, h.current.params.exposureEv)
@@ -30,7 +31,7 @@ class SessionPersistenceTest {
         assertEquals(4, timeline.size)
         assertEquals(2, position)
 
-        val restored = EditHistory(doc(9.9f))
+        val restored = EditHistory(snap(9.9f))
         restored.importTimeline(timeline, position)
         assertEquals(0.5f, restored.current.params.exposureEv)
         assertEquals(1, restored.step)
@@ -46,9 +47,9 @@ class SessionPersistenceTest {
 
     @Test
     fun importTimeline_ignoresInvalidInput() {
-        val h = EditHistory(doc(3.21f))
+        val h = EditHistory(snap(3.21f))
         h.importTimeline(emptyList(), 0)
-        h.importTimeline(listOf(doc(1f)), 5)
+        h.importTimeline(listOf(snap(1f)), 5)
         assertEquals(3.21f, h.current.params.exposureEv)
         assertFalse(h.canUndo)
     }
