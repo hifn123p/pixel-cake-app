@@ -8,6 +8,11 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
+// v0.7.3：release 签名闸门的判定布尔（android{} 内赋值；声明必须在顶部 —— 顶层属性
+// 初始化按声明序执行，声明在后会把赋值覆盖回 false）
+var releaseSigningPresent = false
+
+
 android {
     namespace = "com.hifn.pixelcake"
     compileSdk = libs.versions.compileSdk.get().toInt()
@@ -97,6 +102,8 @@ android {
                 storeType = "PKCS12"
             }
         }
+    // v0.7.3：供下方 release 签名闸门读取（配置期一次判定）
+    releaseSigningPresent = signingConfigs.findByName("release") != null
     }
 
     buildTypes {
@@ -105,6 +112,10 @@ android {
             versionNameSuffix = "-debug"
         }
         release {
+            // v0.7.3（安全审计 中-1）：签名仍按旧口径回落 debug 密钥（**不能**在配置期抛 ——
+            // release{} 块对所有变体构建都会执行，抛在这里连 assembleDebug 都活不了）；
+            // 真正的闸门在下面 taskGraph.whenReady：真正要打 release 包且没有签名配置时
+            // fail-closed（拒绝静默使用公开在仓库里的 debug 密钥）。
             signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
             isMinifyEnabled = true
             isShrinkResources = true
@@ -142,6 +153,25 @@ android {
 kotlin {
     compilerOptions {
         jvmTarget.set(JvmTarget.fromTarget(libs.versions.jvmTarget.get()))
+    }
+}
+
+// v0.7.3（安全审计 中-1）：release 打包的签名闸门 —— 没有 KEYSTORE_PATH 等签名配置
+// 时拒绝用公开在仓库里的 debug 密钥打 release（同签名 = 任何人可造覆盖安装的恶意更新）。
+// 本地实验显式传 -PallowDebugSignedRelease=true。
+// ⚠️ 两轮实证：配置期抛（buildTypes 内）连 assembleDebug 都炸；whenTaskAdded 在
+// AGP 注册 assembleRelease 任务本身时就触发（配置期）照样炸 ⇒ 闸门放在 **doFirst**
+// （执行期）：只有真正开始打 release 包时才拦，其余构建零影响。
+tasks.matching { it.name == "assembleRelease" || it.name == "bundleRelease" }.configureEach {
+    doFirst {
+        if (!releaseSigningPresent &&
+            project.findProperty("allowDebugSignedRelease") != "true"
+        ) {
+            throw GradleException(
+                "release 打包需要签名配置（KEYSTORE_PATH 等）；" +
+                    "拒绝用公开的 debug 密钥签名（本地实验请加 -PallowDebugSignedRelease=true）"
+            )
+        }
     }
 }
 

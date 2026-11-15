@@ -197,12 +197,12 @@ private fun GlassTabBar(
                             PathIcon(
                                 def = tab.icon,
                                 tint = if (selected) accent else MaterialTheme.colorScheme.onSurfaceVariant,
-                                size = 18.dp
+                                size = 21.dp
                             )
                             Spacer(Modifier.height(3.dp))
                             Text(
                                 text = tab.label,
-                                style = MaterialTheme.typography.labelMedium,
+                                style = MaterialTheme.typography.labelSmall,
                                 fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
                                 color = if (selected) accent else MaterialTheme.colorScheme.onSurfaceVariant
                             )

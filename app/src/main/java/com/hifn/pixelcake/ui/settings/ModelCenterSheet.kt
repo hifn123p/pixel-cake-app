@@ -57,7 +57,7 @@ fun ModelCenterSheet(onDismiss: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(Spacing.cardGap)
         ) {
             Column {
-                Text("模型中心", style = MaterialTheme.typography.displaySmall)
+                Text("模型中心", style = MaterialTheme.typography.titleMedium)
                 Text(
                     // 口径与实现一致：快照在**打开本页时**取一次（本页刻意无刷新按钮，
                     // 见类 KDoc「诊断页只读不动」）；本会话禁用模型后重开本页即可看到新状态。

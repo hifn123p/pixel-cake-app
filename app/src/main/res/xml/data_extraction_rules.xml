@@ -12,4 +12,5 @@
         <include domain="sharedpref" path="." />
         <include domain="database" path="presets.db" />
     </device-transfer>
+<exclude domain="sharedpref" path="session_store.xml"/>
 </data-extraction-rules>

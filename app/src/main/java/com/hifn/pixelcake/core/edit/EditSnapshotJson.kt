@@ -34,7 +34,10 @@ data class EditDocument(
     val version: Int = EditSnapshotJson.CURRENT_VERSION,
     val params: EditParams = EditParams(),
     val retouch: RetouchState = RetouchState(),
-    val layers: List<ObjectLayer> = emptyList()
+    val layers: List<ObjectLayer> = emptyList(),
+    // v0.7.3（运行时审计 P2-1）：Q5 旋转进文档 —— 会话存档此前丢每步旋转，
+    // 「撤销回旋转之前」恢复后失效。带默认值 ⇒ 旧 JSON 自然兼容。
+    val rotationQuarterTurns: Int = 0
 )
 
 /**

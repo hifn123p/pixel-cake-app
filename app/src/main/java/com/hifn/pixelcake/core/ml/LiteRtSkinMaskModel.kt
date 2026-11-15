@@ -79,7 +79,11 @@ class LiteRtSkinMaskModel private constructor(
          * 把Environment 整个泄漏掉。类KDoc 里写着「Environment 生命周期必须覆盖 model」，
          * 说明这件事本来是清楚的，只是失败路径漏了。
          */
-        fun createOrNull(context: Context): SkinMaskModel? {
+        /**
+         * v0.7.3（审计 P2-5）：[onGpuFallback] 在「GPU 尝试失败但继续落到 CPU」时回调 ——
+         * 降级计数的正确落点（此前 MlMaskProvider 只在整体失败时 +1，方向正好反了）。
+         */
+        fun createOrNull(context: Context, onGpuFallback: () -> Unit = {}): SkinMaskModel? {
             val appCtx = context.applicationContext
             val env = runCatching { Environment.create(appCtx) }.getOrElse { t ->
                 DebugLog.w(DebugLog.TAG_ML, "Environment.create failed", kv("err", t))
@@ -118,6 +122,11 @@ class LiteRtSkinMaskModel private constructor(
                         null
                     }
                     if (instance != null) return instance
+                }
+                // v0.7.3（审计 P2-5）：走到 GPU 迭代的末尾还没 return = GPU 尝试失败
+                // 且即将落到 CPU —— 这才是「降级」事件本身。
+                if (accel == Accelerator.GPU) {
+                    runCatching { onGpuFallback() }
                 }
             }
             DebugLog.e(DebugLog.TAG_ML, "skin mask model unavailable", kv("lastErr", lastErr ?: IllegalStateException("unknown")))

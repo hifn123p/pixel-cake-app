@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.AlertDialog
@@ -40,6 +41,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -124,9 +126,21 @@ private val LUT_OPTIONS = listOf(
  * 自然饱和度/饱和度/去朦胧调的是画面的「气氛」而不是个人偏好，按功能命名。
  */
 enum class LightTab(val label: String) {
-    Light("明暗"),
+    // v0.7.3 拆组（§04-B「每屏 ≤2 滑块」）：旧「明暗」一屏 7 条滑块装不下，
+    // 按使用频次拆成 4 组 —— 基础（曝光/对比）、影调（高光/阴影）、白黑（白/黑色阶）、找回。
+    Base("基础"),
+    Tone("影调"),
+    Whites("白黑"),
+    Recovery("找回"),
     WhiteBalance("白平衡"),
     Atmosphere("氛围")
+}
+
+/** 「人像」分类的二级分组（v0.7.3 拆组）：磨皮/美型/工具各一屏 ≤4 条滑块。 */
+enum class PortraitTab(val label: String) {
+    Smooth("磨皮"),
+    Beauty("美型"),
+    Tools("工具")
 }
 
 /** 「颜色」分类的二级分组（§4.0.10：LUT 移入「预设」，只剩两个逐像素工具）。 */
@@ -193,7 +207,8 @@ enum class PresetTab(val label: String) {
  * `(PanelSelection) -> Unit`，面板里任何一处改动都走 `copy`，不会出现「某一格忘了传 setter」。
  */
 data class PanelSelection(
-    val lightTab: LightTab = LightTab.Light,
+    val lightTab: LightTab = LightTab.Base,
+    val portraitTab: PortraitTab = PortraitTab.Smooth,
     val colorTab: ColorTab = ColorTab.Mix,
     val curveTab: CurveTab = CurveTab.Luma,
     val detailTab: DetailTab = DetailTab.Sharpen,
@@ -226,9 +241,11 @@ fun ParamSubBar(
     category: EditorCategory,
     selection: PanelSelection,
     onSelectionChange: (PanelSelection) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    // v0.7.3：inline = chips 本体（deck-top 合并行内用，不带自身 padding）
+    inline: Boolean = false
 ) {
-    val bar = modifier.padding(horizontal = Spacing.cardInner, vertical = Spacing.m)
+    val bar = if (inline) modifier else modifier.padding(horizontal = Spacing.cardInner, vertical = Spacing.m)
     when (category) {
         EditorCategory.Light -> GlassChipRow(
             items = LightTab.entries,
@@ -236,10 +253,8 @@ fun ParamSubBar(
             label = { it.label },
             onSelect = { onSelectionChange(selection.copy(lightTab = it)) },
             modifier = bar,
-            // ⚠️ 2026-10-30：与作用域行同一口径 —— 这一行也钉在滚动之外，
-            // 按宽度换行时 3~5 个分组会排成 2 排（约 100dp），把内容区压到装不下直方图。
-            // 单行 + 紧凑后高度恒为一行；5 个双字 chip 在 6.7 寸屏上基本能一眼看完。
-            singleRow = true,
+            // v0.7.3：deck-top 合并行内联渲染（见 EditorScreen 的 DeckTopBar）
+            inline = true,
             compact = true
         )
 
@@ -249,10 +264,8 @@ fun ParamSubBar(
             label = { it.label },
             onSelect = { onSelectionChange(selection.copy(colorTab = it)) },
             modifier = bar,
-            // ⚠️ 2026-10-30：与作用域行同一口径 —— 这一行也钉在滚动之外，
-            // 按宽度换行时 3~5 个分组会排成 2 排（约 100dp），把内容区压到装不下直方图。
-            // 单行 + 紧凑后高度恒为一行；5 个双字 chip 在 6.7 寸屏上基本能一眼看完。
-            singleRow = true,
+            // v0.7.3：deck-top 合并行内联渲染（见 EditorScreen 的 DeckTopBar）
+            inline = true,
             compact = true
         )
 
@@ -262,10 +275,8 @@ fun ParamSubBar(
             label = { it.label },
             onSelect = { onSelectionChange(selection.copy(curveTab = it)) },
             modifier = bar,
-            // ⚠️ 2026-10-30：与作用域行同一口径 —— 这一行也钉在滚动之外，
-            // 按宽度换行时 3~5 个分组会排成 2 排（约 100dp），把内容区压到装不下直方图。
-            // 单行 + 紧凑后高度恒为一行；5 个双字 chip 在 6.7 寸屏上基本能一眼看完。
-            singleRow = true,
+            // v0.7.3：deck-top 合并行内联渲染（见 EditorScreen 的 DeckTopBar）
+            inline = true,
             compact = true
         )
 
@@ -275,10 +286,8 @@ fun ParamSubBar(
             label = { it.label },
             onSelect = { onSelectionChange(selection.copy(detailTab = it)) },
             modifier = bar,
-            // ⚠️ 2026-10-30：与作用域行同一口径 —— 这一行也钉在滚动之外，
-            // 按宽度换行时 3~5 个分组会排成 2 排（约 100dp），把内容区压到装不下直方图。
-            // 单行 + 紧凑后高度恒为一行；5 个双字 chip 在 6.7 寸屏上基本能一眼看完。
-            singleRow = true,
+            // v0.7.3：deck-top 合并行内联渲染（见 EditorScreen 的 DeckTopBar）
+            inline = true,
             compact = true
         )
 
@@ -288,14 +297,20 @@ fun ParamSubBar(
             label = { it.label },
             onSelect = { onSelectionChange(selection.copy(presetTab = it)) },
             modifier = bar,
-            // ⚠️ 2026-10-30：与作用域行同一口径 —— 这一行也钉在滚动之外，
-            // 按宽度换行时 3~5 个分组会排成 2 排（约 100dp），把内容区压到装不下直方图。
-            // 单行 + 紧凑后高度恒为一行；5 个双字 chip 在 6.7 寸屏上基本能一眼看完。
-            singleRow = true,
+            // v0.7.3：deck-top 合并行内联渲染（见 EditorScreen 的 DeckTopBar）
+            inline = true,
             compact = true
         )
 
-        EditorCategory.Portrait -> Unit
+        EditorCategory.Portrait -> GlassChipRow(
+            items = PortraitTab.entries,
+            selected = selection.portraitTab,
+            label = { it.label },
+            onSelect = { onSelectionChange(selection.copy(portraitTab = it)) },
+            modifier = bar,
+            inline = true,
+            compact = true
+        )
     }
 }
 
@@ -430,6 +445,7 @@ fun ParamPanel(
             when (category) {
                 EditorCategory.Portrait -> PortraitParams(
                     retouch, retouchTool, brushRadius, inpaintRadius, inpaintCount,
+                    selection, onSelectionChange,
                     autoMaskEnabled, onRetouchChange, onRetouchCommit, onToolChange,
                     onBrushRadiusChange, onInpaintRadiusChange, onClearMask, onClearInpaint,
                     onAutoMaskChange, onDraggingChange
@@ -517,8 +533,25 @@ fun ParamScopeBar(
     emptyScopes: Set<ObjectScope> = emptySet(),
     // 「点哪修哪」（UI 3.0 §D）：非 null 时在行尾渲染 36dp 准星按钮；pickActive = 拾取中。
     pickActive: Boolean = false,
-    onTogglePick: (() -> Unit)? = null
+    onTogglePick: (() -> Unit)? = null,
+    // v0.7.3：inline = 只渲染 chips 本体（deck-top 合并行内用；滚动/准星/提示由 DeckTopBar 承担）
+    inline: Boolean = false
 ) {
+    if (inline) {
+        GlassChipRow(
+            items = SCOPE_ITEMS,
+            selected = current,
+            label = { sc ->
+                val base = sc?.label ?: WHOLE_IMAGE_LABEL
+                if (sc != null && adjusted(sc)) "$base •" else base
+            },
+            onSelect = onSelect,
+            itemEnabled = { sc -> sc == null || (available && sc !in emptyScopes) },
+            inline = true,
+            compact = true
+        )
+        return
+    }
     Column(modifier = modifier) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(modifier = Modifier.weight(1f)) {
@@ -664,6 +697,8 @@ private fun PortraitParams(
     brushRadius: Float,
     inpaintRadius: Float,
     inpaintCount: Int,
+    selection: PanelSelection,
+    onSelectionChange: (PanelSelection) -> Unit,
     autoMaskEnabled: Boolean,
     onRetouchChange: (RetouchState) -> Unit,
     onRetouchCommit: () -> Unit,
@@ -697,19 +732,11 @@ private fun PortraitParams(
         Switch(checked = autoMaskEnabled, onCheckedChange = onAutoMaskChange)
     }
 
-    // 画布工具：改变「点图片会发生什么」，因此是一级参数之前的选择
-    Spacer(Modifier.height(Spacing.m))
-    GroupLabel("画布工具")
-    GlassChipRow(
-        items = listOf(TOOL_NONE, TOOL_SKIN, TOOL_BLEMISH),
-        selected = tool,
-        label = { id -> when (id) { TOOL_SKIN -> "皮肤画笔"; TOOL_BLEMISH -> "祛瑕"; else -> "关闭" } },
-        onSelect = onToolChange
-    )
-
-    when (tool) {
-        TOOL_SKIN -> {
-            GroupLabel("磨皮")
+    // —— 三页签（v0.7.3 拆组，§04-B「每屏 ≤4 条滑块」）：磨皮 / 美型 / 工具 ——
+    // 旧版把磨皮滑块藏在「皮肤画笔」工具分支里（选了工具才看得到），
+    // 页签化后语义更直：磨皮调的是「量」，工具选的是「点图片会发生什么」。
+    when (selection.portraitTab) {
+        PortraitTab.Smooth -> {
             ParamSlider(
                 label = "磨皮强度", value = retouch.neutralGray.strength,
                 valueRange = 0f..1f, step = 0.05f,
@@ -742,86 +769,100 @@ private fun PortraitParams(
                 onDraggingChange = onDraggingChange
             )
             if (!smoothingOn) Hint("磨皮强度 0% = 整段跳过：阈值 / 半径暂不参与。阈值是「多平才算皮肤」的判定线：低 = 只磨很平的区域（保细节），高 = 更激进的整片磨平。")
-            ParamSlider(
-                label = "笔刷大小", value = brushRadius,
-                valueRange = 0.005f..0.15f, step = 0.005f, format = { "%.3f".format(it) },
-                onValueChange = onBrushRadiusChange,
-                // 刻意不提交：半径是**工具设置**不是图像参数，进撤销栈会制造
-                // 「画面无变化的历史步骤」。松手不 commit 是与全面板唯一不同之处。
-                onValueChangeFinished = {},
-                onDraggingChange = onDraggingChange
-            )
-            ClearButton("清除皮肤蒙版", onClearMask)
+            Hint("蒙版来源 = 自动蒙版（上面的开关）+ 皮肤画笔（「工具」页）。")
         }
 
-        TOOL_BLEMISH -> {
-            GroupLabel("祛瑕")
+        PortraitTab.Beauty -> {
             ParamSlider(
-                label = "瑕疵点半径", value = inpaintRadius,
-                valueRange = 0.002f..0.04f, step = 0.002f, format = { "%.3f".format(it) },
-                onValueChange = onInpaintRadiusChange,
-                // 刻意不提交：同「笔刷大小」——工具设置不进撤销栈。
-                onValueChangeFinished = {},
-                onDraggingChange = onDraggingChange
+                label = "瘦脸", value = retouch.beauty.slimFace, valueRange = 0f..1f, step = 0.05f,
+                onValueChange = { onRetouchChange(retouch.copy(beauty = retouch.beauty.copy(slimFace = it))) },
+                onValueChangeFinished = onRetouchCommit, onDraggingChange = onDraggingChange
             )
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(vertical = Spacing.xs),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("已标记瑕疵点", style = MaterialTheme.typography.bodyMedium)
-                Text(
-                    inpaintCount.toString(),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+            ParamSlider(
+                label = "收下颌", value = retouch.beauty.slimJaw, valueRange = 0f..1f, step = 0.05f,
+                onValueChange = { onRetouchChange(retouch.copy(beauty = retouch.beauty.copy(slimJaw = it))) },
+                onValueChangeFinished = onRetouchCommit, onDraggingChange = onDraggingChange
+            )
+            ParamSlider(
+                label = "大眼", value = retouch.beauty.eyeEnlarge, valueRange = 0f..1f, step = 0.05f,
+                onValueChange = { onRetouchChange(retouch.copy(beauty = retouch.beauty.copy(eyeEnlarge = it))) },
+                onValueChangeFinished = onRetouchCommit, onDraggingChange = onDraggingChange
+            )
+
+            // —— 细部位美容（§4.0.10 删）——
+            // 原「细部位美容」面板（8 个部位 chip）已整体移除：渲染侧真正接线的只有大眼
+            // （且它就是上面「美型」组里的那条），其余 7 个 chip 点进去全是「尚未接入」的空态。
+            // 待分区磨皮 / 局部形变算子落地（DEV_PLAN P4）时，随算子一起恢复。
+
+            GroupLabel("追色")
+            GlassChipRow(
+                items = COLOR_TRANSFER_OPTIONS,
+                selected = COLOR_TRANSFER_OPTIONS.firstOrNull { it.first == retouch.colorTransfer.refId },
+                label = { it.second },
+                onSelect = { (id, _) ->
+                    onRetouchChange(retouch.copy(colorTransfer = retouch.colorTransfer.copy(refId = id)))
+                    onRetouchCommit()
+                }
+            )
+            if (retouch.colorTransfer.refId != "none") {
+                ParamSlider(
+                    label = "追色强度", value = retouch.colorTransfer.intensity,
+                    valueRange = 0f..1f, step = 0.05f,
+                    onValueChange = {
+                        onRetouchChange(retouch.copy(colorTransfer = retouch.colorTransfer.copy(intensity = it)))
+                    },
+                    onValueChangeFinished = onRetouchCommit, onDraggingChange = onDraggingChange
                 )
             }
-            ClearButton("清除瑕疵点", onClearInpaint)
         }
-    }
 
-    GroupLabel("美型")
-    ParamSlider(
-        label = "瘦脸", value = retouch.beauty.slimFace, valueRange = 0f..1f, step = 0.05f,
-        onValueChange = { onRetouchChange(retouch.copy(beauty = retouch.beauty.copy(slimFace = it))) },
-        onValueChangeFinished = onRetouchCommit, onDraggingChange = onDraggingChange
-    )
-    ParamSlider(
-        label = "收下颌", value = retouch.beauty.slimJaw, valueRange = 0f..1f, step = 0.05f,
-        onValueChange = { onRetouchChange(retouch.copy(beauty = retouch.beauty.copy(slimJaw = it))) },
-        onValueChangeFinished = onRetouchCommit, onDraggingChange = onDraggingChange
-    )
-    ParamSlider(
-        label = "大眼", value = retouch.beauty.eyeEnlarge, valueRange = 0f..1f, step = 0.05f,
-        onValueChange = { onRetouchChange(retouch.copy(beauty = retouch.beauty.copy(eyeEnlarge = it))) },
-        onValueChangeFinished = onRetouchCommit, onDraggingChange = onDraggingChange
-    )
-
-    // —— 细部位美容（§4.0.10 删）——
-    // 原「细部位美容」面板（8 个部位 chip）已整体移除：渲染侧真正接线的只有大眼
-    // （且它就是上面「美型」组里的那条），其余 7 个 chip 点进去全是「尚未接入」的空态，
-    // 还与「美型」组重复展示同一条大眼滑块 —— 按本项目「宁可不给，不给假的」的口径删除。
-    // 待分区磨皮 / 局部形变算子落地（DEV_PLAN P4）时，随算子一起恢复。
-
-    GroupLabel("追色")
-    GlassChipRow(
-        items = COLOR_TRANSFER_OPTIONS,
-        selected = COLOR_TRANSFER_OPTIONS.firstOrNull { it.first == retouch.colorTransfer.refId },
-        label = { it.second },
-        onSelect = { (id, _) ->
-            onRetouchChange(retouch.copy(colorTransfer = retouch.colorTransfer.copy(refId = id)))
-            onRetouchCommit()
+        PortraitTab.Tools -> {
+            GroupLabel("画布工具")
+            GlassChipRow(
+                items = listOf(TOOL_NONE, TOOL_SKIN, TOOL_BLEMISH),
+                selected = tool,
+                label = { id -> when (id) { TOOL_SKIN -> "皮肤画笔"; TOOL_BLEMISH -> "祛瑕"; else -> "关闭" } },
+                onSelect = onToolChange
+            )
+            when (tool) {
+                TOOL_SKIN -> {
+                    ParamSlider(
+                        label = "笔刷大小", value = brushRadius,
+                        valueRange = 0.005f..0.15f, step = 0.005f, format = { "%.3f".format(it) },
+                        onValueChange = onBrushRadiusChange,
+                        // 刻意不提交：半径是**工具设置**不是图像参数，进撤销栈会制造
+                        // 「画面无变化的历史步骤」。
+                        onValueChangeFinished = {},
+                        onDraggingChange = onDraggingChange
+                    )
+                    ClearButton("清除皮肤蒙版", onClearMask)
+                }
+                TOOL_BLEMISH -> {
+                    ParamSlider(
+                        label = "瑕疵点半径", value = inpaintRadius,
+                        valueRange = 0.002f..0.04f, step = 0.002f, format = { "%.3f".format(it) },
+                        onValueChange = onInpaintRadiusChange,
+                        // 刻意不提交：同「笔刷大小」——工具设置不进撤销栈。
+                        onValueChangeFinished = {},
+                        onDraggingChange = onDraggingChange
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = Spacing.xs),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("已标记瑕疵点", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            inpaintCount.toString(),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    ClearButton("清除瑕疵点", onClearInpaint)
+                }
+                else -> Hint("选「皮肤画笔」涂抹蒙版，或选「祛瑕」点掉小瑕疵。")
+            }
         }
-    )
-    if (retouch.colorTransfer.refId != "none") {
-        ParamSlider(
-            label = "追色强度", value = retouch.colorTransfer.intensity,
-            valueRange = 0f..1f, step = 0.05f,
-            onValueChange = {
-                onRetouchChange(retouch.copy(colorTransfer = retouch.colorTransfer.copy(intensity = it)))
-            },
-            onValueChangeFinished = onRetouchCommit, onDraggingChange = onDraggingChange
-        )
     }
 }
 
@@ -859,17 +900,27 @@ private fun LightParams(
             Hint("色温正 = 偏暖（增红减蓝）；色调正 = 偏品红。RAW 上这两项改的是线性增益，不会像 JPEG 那样一拉就出色阶断层。")
         }
 
-        LightTab.Light -> {
+        LightTab.Base -> {
             EditSlider("曝光", params.exposureEv, -2f, 2f, 0.1f, { p, v -> p.copy(exposureEv = v) }, params, onParamChange, onCommit, onDraggingChange, format = EV)
             EditSlider("对比度", params.contrast, -1f, 1f, 0.05f, { p, v -> p.copy(contrast = v) }, params, onParamChange, onCommit, onDraggingChange, format = PERCENT)
+            Hint("曝光 ±2 EV、对比度 ±100%。四个明暗滑块的正方向一律是「往亮推」（Lightroom 口径）。")
+        }
+
+        LightTab.Tone -> {
             EditSlider("高光", params.highlights, -1f, 1f, 0.05f, { p, v -> p.copy(highlights = v) }, params, onParamChange, onCommit, onDraggingChange, format = PERCENT)
             EditSlider("阴影", params.shadows, -1f, 1f, 0.05f, { p, v -> p.copy(shadows = v) }, params, onParamChange, onCommit, onDraggingChange, format = PERCENT)
+            Hint("高光/阴影分别压「已经存在」的亮部与暗部，各 50% 灰为界 —— 与曝光的整体平移正交。")
+        }
+
+        LightTab.Whites -> {
             EditSlider("白色色阶", params.whites, -1f, 1f, 0.05f, { p, v -> p.copy(whites = v) }, params, onParamChange, onCommit, onDraggingChange, format = PERCENT)
             EditSlider("黑色色阶", params.blacks, -1f, 1f, 0.05f, { p, v -> p.copy(blacks = v) }, params, onParamChange, onCommit, onDraggingChange, format = PERCENT)
+            Hint("白/黑色阶动的是两端锚点：白点定「多亮算纯白」，黑点定「多暗算纯黑」。")
+        }
 
-            GroupLabel("高光找回")
+        LightTab.Recovery -> {
             EditSlider("强度", params.highlightRecovery, 0f, 1f, 0.05f, { p, v -> p.copy(highlightRecovery = v) }, params, onParamChange, onCommit, onDraggingChange, format = PERCENT_U)
-            Hint("四个明暗滑块的正方向一律是「往亮推」（Lightroom 口径）。高光找回把线性域的压肩起点往下移：被曝光推到白点以上的云层只有它救得回来，其余滑块都只能压「已经存在」的亮度。")
+            Hint("高光找回把线性域的压肩起点往下移：被曝光推到白点以上的云层只有它救得回来，其余滑块都只能压「已经存在」的亮度。")
         }
 
         LightTab.Atmosphere -> {
@@ -1093,18 +1144,18 @@ private fun MyPresetsSection(
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) onImport(uri)
     }
-    GroupLabel("我的预设（自定义参数栈）")
+    GroupLabel("我的预设")
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Spacing.s)) {
-        TextButton(onClick = { importLauncher.launch(arrayOf("application/json", "application/octet-stream", "text/plain")) }, enabled = true) {
+        TextButton(modifier = Modifier.heightIn(min = 44.dp), onClick = { importLauncher.launch(arrayOf("application/json", "application/octet-stream", "text/plain")) }, enabled = true) {
             Text("导入")
         }
     }
     if (canSaveCurrent) {
-        TextButton(onClick = { showSaveDialog = true; draftName = "" }) {
+        TextButton(modifier = Modifier.heightIn(min = 44.dp), onClick = { showSaveDialog = true; draftName = "" }) {
             Text("把当前调法存为预设")
         }
     } else {
-        TextButton(onClick = {}, enabled = false) {
+        TextButton(modifier = Modifier.heightIn(min = 44.dp), onClick = {}, enabled = false) {
             Text("把当前调法存为预设")
         }
         Hint("当前参数与精修都是中性 —— 先调出一点风格再保存。")
@@ -1120,7 +1171,7 @@ private fun MyPresetsSection(
             thumb = { presetThumbs[it.id] },
             onSelect = onPreset
         )
-        TextButton(onClick = { showManage = true }) {
+        TextButton(modifier = Modifier.heightIn(min = 44.dp), onClick = { showManage = true }) {
             Text("管理（删除）")
         }
     }
@@ -1144,7 +1195,7 @@ private fun MyPresetsSection(
                 }
             },
             confirmButton = {
-                TextButton(
+                TextButton(modifier = Modifier.heightIn(min = 44.dp), 
                     enabled = draftName.isNotBlank(),
                     onClick = {
                         onSaveCurrent(draftName.trim())
@@ -1154,7 +1205,7 @@ private fun MyPresetsSection(
                 ) { Text("保存") }
             },
             dismissButton = {
-                TextButton(onClick = { showSaveDialog = false }) { Text("取消") }
+                TextButton(modifier = Modifier.heightIn(min = 44.dp), onClick = { showSaveDialog = false }) { Text("取消") }
             }
         )
     }
@@ -1176,10 +1227,10 @@ private fun MyPresetsSection(
                         ) {
                             Text(cp.name, style = MaterialTheme.typography.bodyMedium)
                             Row {
-                                TextButton(onClick = { exportPreset(cp) }) {
+                                TextButton(modifier = Modifier.heightIn(min = 44.dp), onClick = { exportPreset(cp) }) {
                                     Text("导出")
                                 }
-                                TextButton(onClick = { pendingDelete = cp }) {
+                                TextButton(modifier = Modifier.heightIn(min = 44.dp), onClick = { pendingDelete = cp }) {
                                     Text("删除")
                                 }
                             }
@@ -1188,7 +1239,7 @@ private fun MyPresetsSection(
                 }
             },
             confirmButton = {
-                TextButton(onClick = { showManage = false }) { Text("完成") }
+                TextButton(modifier = Modifier.heightIn(min = 44.dp), onClick = { showManage = false }) { Text("完成") }
             }
         )
         pendingDelete?.let { target ->
@@ -1202,7 +1253,7 @@ private fun MyPresetsSection(
                     )
                 },
                 confirmButton = {
-                    TextButton(
+                    TextButton(modifier = Modifier.heightIn(min = 44.dp), 
                         onClick = {
                             onDeleteCustom(target.id)
                             pendingDelete = null
@@ -1210,7 +1261,7 @@ private fun MyPresetsSection(
                     ) { Text("删除") }
                 },
                 dismissButton = {
-                    TextButton(onClick = { pendingDelete = null }) { Text("取消") }
+                    TextButton(modifier = Modifier.heightIn(min = 44.dp), onClick = { pendingDelete = null }) { Text("取消") }
                 }
             )
         }
@@ -1482,7 +1533,7 @@ private fun PresetParams(
             )
         }
         PresetTab.Style -> {
-            GroupLabel("预设（参数栈）")
+            GroupLabel("风格预设")
             PresetThumbRow(
                 items = presets,
                 selected = presets.firstOrNull { it.id == activePresetId },
@@ -1664,7 +1715,7 @@ private fun GroupHeader(
     ) {
         GroupLabel(text)
         if (showReset) {
-            TextButton(onClick = onReset) { Text(actionLabel) }
+            TextButton(modifier = Modifier.heightIn(min = 44.dp), onClick = onReset) { Text(actionLabel) }
         }
     }
 }
@@ -1688,11 +1739,15 @@ private fun GroupHeader(
  */
 @Composable
 private fun GroupLabel(text: String) {
+    // v0.7.3 眉题化（审计 A1）：面板内分组标题从 20sp 降到 13sp 眉题档 ——
+    // 控制台内部不该出现与页面大标题同级的字（截图 05「L 档只露 1 条滑块」的根因之一，
+    // 5 个组各省 ~22dp）。
     Text(
         text = text,
-        style = MaterialTheme.typography.titleMedium,
-        color = MaterialTheme.colorScheme.onSurface,
-        modifier = Modifier.padding(top = Spacing.l, bottom = Spacing.s)  // 从 Spacing.m/xs 提升，增加间距
+        style = MaterialTheme.typography.labelMedium,
+        fontWeight = FontWeight.SemiBold,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = Spacing.m, bottom = Spacing.s)
     )
 }
 
@@ -1713,5 +1768,8 @@ private fun Hint(text: String) {
 /** 面板内的次要动作用文字按钮，不用实心按钮 —— 实心按钮会把视线从预览图抢走。 */
 @Composable
 private fun ClearButton(text: String, onClick: () -> Unit) {
-    TextButton(onClick = onClick, modifier = Modifier.fillMaxWidth()) { Text(text) }
+    TextButton(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp)
+    ) { Text(text) }
 }

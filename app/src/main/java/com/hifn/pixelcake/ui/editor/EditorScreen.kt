@@ -17,6 +17,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculatePan
@@ -73,6 +74,7 @@ import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
@@ -170,7 +172,7 @@ private const val HUD_DWELL_MS = 800L
  * ⇒ **待办**：拆组后 S 档可降到 ≈174dp，再把提示行收到 16dp 即与规范的 168dp 对齐，
  * 届时可去掉滚动兜底。详见 `docs/ENGINEERING_NOTES.md` §9.6。
  */
-private val DECK_HEIGHT_S = 248.dp
+private val DECK_HEIGHT_S = 176.dp
 private val DECK_HEIGHT_L = 330.dp
 
 /**
@@ -301,6 +303,8 @@ fun EditorScreen(
     onDismissExportReceipt: () -> Unit = {},
     exportFormat: ExportFormat = ExportFormat.JPEG,
     onParamChange: (EditParams) -> Unit,
+    // 强度环专用写回（v0.7.3）：与 onParamChange 的区别 = **不清 activePresetId**
+    onPresetParams: (EditParams) -> Unit = {},
     onParamCommit: () -> Unit = {},
     onRetouchChange: (RetouchState) -> Unit,
     onRetouchCommit: () -> Unit = {},
@@ -352,11 +356,19 @@ fun EditorScreen(
     var showExport by remember { mutableStateOf(false) }
     var dragging by remember { mutableStateOf(false) }
     // 强度环（UI 3.0 §F）：当前预设的强度（0..1）；切预设时重置为 1。
+    // ⚠️ v0.7.3（运行时审计 P1-1）：必须走**专用通道** onPresetParams —— 旧版经
+    // onParamChange，而 AppRoot 在 onParamChange 里无条件清 activePresetId ⇒
+    // 第一格拖动就把预设取消、环在指下消失（node 销毁连 commit 都发不出）。
+    // 强度环是预设的一部分，不是「手动改动」。
     var presetAmount by remember(activePresetId) { mutableStateOf(1f) }
     val onPresetAmount: (Float) -> Unit = { a ->
         presetAmount = a
-        val base = presets.firstOrNull { it.id == activePresetId }?.params
-        if (base != null) onParamChange(base.lerped(a))
+        val preset = presets.firstOrNull { it.id == activePresetId }
+        if (preset != null) {
+            onPresetParams(preset.params.lerped(a))
+            // retouch 同步回退（P3-8）：强度环回退「整套调法」，人像精修不该留在 100%
+            onRetouchChange(preset.retouch.lerped(a))
+        }
     }
     // 「点哪修哪」拾取模式（UI 3.0 §D）：作用域行的准星按钮进入；
     // 激活期间照片单击 = 命中测试选作用域（双击缩放在此期间让位）。
@@ -456,6 +468,8 @@ fun EditorScreen(
     // 且 `inertUnless` 仍保证残影不可点。回场 240ms（规范口径）比隐去 150ms 慢半拍：
     // 消失要果断、回来要温柔。⚠️ 绑定的是「滑块拖动」；规范还绑定了「照片上横拖调参」，
     // 那条手势通道属 P3（见 UI3.0.html §09），届时两条输入共用这一个状态。
+    // v0.7.3（性能审计 P3-7）：消费点改 graphicsLayer lambda（deferred read），
+    // 动画每帧只重绘不重组 —— 淡出影响的 5 条 modifier 链不再整树重组。
     val chromeAlpha by animateFloatAsState(
         targetValue = if (dragging) 0.32f else 1f,
         animationSpec = if (dragging) {
@@ -933,33 +947,105 @@ fun EditorScreen(
             // ———— 2. Chrome 层（顶栏 + 直方图条 + Deck + Rail）————
             //
             // Deck 内容两态共用这一份（两处各写一遍必然漂移，同 GlassChipRow 的教训）。
+            //
+            // v0.7.3（审计 C1）：作用域行 + 分组行合并为**一条** deck-top（规范 §04-B `.deck-top`
+            // 的结构：作用域 chips + 分组 chips 同一横滚 + 准星钉尾）。原先两条钉住行（40+56=96dp）
+            // 合并为一行（40dp）—— 这 56dp 是「S 档 248 → 176」预算的主要来源。
+            // 提示行同步收敛：只在对象识别异常 / 存在空作用域时出现一行（原先常驻）。
+            val deckTopHint = when {
+                !objectScopesAvailable -> "对象识别不可用，仅支持整图。"
+                category.scopeMode.showsScopeBar && emptyScopes.isNotEmpty() ->
+                    "灰色作用域 = 本图未检出该对象。"
+                else -> null
+            }
             val deckInner: @Composable () -> Unit = {
                 Column(modifier = Modifier.fillMaxSize()) {
-                        if (category.scopeMode.showsScopeBar) {
-                            ParamScopeBar(
-                                current = scope,
-                                available = objectScopesAvailable,
-                                emptyScopes = emptyScopes,
-                                adjusted = { sc -> layers.isAdjusted(sc) },
-                                onSelect = selectScope,
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = Spacing.cardInner, vertical = Spacing.s),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .horizontalScroll(rememberScrollState()),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                if (category.scopeMode.showsScopeBar) {
+                                    ParamScopeBar(
+                                        current = scope,
+                                        available = objectScopesAvailable,
+                                        emptyScopes = emptyScopes,
+                                        adjusted = { sc -> layers.isAdjusted(sc) },
+                                        onSelect = selectScope,
+                                        inline = true
+                                    )
+                                    Box(
+                                        modifier = Modifier
+                                            .padding(horizontal = 8.dp)
+                                            .width(1.dp)
+                                            .height(16.dp)
+                                            .background(MaterialTheme.colorScheme.outlineVariant)
+                                    )
+                                }
+                                ParamSubBar(
+                                    category = category,
+                                    selection = selection,
+                                    onSelectionChange = { selection = it },
+                                    inline = true
+                                )
+                            }
+                            if (pickAvailable) {
+                                val tint = MaterialTheme.colorScheme.primary
+                                Box(
+                                    modifier = Modifier
+                                        .padding(start = Spacing.s)
+                                        .size(36.dp)
+                                        .clip(Radius.pill)
+                                        .background(
+                                            if (pickActive) tint.copy(alpha = 0.14f) else Color.Transparent
+                                        )
+                                        .border(
+                                            1.dp,
+                                            if (pickActive) tint.copy(alpha = 0.45f)
+                                            else MaterialTheme.colorScheme.outlineVariant,
+                                            Radius.pill
+                                        )
+                                        .clickable(
+                                            interactionSource = null,
+                                            indication = null
+                                        ) {
+                                            pickActive = !pickActive
+                                            pickNote = ""
+                                        }
+                                        .semantics {
+                                            contentDescription =
+                                                if (pickActive) "退出点选作用域" else "点选作用域（在照片上点一下要修的对象）"
+                                        },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    PathIcon(
+                                        def = AppIcons.Target,
+                                        tint = if (pickActive) tint
+                                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        size = 19.dp
+                                    )
+                                }
+                            }
+                        }
+                        deckTopHint?.let {
+                            Text(
+                                it,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(
-                                    horizontal = Spacing.cardInner,
-                                    vertical = Spacing.s
-                                ),
-                                pickActive = pickActive,
-                                onTogglePick = if (pickAvailable) {
-                                    {
-                                        pickActive = !pickActive
-                                        pickNote = ""
-                                    }
-                                } else null
+                                    start = Spacing.cardInner,
+                                    end = Spacing.cardInner,
+                                    bottom = Spacing.xs
+                                )
                             )
                         }
-                        ParamSubBar(
-                            category = category,
-                            selection = selection,
-                            onSelectionChange = { selection = it }
-                        )
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -1037,7 +1123,7 @@ fun EditorScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .inertUnless(enabled = !dragging)
-                        .alpha(chromeAlpha)
+                        .graphicsLayer { alpha = chromeAlpha }
                 ) {
                     EditorTopBar(
                         showOriginal = showOriginal,
@@ -1072,7 +1158,7 @@ fun EditorScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .inertUnless(enabled = !dragging)
-                                .alpha(chromeAlpha)
+                                .graphicsLayer { alpha = chromeAlpha }
                         ) {
                             HistogramStrip(
                                 data = histogram,
@@ -1090,7 +1176,7 @@ fun EditorScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .inertUnless(enabled = !dragging)
-                                .alpha(chromeAlpha)
+                                .graphicsLayer { alpha = chromeAlpha }
                                 .navigationBarsPadding()
                                 .padding(horizontal = 10.dp, vertical = 8.dp)
                         ) {
@@ -1125,7 +1211,7 @@ fun EditorScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .inertUnless(enabled = !dragging)
-                        .alpha(chromeAlpha)
+                        .graphicsLayer { alpha = chromeAlpha }
                 ) {
                     HistogramStrip(
                         data = histogram,
@@ -1140,7 +1226,9 @@ fun EditorScreen(
                 // 拖拽只改 deckHOverride，不触发动画（跟手）。上限见 deckHOverride 的 KDoc。
                 val deckDragHandle = Modifier
                     .fillMaxWidth()
-                    .height(20.dp)
+                    // v0.7.3（审计 B2）：触控 20→44dp —— 这是全面板误触率最高的一根；
+                    // 视觉条 36×4 居中不变。
+                    .height(44.dp)
                     .pointerInput(Unit) {
                         detectVerticalDragGestures { change, dragAmount ->
                             change.consume()
@@ -1175,17 +1263,19 @@ fun EditorScreen(
 
                 // ———— Deck 控制台（高度可调）————
                 //
-                // 实心容器（零 blur），顶部 20dp 圆角。高度由拖拽手柄或分类切换决定。
-                // 作用域行 / 分组 chips 钉在滚动之外；内容区滚动兜底（4 滑块的组）。
+                // v0.7.3（审计 C2，owner 拍板）：恢复规范的**悬浮卡**形态 —— 左右 10dp 边距、
+                // 四角 20dp 圆角（规范 22 不在梯，取 card 档）。高度由拖拽手柄或分类切换决定。
+                // 作用域/分组 chips 钉在滚动之外；内容区滚动兜底。
                 // ⚠️ 这里是参数的一部分（决定「改谁 / 改什么」），**不**随 chrome 淡出。
                 ChromeSkin(lightChrome) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .padding(horizontal = 10.dp)
                         .height(deckEffH)
                         .background(
                             MaterialTheme.colorScheme.surface,
-                            RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
+                            Radius.card
                         )
                 ) {
                     deckInner()
@@ -1197,7 +1287,7 @@ fun EditorScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .inertUnless(enabled = !dragging)
-                        .alpha(chromeAlpha)
+                        .graphicsLayer { alpha = chromeAlpha }
                         .navigationBarsPadding()
                         .padding(horizontal = 10.dp, vertical = 8.dp)
                 ) {
@@ -1228,6 +1318,8 @@ fun EditorScreen(
                                 previewPan = Offset.Zero
                             }
                             .glassSurface(tint, Radius.pill)
+                            // v0.7.3（审计 B7）：触控 ≥44dp
+                            .heightIn(min = 44.dp)
                             .padding(horizontal = Spacing.m, vertical = Spacing.s),
                         contentAlignment = Alignment.Center
                     ) {
@@ -1407,11 +1499,29 @@ fun EditorScreen(
                     .padding(Spacing.m),
                 verticalArrangement = Arrangement.spacedBy(Spacing.xs)
             ) {
-                Text(
-                    "历史",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "历史",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    // v0.7.3（审计 C4）：撤销/重做迁入 —— 顶栏 8 枚 48dp 在 392dp 屏放不下；
+                    // 这里是栈语义的家，两枚 48dp 与丝带构成同一问题的同一处答案。
+                    Row(horizontalArrangement = Arrangement.spacedBy(Spacing.xs)) {
+                        IconAction(
+                            def = AppIcons.Undo, label = "撤销",
+                            enabled = canUndo, onClick = onUndo
+                        )
+                        IconAction(
+                            def = AppIcons.Redo, label = "重做",
+                            enabled = canRedo, onClick = onRedo
+                        )
+                    }
+                }
                 Text(
                     "共 ${historyDepth + 1} 个状态 · 当前第 $historyStep 步",
                     style = MaterialTheme.typography.labelSmall,
@@ -1439,6 +1549,8 @@ fun EditorScreen(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
+                                // v0.7.3（审计 B8）：行触控 ≥44dp
+                                .heightIn(min = 44.dp)
                                 .clip(Radius.chip)
                                 .background(
                                     if (isCurrent) MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
@@ -1664,8 +1776,9 @@ private fun EditorTopBar(
                     // 占宽的长文字（约 40dp）。编辑器是全 App 唯一的编辑界面，照片 + 工具栏
                     // 本身已经说明「你在哪」—— 省下的宽度留给操作本身。
                     Spacer(Modifier.weight(1f))
-                    IconAction(def = AppIcons.Undo, label = "撤销", enabled = canUndo, onClick = onUndo)
-                    IconAction(def = AppIcons.Redo, label = "重做", enabled = canRedo, onClick = onRedo)
+                    // v0.7.3（审计 C4/B3）：撤销/重做迁入历史面板 —— 顶栏 8 枚 48dp 热区
+                    // 在 392dp 屏放不下；历史面板本就是栈语义的家（§12.3），顶部两枚 48dp
+                    // 撤/重做与「第 N 步」丝带是同一问题的同一种答案。
                     // 历史（§09）：与撤销/重做并列 —— 它们回答的是同一个问题「我改过些什么」，
                     // 只是粒度不同（一步 vs 列出每一步）。
                     IconAction(def = AppIcons.History, label = "历史", onClick = onOpenHistory)
@@ -1726,7 +1839,8 @@ private fun IconAction(
     }
     Box(
         modifier = Modifier
-            .size(34.dp)
+            // v0.7.3（审计 B3）：热区 34→48dp（§4.0.8 交互口径；spec 的 34px 是视觉口径）
+            .size(48.dp)
             .clip(Radius.chip)
             .clickable(
                 interactionSource = null,
@@ -1757,7 +1871,8 @@ private fun ExportPill(
     val interaction = remember { MutableInteractionSource() }
     Box(
         modifier = Modifier
-            .height(34.dp)
+            // v0.7.3（审计 B5）：主操作热区 34→44dp（顶栏 Row 48dp 内可容）
+            .height(44.dp)
             .pressScale(interaction)
             .clickable(
                 interactionSource = interaction,
@@ -1847,16 +1962,22 @@ private fun HistogramStrip(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 10.dp, vertical = 6.dp)
-                // 规范 §04-B 直方图条 radius 14px —— 本项目圆角阶梯只有 12/20/28/24+胶囊
-                // （Radius.kt），14 不在梯上；取最近的小控件档 chip（12dp），2dp 偏差作为
-                // 「守梯级优先」的决策记录（审计 A-P3-3）。
+                // v0.7.3（审计 B6）：点击区包一层 48dp 高的外盒（视觉 34dp 条居中不变）
+                .height(48.dp)
                 .clip(Radius.chip)
-                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.82f))
                 .clickable(interactionSource = null, indication = null, onClick = onToggle)
                 // T4 无障碍：直方图是纯 Canvas 自绘，不给语义就是哑块。
                 .semantics { contentDescription = "RGB 直方图，点按可收起或展开" }
-                .padding(horizontal = 12.dp, vertical = 6.dp)
         ) {
+            // 视觉条 34dp 居中于 48dp 触控盒（规范视觉值不变）
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(34.dp)
+                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.82f), Radius.chip)
+                    .padding(horizontal = 12.dp),
+                contentAlignment = Alignment.Center
+            ) {
             Canvas(modifier = Modifier.fillMaxWidth().height(22.dp)) {
                 val channels = listOf(data.first to HIST_R, data.second to HIST_G, data.third to HIST_B)
                 for ((arr, color) in channels) {
@@ -1874,6 +1995,7 @@ private fun HistogramStrip(
                     path.close()
                     drawPath(path, color.copy(alpha = 0.42f))
                 }
+            }
             }
         }
     }

@@ -93,7 +93,7 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.flow.sample
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.isActive
@@ -172,6 +172,9 @@ private fun AppRoot(settings: AppSettings) {
     var rotationQuarterTurns by remember { mutableStateOf(0) }
     var srcUri by remember { mutableStateOf<Uri?>(null) }
     val history = remember { EditHistory() }
+    // v0.7.3（审计 P3-5）：历史变更的可观察计数 —— 撤销/重做结构等值时 params 等不变化，
+    // 无它则持久化位置与丝带都会停留在旧值。所有历史入口都推进它。
+    var historyRev by remember { mutableStateOf(0) }
     var params by remember { mutableStateOf(EditParams()) }
     // 对象作用域图层（批次 5，`docs/OBJECT_TONE_DESIGN.md` §4）：每作用域至多一层，
     // 唯一性由 `upsert` / `without` 保证。与 `params` / `retouch` **并列** ——
@@ -612,7 +615,7 @@ private fun AppRoot(settings: AppSettings) {
     }
 
     val openInEditor: (Uri) -> Unit = { uri ->
-        DebugLog.i(DebugLog.TAG_IMPORT, "pick", mapOf("uri" to uri.toString()))
+        DebugLog.i(DebugLog.TAG_IMPORT, "pick", mapOf("uri" to DebugLog.shortUri(uri)))
         // 会话持久化（v0.7.2）：拿可持久化授权（SAF/Photo Picker 都带 persistable 标志；
         // 个别机型 picker 拒绝 ⇒ SecurityException，按「不可恢复」处理即可）。同时清掉
         // 上一条会话记录 —— 新图导入即新会话，旧记录不能在「新导入解码失败」时复活。
@@ -891,7 +894,7 @@ private fun AppRoot(settings: AppSettings) {
         val newQ = (rotationQuarterTurns + 1) % 4
         applySessionRotation(newQ)
         // 旋转是编辑的一部分：进撤销栈（撤销/重做会经 applySnapshot 恢复旋转）
-        history.push(EditSnapshot(params, retouch, layers, rotationQuarterTurns = newQ))
+        history.push(EditSnapshot(params, retouch, layers, rotationQuarterTurns = newQ)); historyRev++
     }
     BackHandler(enabled = editorOpen) { editorOnBack() }
 
@@ -932,10 +935,12 @@ private fun AppRoot(settings: AppSettings) {
         rotationQuarterTurns = 0
         baselinePending = true
         history.reset()
+        // v0.7.3（审计 P2-1）：per-step rotation 从每步文档恢复（旧版把最终旋转
+        // 盖到每一步上 ⇒ 「撤销回旋转之前」在恢复后失效）。
         val timeline = record.timeline.map { doc ->
             EditSnapshot(
                 params = doc.params, retouch = doc.retouch, layers = doc.layers,
-                rotationQuarterTurns = record.rotationQuarterTurns
+                rotationQuarterTurns = doc.rotationQuarterTurns
             )
         }
         history.importTimeline(timeline, record.position)
@@ -943,7 +948,8 @@ private fun AppRoot(settings: AppSettings) {
         params = current.params
         retouch = current.retouch
         layers = current.layers
-        if (record.rotationQuarterTurns != 0) applySessionRotation(record.rotationQuarterTurns)
+        val restoreRot = history.current.rotationQuarterTurns
+        if (restoreRot != 0) applySessionRotation(restoreRot)
         loading = false
         status = EditorStatus(StatusKind.Info, "已恢复上次的编辑会话")
         nav.push(AppScreen.Editor)
@@ -958,24 +964,37 @@ private fun AppRoot(settings: AppSettings) {
     // 这条不变式，用可观察态触发；落盘时现读时间线。
     LaunchedEffect(Unit) {
         snapshotFlow {
-            Triple(srcUri, rotationQuarterTurns, nav.current) to Triple(params, retouch, layers)
+            // historyRev（审计 P3-5）：撤销/重做结构等值也必须触发重持久化
+            listOf(srcUri, rotationQuarterTurns, nav.current, params, retouch, layers, historyRev)
         }
-            .sample(1200)
-            .collect { _ ->
+            // v0.7.3（审计 P2-2）：debounce（静默 1.2s 才写）而非 sample（每 1.2s 必写一次）
+            // —— 长拖动不再周期性落盘；编码挪到 Default（整条时间线的 JSON 在主线程 encode
+            // 是 5-30ms 的周期性卡顿源）。
+            .debounce(1200)
+            .collect {
                 val uri = srcUri ?: return@collect
                 if (nav.current != AppScreen.Editor || loading) return@collect
+                // 主线程捕获状态 → Default 编码落盘（仓库既有纪律）
+                val uriStr = uri.toString()
+                val rot = rotationQuarterTurns
                 val (timeline, position) = history.exportTimeline()
-                SessionStore.save(
-                    context,
-                    SessionRecord(
-                        srcUri = uri.toString(),
-                        rotationQuarterTurns = rotationQuarterTurns,
-                        position = position,
-                        timeline = timeline.map {
-                            EditDocument(params = it.params, retouch = it.retouch, layers = it.layers)
-                        }
+                val docs = timeline.map {
+                    EditDocument(
+                        params = it.params, retouch = it.retouch, layers = it.layers,
+                        rotationQuarterTurns = it.rotationQuarterTurns
                     )
-                )
+                }
+                withContext(Dispatchers.Default) {
+                    SessionStore.save(
+                        context,
+                        SessionRecord(
+                            srcUri = uriStr,
+                            rotationQuarterTurns = rot,
+                            position = position,
+                            timeline = docs
+                        )
+                    )
+                }
             }
     }
 
@@ -1041,8 +1060,16 @@ private fun AppRoot(settings: AppSettings) {
                     onRotate = onRotate,
                     onImportPresets = { uri ->
                         scope.launch {
+                            // v0.7.3（安全审计 低-1）：预设文件 5MB 上限 —— 用户被诱导导入
+                            // 超大「预设」时 readText() 全量进内存会 OOM（DoS 本 App）。
                             val text = withContext(Dispatchers.IO) {
-                                context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+                                runCatching {
+                                    val afd = context.contentResolver.openAssetFileDescriptor(uri, "r")
+                                    val size = afd?.use { it.length } ?: -1L
+                                    if (size < 0 || size > 5L * 1024 * 1024) return@runCatching null
+                                    context.contentResolver.openInputStream(uri)
+                                        ?.bufferedReader()?.use { it.readText() }
+                                }.getOrNull()
                             } ?: return@launch
                             val imported = CustomPresets.decode(text)
                             if (imported.isEmpty()) {
@@ -1073,7 +1100,10 @@ private fun AppRoot(settings: AppSettings) {
                     historyStep = history.step,
                     historyDepth = history.depth,
                     onSeekHistory = { idx ->
-                        if (history.seekTo(idx)) applySnapshot(history.current)
+                        if (history.seekTo(idx)) {
+                            applySnapshot(history.current)
+                            historyRev++
+                        }
                     },
                     status = status,
                     exporting = exporting,
@@ -1091,12 +1121,15 @@ private fun AppRoot(settings: AppSettings) {
                         params = it
                         if (activePresetId != "none") activePresetId = "none"
                     },
-                    onParamCommit = { history.push(EditSnapshot(params, retouch, layers, rotationQuarterTurns)) },
+                    // 强度环专用通道（运行时审计 P1-1）：写参数但**不清 activePresetId** ——
+                    // 强度环是预设的一部分；撤销栈由环松手时的 onParamCommit 入栈。
+                    onPresetParams = { params = it; historyRev++ },
+                    onParamCommit = { history.push(EditSnapshot(params, retouch, layers, rotationQuarterTurns)); historyRev++ },
                     onRetouchChange = {
                         retouch = it
                         if (activePresetId != "none") activePresetId = "none"
                     },
-                    onRetouchCommit = { history.push(EditSnapshot(params, retouch, layers, rotationQuarterTurns)) },
+                    onRetouchCommit = { history.push(EditSnapshot(params, retouch, layers, rotationQuarterTurns)); historyRev++ },
                     // 图层变更（拖动中）只改状态；离散动作由 `onLayersCommit` 单独入栈
                     //（两者分开的理由与 `onParamChange` / `onParamCommit` 完全一样：
                     // 拖动过程中每帧都入栈会把撤销栈撑爆）。
@@ -1104,7 +1137,7 @@ private fun AppRoot(settings: AppSettings) {
                     // 刻意**不**清 `activePresetId`：预设只描述「整图参数 + 人像精修」，
                     // 对象层是并列的结构 ⇒ 改层不算「偏离预设」（见 `PresetParams` 的说明）。
                     onLayersChange = { layers = it },
-                    onLayersCommit = { history.push(EditSnapshot(params, retouch, layers, rotationQuarterTurns)) },
+                    onLayersCommit = { history.push(EditSnapshot(params, retouch, layers, rotationQuarterTurns)); historyRev++ },
                     onToolChange = { retouchTool = it },
                     onBrushStroke = { nx, ny ->
                         // 节流：与上一描迹太近则忽略；并设条数上限，防蒙版重建爆炸。
@@ -1144,10 +1177,16 @@ private fun AppRoot(settings: AppSettings) {
                         history.push(EditSnapshot(params, retouch, layers, rotationQuarterTurns))
                     },
                     onUndo = {
-                        if (history.undo()) applySnapshot(history.current)
+                        if (history.undo()) {
+                            applySnapshot(history.current)
+                            historyRev++
+                        }
                     },
                     onRedo = {
-                        if (history.redo()) applySnapshot(history.current)
+                        if (history.redo()) {
+                            applySnapshot(history.current)
+                            historyRev++
+                        }
                     },
                     onExport = {
                         // ⚠️ 这三行必须在 `scope.launch` **之前同步执行**，不能留在协程体里。
@@ -1479,7 +1518,7 @@ private fun AppRoot(settings: AppSettings) {
                                 if (imageEpoch.get() != epochAtStart) return@launch
                                 activePresetId = "none"
                                 params = suggestion
-                                history.push(EditSnapshot(suggestion, retouch, layers, rotationQuarterTurns))
+                                history.push(EditSnapshot(suggestion, retouch, layers, rotationQuarterTurns)); historyRev++
                                 status = EditorStatus(StatusKind.Info, "已自动增强")
                                 DebugLog.i(DebugLog.TAG_EDIT, "auto enhance", mapOf(
                                     "ev" to suggestion.exposureEv, "c" to suggestion.contrast))
@@ -1507,8 +1546,9 @@ private fun AppRoot(settings: AppSettings) {
             when (currentTab) {
                 PixelCakeTab.Darkroom -> HomeScreen(
                     settings = settings,
+                    onOpenSettings = { tab = PixelCakeTab.Settings },
                     onImportPhoto = { photoLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
-                    onImportArw = { arwLauncher.launch(arrayOf("*/*")) },
+                    onImportArw = { arwLauncher.launch(arrayOf("image/*", "application/octet-stream")) },
                     loading = loading,
                     // 首屏状态是**纯文案**（无类别取色需求）→ 取 .text 即可。
                     message = status.text,

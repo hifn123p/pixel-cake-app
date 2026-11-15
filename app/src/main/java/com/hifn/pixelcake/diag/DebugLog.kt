@@ -25,6 +25,14 @@ import java.util.concurrent.atomic.AtomicBoolean
  * - 写日志永不抛异常（避免日志拖垮主流程）。
  */
 object DebugLog {
+    /**
+     * v0.7.3（安全审计 低-3）：日志里的用户 uri 只记最后一段 —— 调试日志可被系统
+     * 分享导出，完整 content:// 串没有诊断价值，文件名/路径信息不该跟着出门。
+     */
+    fun shortUri(uri: Any?): String = when (val t = uri?.toString()) {
+        null -> "-"
+        else -> t.substringAfterLast('/')
+    }
 
     const val TAG_LIFECYCLE = "LIFECYCLE"
     const val TAG_IMPORT = "IMPORT"

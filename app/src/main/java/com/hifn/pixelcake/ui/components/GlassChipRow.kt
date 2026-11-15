@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -26,6 +27,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.hifn.pixelcake.ui.theme.Radius
 import com.hifn.pixelcake.ui.theme.Spacing
 
@@ -100,7 +102,8 @@ fun <T> GlassChipRow(
     itemEnabled: ((T) -> Boolean)? = null,
     swatch: ((T) -> Color)? = null,
     singleRow: Boolean = false,
-    compact: Boolean = false
+    compact: Boolean = false,
+    inline: Boolean = false
 ) {
     // ⚠️ chip 的生成逻辑必须只有一份：`singleRow` 只换容器，不换内容。
     // 两处各写一遍 forEach 迟早会漂移（一边记得传 `itemEnabled`、另一边忘了）。
@@ -119,6 +122,8 @@ fun <T> GlassChipRow(
                 enabled = enabled && (itemEnabled?.invoke(item) ?: true),
                 shape = Radius.chip,
                 colors = selectedChipColors,
+                // v0.7.3（审计 B4）：chip 触控 32→36dp（Q4 折中档；48 档留给主操作）
+                modifier = Modifier.height(36.dp),
                 label = {
                     Row(
                         modifier = Modifier.padding(
@@ -135,14 +140,27 @@ fun <T> GlassChipRow(
                         // 置成 labelLarge（14sp），不写这一行就等于**默认 14sp** ——
                         // 比 Token 规定的 chip 字号（12sp）大一档，双字 chip 因此宽出约 8dp，
                         // 一行少放一个，间接把参数区的高度吃掉。这条也解释真机反馈的「字体偏大」。
-                        Text(label(item), style = MaterialTheme.typography.labelMedium)
+                        // v0.7.3（审计 A6）：chip 文字 12sp（规范 `.g` 12px；≥11sp 红线满足）
+                        Text(
+                            label(item),
+                            style = MaterialTheme.typography.labelMedium.copy(fontSize = 12.sp)
+                        )
                     }
                 }
             )
         }
     }
 
-    if (singleRow) {
+    if (inline) {
+        // 「内联」形态（v0.7.3 deck-top 合并行专用）：不自带滚动/换行，
+        // 由调用方把多个 inline chip 组放进**同一条** horizontalScroll 里。
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(Spacing.s),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            chipRow()
+        }
+    } else if (singleRow) {
         // 审计债「横滑 chips 无截断提示」：行尾叠一层渐隐遮罩 —— 被截断的选项淡出，
         // 比只靠「半露的 chip」更明确地表达「右边还有」。仅当真的溢出时才画
         //（`canScrollForward`），未溢出的短行（3~5 项的二级行）完全不受影响。

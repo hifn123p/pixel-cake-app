@@ -10,6 +10,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Shape
 import com.hifn.pixelcake.ui.theme.ContainerLevel
@@ -96,10 +97,13 @@ fun SectionHeader(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(modifier = Modifier.weight(1f)) {
+            // v0.7.3（审计 A2）：组标题 20sp → 13sp 眉题档（规范 §M 组眉/行题）——
+            // 设置页一屏密度恢复到 mock 口径（截图 63 实测只有 mock 一半）。
             Text(
                 text = title,
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             if (subtitle != null) {
                 Text(

@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -28,6 +29,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.semantics.Role
 import java.io.File
 import androidx.compose.ui.platform.LocalContext
@@ -133,7 +136,8 @@ fun SettingsScreen(
     ) {
         item {
             Column(modifier = Modifier.padding(bottom = Spacing.m)) {
-                Text("设置", style = MaterialTheme.typography.displaySmall)
+                // v0.7.3（审计 A4）：页头 28sp → titleMedium（规范 §M 页头 17px/700）
+                Text("设置", style = MaterialTheme.typography.titleMedium)
                 Text(
                     "默认值与系统级开关。调色参数都在编辑器里，不在这里。",
                     style = MaterialTheme.typography.bodyMedium,
@@ -305,7 +309,7 @@ fun SettingsScreen(
                 }
 
                 Spacer(Modifier.height(Spacing.xs))
-                TextButton(
+                TextButton(modifier = Modifier.heightIn(min = 44.dp), 
                     onClick = {
                         // D4：递归删除是潜在几千个文件的磁盘 IO，绝不能在主线程做。
                         // v0.7.2（审计 C-F6）：删除后**重新测量**而不是乐观置 0 ——
@@ -388,7 +392,7 @@ fun SettingsScreen(
                     // 不用再点进「关于」里找（口径与关于页一致，走同一个函数）。
                     subtitle = version
                 ) {
-                    TextButton(onClick = { showAbout = true }) { Text("查看详情") }
+                    TextButton(modifier = Modifier.heightIn(min = 44.dp), onClick = { showAbout = true }) { Text("查看详情") }
                 }
             }
         }
@@ -409,14 +413,14 @@ fun SettingsScreen(
                     // v0.7.2（审计 C-F12）：一键毁掉主题/透明度/放大文本/导出格式/画质/自动蒙版
                     // 属破坏性操作，弹确认窗；误触点「取消」即可无损返回。
                     var confirmReset by remember { mutableStateOf(false) }
-                    TextButton(onClick = { confirmReset = true }) { Text("恢复") }
+                    TextButton(modifier = Modifier.heightIn(min = 44.dp), onClick = { confirmReset = true }) { Text("恢复") }
                     if (confirmReset) {
                         AlertDialog(
                             onDismissRequest = { confirmReset = false },
                             title = { Text("恢复全部默认设置？") },
                             text = { Text("主题、透明度、放大文本、导出格式与画质、自动蒙版都会回到默认值。") },
                             confirmButton = {
-                                TextButton(
+                                TextButton(modifier = Modifier.heightIn(min = 44.dp), 
                                     onClick = {
                                         settings.reset()
                                         confirmReset = false
@@ -424,7 +428,7 @@ fun SettingsScreen(
                                 ) { Text("恢复") }
                             },
                             dismissButton = {
-                                TextButton(onClick = { confirmReset = false }) { Text("取消") }
+                                TextButton(modifier = Modifier.heightIn(min = 44.dp), onClick = { confirmReset = false }) { Text("取消") }
                             }
                         )
                     }
@@ -438,7 +442,7 @@ fun SettingsScreen(
                     title = "模型中心",
                     subtitle = "分割 / 人脸模型的加载状态、加速器与缓存（只读诊断）"
                 ) {
-                    TextButton(onClick = { showModelCenter = true }) { Text("查看") }
+                    TextButton(modifier = Modifier.heightIn(min = 44.dp), onClick = { showModelCenter = true }) { Text("查看") }
                 }
 
                 Spacer(Modifier.height(Spacing.s))
@@ -451,7 +455,7 @@ fun SettingsScreen(
                         else -> "排查真机问题时导出给开发者"
                     }
                 ) {
-                    TextButton(onClick = {
+                    TextButton(modifier = Modifier.heightIn(min = 44.dp), onClick = {
                         logExportState = if (DebugLog.export(context)) LOG_EXPORTED else LOG_EXPORT_FAILED
                     }) { Text("导出") }
                 }
@@ -504,7 +508,8 @@ private fun SettingChips(
     chips: @Composable () -> Unit
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
-        Text(title, style = MaterialTheme.typography.bodyMedium)
+        // v0.7.3（审计 A3）：行题 15sp → 13sp SemiBold（§M `.srow .st b` 13px/600）
+        Text(title, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
         Text(
             subtitle,
             style = MaterialTheme.typography.labelSmall,
@@ -586,7 +591,7 @@ private fun ModelStatusRows(refreshKey: Int, onRefresh: () -> Unit) {
     SettingRow(title = "模型状态", subtitle = stateText) {
         // v0.7.2（审计 C-F9）：裸 Text 的触达只有 ~30×18dp（全页唯一 <48dp 目标）且无
         // 按钮语义 —— 换 TextButton 一举两得。
-        TextButton(onClick = onRefresh) { Text("刷新") }
+        TextButton(modifier = Modifier.heightIn(min = 44.dp), onClick = onRefresh) { Text("刷新") }
     }
     Spacer(Modifier.height(Spacing.s))
     SettingRow(
@@ -627,7 +632,7 @@ private fun SettingSwitchRow(
                 .weight(1f)
                 .padding(end = Spacing.m)
         ) {
-            Text(title, style = MaterialTheme.typography.bodyMedium)
+            Text(title, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
             Text(
                 subtitle,
                 style = MaterialTheme.typography.labelSmall,
@@ -655,7 +660,7 @@ private fun SettingRow(
                 // 右留白：防止两行文字贴到开关/chip 上（靠 `SpaceBetween` 不会自动留缝）。
                 .padding(end = Spacing.m)
         ) {
-            Text(title, style = MaterialTheme.typography.bodyMedium)
+            Text(title, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
             Text(
                 subtitle,
                 style = MaterialTheme.typography.labelSmall,

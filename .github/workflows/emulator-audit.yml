@@ -56,6 +56,16 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
+      - name: Lint (Android Lint —— 安全/性能静态工具链；报告 git 回传)
+        run: |
+          set -o pipefail
+          ./gradlew lintDebug 2>&1 | tee lint.log || true
+          echo "--- lint 错误级 ---"
+          grep -c "severity=\"Error\"" app/build/reports/lint-results-debug.xml 2>/dev/null || true
+          mkdir -p audit-art
+          cp app/build/reports/lint-results-debug.html audit-art/ 2>/dev/null || true
+          cp app/build/reports/lint-results-debug.xml audit-art/ 2>/dev/null || true
+
       - name: Assemble debug APK + unit tests
         run: |
           set -o pipefail

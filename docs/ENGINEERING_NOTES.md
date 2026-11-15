@@ -1461,3 +1461,61 @@ EditorScreen 40+ 回调、MainActivity→EditorScreen 全部实参、Home/Camera
 
 **仍为有意决策（不随本轮翻案）**：顶栏玻璃胶囊 / Deck 贴底形态、双极滑块零点刻度、
 GlassTabBar 标签「调色台」（产品语言）—— 三者的裁决理由见 §19.4 原文，改动需整批重验。
+
+---
+## §20 三路工具审计 + 全量修复 + 云端复测（v0.7.3，2026-11-15）
+
+> 项目所有人四项指令：①静态审查 UI 设计一致性/字体比例/人体工学；②云端模拟器动态核查一致性；
+> ③用安全、性能工具核查代码；④全量修改与复测。三路子代理审计（UI 27 项 / 安全 6 项 /
+> 性能逻辑 16 项，全部逐条源码复核）+ Android Lint 入 CI + 走查脚本扩容复测，本节为台账。
+
+### 20.1 修复映射（按域）
+
+**UI 保真 / 字体比例 / 人体工学（27 项 → 全部落地，owner 推翻 §9.6-Q4「26dp 有意」裁决）**
+- 热区：ParamSlider 26→48dp（标签叠布进单层 48dp 盒，视觉不变、Deck 预算净 0）+ 自绘轨道
+  （3dp 线 + **双极零点刻度** `.sl-zero` 清账 + M3 默认停点圆点消失）；Deck 拖高把手 20→44；
+  IconAction 34→48；chips 32→36dp；导出胶囊 34→44；直方图点击区 48（视觉 34 保持）；
+  历史行 44；放大胶囊 44；TextButton 统一 heightIn(44)（设置/面板/相机三域）
+- 字阶：GroupLabel/SectionHeader 眉题化（20→13 SemiBold）；设置页头 28→20、行题 15→13 SemiBold；
+  模型中心/相机面板同口径；TabBar 图标 18→21 + 字 11sp；chip 字 12sp（`.g` 12px）；去 CJK 字距
+- 结构：**明暗拆 4 组**（基础/影调/白黑/找回）+ **人像拆 3 页签**（磨皮/美型/工具 ——
+  顺带修掉「磨皮滑块藏在画笔工具分支里」的语义债）+ **deck-top 合并**（作用域+分组 chips
+  同一横滚 + 准星钉尾，-56dp）⇒ **DECK_HEIGHT_S 248→176**（规范 168±8，拆组 blocker 关闭）
+- 形态：Deck 恢复规范**悬浮卡**（左右 10dp、四角圆角 —— §19.4 贴底决策被 owner 口径推翻）；
+  首页顶栏 15sp 字标 + sliders 入口钮（§02 `.wm`/`.tbi`）；成片卡 344dp 上限；
+  chromeAlpha 消费改 graphicsLayer lambda（淡出每帧只重绘不重组）
+
+**性能 / 功能逻辑（16 项）**
+- **P1**：强度环首拖即失效（onParamChange 无条件清 activePresetId ⇒ 环在指下消失且无 commit）
+  → `onPresetParams` 专用通道（不清预设）+ retouch 同步 lerp（强度环回退「整套调法」）
+- 会话：EditDocument 补 per-step rotation（restore 曾把最终旋转盖到每步）；persist 改
+  debounce(1.2s) + Default 线程编码（原 sample 周期性主线程 encode 是卡顿源）；
+  `historyRev` 可观察计数（结构等值的 undo/redo 也触发持久化与丝带刷新）
+- 相机：自动导出闸门**前置**（关闭时不再白跑全分辨率解码渲染）；悬空默认预设回落 + 可见反馈
+- ML：GPU→CPU 降级计数改由 `createOrNull(onGpuFallback)` 回调（旧计数方向正好反了）；
+  统计字段 @Volatile；SHA-256 移出 synchronized 关键路径（后台懒算）
+
+**安全（6 项）**
+- **中**：release 签名 fail-closed —— 无签名配置时拒绝静默回落公开 debug 密钥
+  （⚠️ 三轮实证：配置期抛 / whenTaskAdded 都会炸掉全部构建，最终落点 **doFirst 执行期**）
+- 低：预设导入 5MB 上限（OOM DoS）；backup 规则修正（custom_presets.json 真实备份 +
+  session_store.xml 显式排除）；DebugLog URI 只记最后段（可分享日志不携带路径信息）；
+  ARW picker MIME 收紧（image/* + octet-stream）
+
+### 20.2 云端复测（emulator-audit 15 轮迭代，全绿）
+
+- 编译 + 单测全绿（新增 SessionPersistenceTest ×5、MaskContourTest ×4）
+- **会话恢复运行时实证**：走查编辑（导出/自动增强/调整阈值半径）→ `am force-stop` → 重启
+  → 编辑器无缝续上，阈值 24 / 半径 0.010 完整还原（截图 61b_session_restored）
+- 相机直连组三条例上屏确认；模型中心统计/SHA 行入诊断；Lint 0 error（报告进证据链）
+- 平色疑点探针两轮未复现（维持记账）；SAF 导航漂移经「接受任意测试图 + 探针前移」两轮修正
+
+### 20.3 新教训（三条）
+
+1. **Gradle 闸门的落点**：配置期抛 / whenTaskAdded 注册期触发 / doFirst 执行期 ——
+   只有 doFirst 不误伤其它构建；.kts 里 `gradle.taskGraph.whenReady {}` 的 receiver 推断不过。
+2. **stash 冲突的内容腐化**：本轮 SessionPersistence.kt（主源码被写入测试内容）、
+   EditDocument.rotation 字段、SettingsScreen dp import 三处被 stash pull 冲突静默污染 ——
+   **多文件批量 patch 后必须以 CI 编译为唯一真相源**，本地「平衡检查」证明不了名字解析。
+3. **走查时序**：会话恢复探针必须在编辑器退出**之前**（退出即清档是正确语义，探针曾放在
+   清档之后 → 永远探测不到）。

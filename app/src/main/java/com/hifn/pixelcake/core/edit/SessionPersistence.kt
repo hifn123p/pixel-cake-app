@@ -26,8 +26,10 @@ import kotlinx.serialization.json.Json
  *   防抖落盘（编辑是低频写、SharedPreferences 单键覆盖，无放大风险）；
  * - **清**：`editorOnBack`（用户主动退出）与换图瞬间 —— 前者是「会话结束」的语义，
  *   后者由新会话的首笔写入覆盖；App 冷启动恢复成功后同样清除（一次性凭据）。
- * - **权限**：源 uri 必须是可持久化授权（SAF / Photo Picker 均可 `takePersistableUriPermission`）；
- *   不可持久化的授权（部分机型 picker 拒绝）恢复时解码失败 ⇒ 按损坏处理清除，不留幽灵会话。
+ * - **权限**：SAF（OpenDocument）授权可 `takePersistableUriPermission` 持久化；Photo Picker
+ *   的授权多数机型**不可** take（take 会抛 SecurityException，调用方 runCatching 兜住）——
+ *   但 picker 授权本身能**跨进程死亡**存活（不能跨重启）。因此：进程死亡恢复对两类来源都成立；
+ *   设备重启后的恢复只有 SAF 来源可用，其余走「解码失败 ⇒ 清档」的既有降级路径。
  */
 @Serializable
 data class SessionRecord(
