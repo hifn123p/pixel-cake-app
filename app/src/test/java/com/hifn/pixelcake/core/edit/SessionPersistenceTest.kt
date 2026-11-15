@@ -23,8 +23,8 @@ class SessionPersistenceTest {
         h.push(snap(1.0f))
         h.push(snap(1.5f))
         h.undo() // current = 1.0，redo 栈里有 1.5
-        assertEquals(1, h.step)
-        assertEquals(0.5f, h.current.params.exposureEv)
+        assertEquals(2, h.step)
+        assertEquals(1.0f, h.current.params.exposureEv)
 
         val (timeline, position) = h.exportTimeline()
         // 时间线 = [0.0, 0.5, 1.0, 1.5]，当前在下标 2
