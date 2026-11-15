@@ -83,13 +83,20 @@ jobs:
 
       - name: Boot emulator (headless, software GPU)
         run: |
+          emulator -accel-check || true
           emulator -avd pixelcake-audit \
             -no-window -no-audio -no-boot-anim -no-snapshot \
             -gpu swiftshader_indirect \
             -camera-back none -camera-front none \
             > emulator-boot.log 2>&1 &
-          adb wait-for-device
-          timeout 600 bash -c 'until [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = "1" ]; do sleep 5; done'
+          # ⚠️ wait-for-device 必须有超时：模拟器进程若启动即死，原版会无限挂起
+          timeout 300 adb wait-for-device || true
+          timeout 600 bash -c 'until [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = "1" ]; do sleep 5; done' || true
+          BOOTED=$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || echo 0)
+          echo "boot_completed=$BOOTED"
+          echo "--- emulator-boot.log (tail 40) ---"
+          tail -40 emulator-boot.log || true
+          if [ "$BOOTED" != "1" ]; then echo "EMULATOR FAILED TO BOOT"; exit 1; fi
           adb shell settings put global window_animation_scale 0
           adb shell settings put global transition_animation_scale 0
           adb shell settings put global animator_duration_scale 0
