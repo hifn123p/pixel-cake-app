@@ -105,19 +105,11 @@ android {
             versionNameSuffix = "-debug"
         }
         release {
-            // v0.7.3（安全审计 中-1）：fail-closed —— 旧口径静默回落到**公开在仓库里**
-            // 的 debug.keystore，任何能读到本仓库的人都能造出同签名 APK 覆盖安装。
-            // 本地确需 debug 签名 release 时显式传 -PallowDebugSignedRelease=true。
-            signingConfig = signingConfigs.findByName("release")
-                ?: if (project.findProperty("allowDebugSignedRelease") == "true") {
-                    logger.warn("release APK 将使用公开的 debug 密钥签名（仅限本地实验，禁止分发）")
-                    signingConfigs.getByName("debug")
-                } else {
-                    throw GradleException(
-                        "assembleRelease 需要签名配置（KEYSTORE_PATH 等）；" +
-                            "拒绝用公开的 debug 密钥签名 release（本地实验请加 -PallowDebugSignedRelease=true）"
-                    )
-                }
+            // v0.7.3（安全审计 中-1）：签名仍按旧口径回落 debug 密钥（**不能**在配置期抛 ——
+            // release{} 块对所有变体构建都会执行，抛在这里连 assembleDebug 都活不了）；
+            // 真正的闸门在下面 taskGraph.whenReady：真正要打 release 包且没有签名配置时
+            // fail-closed（拒绝静默使用公开在仓库里的 debug 密钥）。
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
@@ -154,6 +146,24 @@ android {
 kotlin {
     compilerOptions {
         jvmTarget.set(JvmTarget.fromTarget(libs.versions.jvmTarget.get()))
+    }
+}
+
+// v0.7.3（安全审计 中-1）：release 打包的签名闸门 —— 没有 KEYSTORE_PATH 等签名配置
+// 时拒绝用公开在仓库里的 debug 密钥打 release（同签名 = 任何人可造覆盖安装的恶意更新）。
+// 本地实验显式传 -PallowDebugSignedRelease=true。
+gradle.taskGraph.whenReady { graph ->
+    val wantsReleaseArtifact = graph.allTasks.any {
+        it.name.startsWith("assembleRelease") || it.name.startsWith("bundleRelease")
+    }
+    if (wantsReleaseArtifact &&
+        signingConfigs.findByName("release") == null &&
+        project.findProperty("allowDebugSignedRelease") != "true"
+    ) {
+        throw GradleException(
+            "release 打包需要签名配置（KEYSTORE_PATH 等）；" +
+                "拒绝用公开的 debug 密钥签名（本地实验请加 -PallowDebugSignedRelease=true）"
+        )
     }
 }
 
