@@ -74,6 +74,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
@@ -886,6 +887,8 @@ fun EditorScreen(
                         .offset { IntOffset(previewPan.x.roundToInt(), previewPan.y.roundToInt()) }
                         .clip(Radius.chip)
                         .alpha(maskAlpha)
+                    // 轮廓用色在组合期捕获（Canvas draw lambda 不是 composable 上下文）
+                    val contourColor = MaterialTheme.colorScheme.primary
                     pickMask?.let { (bmp, loops) ->
                         Image(
                             bitmap = bmp,
@@ -905,7 +908,7 @@ fun EditorScreen(
                                     path.close()
                                     drawPath(
                                         path,
-                                        MaterialTheme.colorScheme.primary,
+                                        contourColor,
                                         style = Stroke(
                                             width = strokeW,
                                             pathEffect = PathEffect.dashPathEffect(

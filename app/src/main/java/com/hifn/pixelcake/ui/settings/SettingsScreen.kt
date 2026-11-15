@@ -47,7 +47,6 @@ import com.hifn.pixelcake.ui.theme.Spacing
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.File
 
 /**
  * 设置页（`docs/UI_DESIGN.md` §3.2.1）。
@@ -346,11 +345,13 @@ fun SettingsScreen(
                     title = "默认修图参数",
                     subtitle = "相机批量与系留套用的预设；与相机面板里的选择是同一个状态"
                 ) {
+                    // ChipSelector 的 T = 选项 id（String）：label 经 id→名称表解析
+                    // （Pair 选项与 String selected 会让 T 无法统一，编译期即炸）
                     ChipSelector(
-                        options = cameraPresetOptions,
+                        options = cameraPresetOptions.map { it.first },
                         selected = settings.cameraDefaultPresetId,
-                        label = { it.second },
-                        onSelect = { settings.cameraDefaultPresetId = it.first }
+                        label = { id -> cameraPresetOptions.firstOrNull { it.first == id }?.second ?: id },
+                        onSelect = { settings.cameraDefaultPresetId = it }
                     )
                 }
 
