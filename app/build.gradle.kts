@@ -97,6 +97,8 @@ android {
                 storeType = "PKCS12"
             }
         }
+    // v0.7.3：供下方 release 签名闸门读取（配置期一次判定）
+    releaseSigningPresent = signingConfigs.findByName("release") != null
     }
 
     buildTypes {
@@ -152,12 +154,13 @@ kotlin {
 // v0.7.3（安全审计 中-1）：release 打包的签名闸门 —— 没有 KEYSTORE_PATH 等签名配置
 // 时拒绝用公开在仓库里的 debug 密钥打 release（同签名 = 任何人可造覆盖安装的恶意更新）。
 // 本地实验显式传 -PallowDebugSignedRelease=true。
-gradle.taskGraph.whenReady { graph ->
-    val wantsReleaseArtifact = graph.allTasks.any {
-        it.name.startsWith("assembleRelease") || it.name.startsWith("bundleRelease")
-    }
+// ⚠️ .kts 里 `gradle.taskGraph.whenReady { }` 的 receiver 推断不过（首轮 CI 实证），
+// 改用 whenTaskAdded：task 在 android{} 求值后才注册，届时布尔已定。
+var releaseSigningPresent = false
+tasks.whenTaskAdded {
+    val wantsReleaseArtifact = name.startsWith("assembleRelease") || name.startsWith("bundleRelease")
     if (wantsReleaseArtifact &&
-        signingConfigs.findByName("release") == null &&
+        !releaseSigningPresent &&
         project.findProperty("allowDebugSignedRelease") != "true"
     ) {
         throw GradleException(
