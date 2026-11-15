@@ -33,8 +33,8 @@ class SessionPersistenceTest {
 
         val restored = EditHistory(snap(9.9f))
         restored.importTimeline(timeline, position)
-        assertEquals(0.5f, restored.current.params.exposureEv)
-        assertEquals(1, restored.step)
+        assertEquals(1.0f, restored.current.params.exposureEv)
+        assertEquals(2, restored.step)
         assertTrue(restored.canRedo)
         restored.redo()
         assertEquals(1.5f, restored.current.params.exposureEv)
