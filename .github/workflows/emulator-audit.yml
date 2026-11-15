@@ -143,6 +143,15 @@ jobs:
           path: audit-art/
           if-no-files-found: error
 
+      - name: Commit walkthrough evidence (git 是唯一匿名可读通道 —— artifact 匿名不可下)
+        if: always()
+        run: |
+          git config user.name "ci-log-bot"
+          git config user.email "ci-log-bot@users.noreply.github.com"
+          git add -f audit-art || true
+          git commit -m "ci-shots: emulator walkthrough evidence (run ${{ github.run_id }})" || true
+          git push origin HEAD:emulator-audit || true
+
       - name: Commit failure log (git 是唯一匿名可读通道；-f 顶掉 gitignore)
         if: failure()
         run: |
