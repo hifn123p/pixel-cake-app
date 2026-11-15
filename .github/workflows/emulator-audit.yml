@@ -69,10 +69,22 @@ jobs:
           # ⚠️ add 必须逐个文件（多 pathspec 任一不匹配 ⇒ 整条 add 原子失败 —— 前两轮
           # emulator-boot.log 不存在把 build-and-test.log 一起吞了，这就是 246 字节之外
           # 「提交成功却什么都没有」的根因）
+          {
+            echo "run=${{ github.run_id }} sha=$(git rev-parse HEAD) detached=$(git symbolic-ref -q HEAD || echo detached)"
+            echo "--- status ---"; git status --short | head -20
+            echo "--- files ---"; ls -la build-and-test.log emulator-boot.log 2>&1
+          } > ci-log-diag.txt
           git add -f build-and-test.log || true
           git add -f emulator-boot.log || true
+          git add -f ci-log-diag.txt || true
           git commit -m "ci-log: emulator-audit failure (run ${{ github.run_id }})" || true
-          git push origin HEAD:emulator-audit || true
+          # push 不再吞错误：失败也要落进第二次尝试的文件里
+          git push origin HEAD:emulator-audit 2>&1 | tee push-result.txt || true
+          if ! git merge-base --is-ancestor HEAD origin/emulator-audit 2>/dev/null; then
+            git add -f push-result.txt || true
+            git commit -m "ci-log: push diagnostic (run ${{ github.run_id }})" || true
+            git push origin HEAD:emulator-audit || true
+          fi
 
       - name: Create AVD
         run: |
