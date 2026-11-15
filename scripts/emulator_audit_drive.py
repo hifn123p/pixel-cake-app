@@ -236,13 +236,25 @@ tap("text", "复位", "41_zoom_reset", wait=1.0, contains=True, allow_missing=Tr
 # ———— I. 导出全链路 ————
 tap("text", "导出", "50_open_export", wait=2.0)
 shot("51_export_sheet")
-# Sheet 里的主按钮「导出」
-tap("text", "导出", "52_export_go", wait=1.0, allow_missing=True)
-# 等 JPEG 导出完成（含回执出现）
-time.sleep(6.0)
-root, _ = dump("receipt")
+# ⚠️ Sheet 主按钮是「导出到相册（JPEG）」—— 顶栏也有一个「导出」，按面积最小编号
+# 会误选顶栏（首轮走查实测：导出从未发生，后面全卡在 Sheet 上）。用独有文案。
+tap("text", "导出到相册", "52_export_go", wait=1.5, contains=True, allow_missing=True)
+# 轮询回执（导出含全分辨率渲染 + EXIF 写回，数秒～数十秒）
+receipt = False
+for _ in range(14):
+    root, t = dump("receipt_poll")
+    if t and ("已导出" in t and "分享" in t):
+        receipt = True
+        break
+    time.sleep(2.5)
+results.append(f"RECEIPT SHOWN: {receipt}")
 shot("53_export_receipt")
 tap("text", "完成", "54_receipt_done", wait=1.5, allow_missing=True)
+# 兜底：Sheet 还开着（回执未出）就系统返回一次，让后续设置页步骤能走
+root, t = dump("after_done")
+if t and "导出到系统相册" in t:
+    back()
+    results.append("export sheet still open -> back()")
 
 # ———— J. 退出编辑器 → 首页 ————
 tap("content-desc", "返回", "60_back_to_home", wait=2.5, contains=True, allow_missing=True)
