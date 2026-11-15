@@ -126,7 +126,7 @@ fun StrengthDial(
                             if (dx == 0f && dy == 0f) return@detectDragGestures
                             // 屏幕坐标 y 向下：0° 在正右方、90° 在正下方。从 12 点钟方向顺时针
                             // 扫过的角度 = atan2 + 90°，负值补一圈 —— 与圆弧绘制的起始角同口径。
-                            var fromTop = Math.toDegrees(atan2(dy, dx.toDouble())) + 90.0
+                            var fromTop = Math.toDegrees(atan2(dy.toDouble(), dx.toDouble())) + 90.0
                             if (fromTop < 0) fromTop += 360.0
                             var nv = (fromTop / 360.0).toFloat().coerceIn(0f, 1f)
                             nv = ((nv / 0.05f).roundToInt() * 0.05f).coerceIn(0f, 1f)
