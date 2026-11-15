@@ -55,6 +55,34 @@ class SessionPersistenceTest {
     }
 
     @Test
+    fun timeline_roundTrip_preservesPerStepRotation() {
+        // v0.7.3（运行时审计 P2-1）：旋转发生在时间线中途 —— 每步文档必须各自携带
+        // 当时的旋转圈数，否则「撤销回旋转之前」在进程死亡恢复后失效。
+        val h = EditHistory(snap(0.0f))
+        h.push(EditSnapshot(params = EditParams(exposureEv = 0.5f), rotationQuarterTurns = 1))
+        h.push(EditSnapshot(params = EditParams(exposureEv = 1.0f), rotationQuarterTurns = 1))
+        h.push(EditSnapshot(params = EditParams(exposureEv = 1.5f), rotationQuarterTurns = 0))
+        val (timeline, position) = h.exportTimeline()
+        val record = SessionRecord(
+            srcUri = "u", rotationQuarterTurns = 0, position = position,
+            timeline = timeline.map {
+                EditDocument(
+                    params = it.params, retouch = it.retouch,
+                    layers = it.layers, rotationQuarterTurns = it.rotationQuarterTurns
+                )
+            }
+        )
+        val restored = SessionJson.decode(SessionJson.encode(record))!!
+        val snapshots = restored.timeline.map {
+            EditSnapshot(
+                params = it.params, retouch = it.retouch,
+                layers = it.layers, rotationQuarterTurns = it.rotationQuarterTurns
+            )
+        }
+        assertEquals(listOf(0, 1, 1, 0), snapshots.map { it.rotationQuarterTurns })
+    }
+
+    @Test
     fun sessionJson_roundTrip() {
         val record = SessionRecord(
             srcUri = "content://media/external/images/media/23",

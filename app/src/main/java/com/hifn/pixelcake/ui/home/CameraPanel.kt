@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -205,8 +206,13 @@ fun CameraPanel(
             // 每轮现读最新预设（tetherPreset 经 rememberUpdatedState）：effect 的 key 只有
             // (session, tetherOn)，切预设 / 自定义预设库重载不会重启本 effect —— 重启 =
             // 重跑基线播种，会把在途/刚落卡的新片记成「已知」而**静默漏导**。
-            // 未选预设（不应发生，有默认值）时跳过本轮，轮询不退出。
-            val preset = tetherPreset.value ?: continue
+            // v0.7.3（审计 P2-3）：默认预设被删（悬空 id 现在会持久化）时回落到内置第一档
+            // 并给出可见反馈，而不是静默 continue（旧口径连下载都不发生）。
+            val preset = tetherPreset.value ?: run {
+                settings.cameraDefaultPresetId = "portra"
+                log("默认修图参数已失效（预设被删？），回落为「波特拉」")
+                Presets.byId("portra") ?: continue
+            }
             try {
                 val query = sn.objectHandles(storageId)
                 // ②/K3：新片收集与坏对象记账都在 TetherProcessor 里（有单测钉住）。
@@ -221,6 +227,12 @@ fun CameraPanel(
                             // v0.7.2（审计 C-F3）：交还重试 —— 原口径「先记账后下载」让一次
                             // USB 抖动等于这张照片永久漏导。渲染失败不交还（确定性错误）。
                             tether.releaseForRetry(photo.handle)
+                            continue
+                        }
+                        // v0.7.3（审计 P2-4）：自动导出闸门**前置** —— 关闭时不再白跑
+                        // 全分辨率解码 + 渲染（数秒 + ~100MB churn），文件留缓存待手动批量导出。
+                        if (!settings.tetherAutoExport) {
+                            log(photo.info.filename + " · 已下载（自动导出已关闭，留在缓存待手动导出）")
                             continue
                         }
                         log(photo.info.filename + " · 套「" + preset.name + "」")
@@ -493,7 +505,7 @@ fun CameraPanel(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("默认修图参数", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                Text("默认修图参数", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
                 Switch(checked = tetherOn, onCheckedChange = null)
             }
             if (tetherOn) {
@@ -643,7 +655,7 @@ fun CameraPanel(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        TextButton(
+                        TextButton(modifier = Modifier.heightIn(min = 44.dp), 
                             onClick = {
                                 selected = if (selected.size == list.photos.size) {
                                     emptySet()
@@ -677,7 +689,7 @@ fun CameraPanel(
                                 color = MaterialTheme.colorScheme.onSurface,
                                 modifier = Modifier.weight(1f)
                             )
-                            TextButton(
+                            TextButton(modifier = Modifier.heightIn(min = 44.dp), 
                                 onClick = {
                                     busy = true
                                     // 卫生复位：单张路径虽不读 batchCancel，但残留 true 会让
@@ -879,7 +891,7 @@ fun CameraPanel(
         // 单张拉取（下载无取消参数）不显示这个按钮 —— 显示一个点了没反应的取消
         // 比没有取消更糟（诚实界面纪律）。
         if (busy && progress != null && batchRunning) {
-            TextButton(
+            TextButton(modifier = Modifier.heightIn(min = 44.dp), 
                 onClick = { batchCancel.set(true) },
                 modifier = Modifier.padding(top = Spacing.xs)
             ) {

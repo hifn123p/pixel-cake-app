@@ -9,4 +9,5 @@
 <full-backup-content>
     <include domain="sharedpref" path="." />
     <include domain="database" path="presets.db" />
+<exclude domain="sharedpref" path="session_store.xml"/>
 </full-backup-content>

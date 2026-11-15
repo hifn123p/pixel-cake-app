@@ -266,6 +266,20 @@ if root is not None:
             results.append(f"preset tap at {c}")
             time.sleep(2.0)
     shot("26_preset_applied")
+    # —— v0.7.3 复测：强度环拖动（P1-1 回归 —— 旧版第一格拖动即取消预设）——
+    root2, t2 = dump("26b_dial")
+    dial = find_contains(root2, "content-desc", "预设强度")
+    if dial:
+        c = bounds_center(dial[0])
+        if c:
+            # 圆环拖动：从环心右下 45° 向内/向上扫（角度 → 值变化）
+            run(["shell", "input", "swipe", str(c[0] + 30), str(c[1] + 40), str(c[0] - 10), str(c[1] - 30), "500"])
+            time.sleep(1.0)
+            root3, t3 = dump("26c_dial_after")
+            results.append(f"DIAL DRAG: before={('预设强度' in t2)} after-desc-changed={t2 != t3}")
+            shot("26b_strength_dial_dragged", delay=0.3)
+    else:
+        results.append("DIAL: not found (preset not applied?)")
 
 # ———— G. 顶栏动作：撤销 / 旋转 / 自动增强 ————
 tap("content-desc", "撤销", "30_undo", wait=1.0, contains=True, allow_missing=True)
@@ -274,6 +288,12 @@ shot("32_after_rotate")
 tap("content-desc", "撤销", "33_undo_rotate", wait=2.5, contains=True, allow_missing=True)
 tap("content-desc", "自动增强", "34_auto_enhance", wait=3.0, contains=True, allow_missing=True)
 shot("35_auto_enhanced")
+# —— v0.7.3 复测：拾取蒙版 + 琥珀虚线轮廓（MaskContour 上屏验证）——
+tap("content-desc", "点选作用域", "36_pick_enter", wait=1.5, contains=True, allow_missing=True, attempts=3)
+run(["shell", "input", "tap", str(int(W * 0.25)), str(int(H * 0.30))])
+time.sleep(2.5)
+shot("37_pick_mask_contour")
+tap("content-desc", "退出点选作用域", "38_pick_exit", wait=1.0, contains=True, allow_missing=True, attempts=3)
 
 # ———— H. 缩放：双击放大 + 复位 ————
 run(["shell", "input", "tap", str(int(W * 0.45)), str(int(H * 0.30))])
@@ -324,6 +344,33 @@ if t and "导出到系统相册" in t:
 run(["shell", "input", "keyevent", "4"])
 time.sleep(2.5)
 results.append(f"focus after back={foreground()!r}")
+
+# —— v0.7.3 复测：进程死亡会话恢复 —— 编辑态刚落盘（导出+调整），强杀重启应无缝续上
+run(["shell", "am", "force-stop", "com.hifn.pixelcake.debug"])
+time.sleep(1.5)
+run(["shell", "am", "start", "-n", "com.hifn.pixelcake.debug/com.hifn.pixelcake.MainActivity"])
+time.sleep(8.0)
+root, t = dump("61b_session_restore")
+restored = "导出" in t and "撤销" in t
+results.append(f"SESSION RESTORED: {restored}")
+shot("61b_session_restored")
+# 退出恢复出来的编辑器（清档，保持后续步骤干净）
+run(["shell", "input", "keyevent", "4"])
+time.sleep(2.0)
+
+# —— v0.7.3 复测：fontScale 1.3 人体工学（Rail heightIn / deck scale / 布局不裁切）——
+run(["shell", "settings", "put", "system", "font_scale", "1.3"])
+time.sleep(2.0)
+run(["shell", "am", "force-stop", "com.hifn.pixelcake.debug"])
+time.sleep(1.0)
+run(["shell", "am", "start", "-n", "com.hifn.pixelcake.debug/com.hifn.pixelcake.MainActivity"])
+time.sleep(6.0)
+shot("63c_font13_home")
+run(["shell", "am", "force-stop", "com.hifn.pixelcake.debug"])
+run(["shell", "settings", "put", "system", "font_scale", "1.0"])
+time.sleep(1.0)
+run(["shell", "am", "start", "-n", "com.hifn.pixelcake.debug/com.hifn.pixelcake.MainActivity"])
+time.sleep(4.0)
 root, _ = dump("home_after")
 shot("61_home_after_back")
 
@@ -337,8 +384,14 @@ shot("63b_settings_scrolled")
 root, st = dump("settings_scrolled")
 results.append(f"CAMERA GROUP VISIBLE: {'相机直连' in st}")
 results.append(f"MODEL STATS ROW: {'推理次数' in st}")
-tap("text", "查看", "64_model_center", wait=2.0, allow_missing=True)
+tap("text", "查看", "64_model_center", wait=2.0, allow_missing=True, attempts=4)
 shot("65_model_center")
+# 滚动 Sheet 到统计/SHA 行
+swipe(int(W * 0.5), int(H * 0.70), int(W * 0.5), int(H * 0.30), ms=500, wait=1.0)
+shot("65b_model_center_stats")
+root, mt = dump("65c_model_stats")
+results.append(f"MODEL STATS ROW: {'推理次数' in mt} SHA ROW: {'SHA-256' in mt}")
+back()
 back()
 shot("66_settings_back")
 # 恢复默认（确认弹窗出现 → 取消）

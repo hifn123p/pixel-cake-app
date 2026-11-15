@@ -1,76 +1,117 @@
 package com.hifn.pixelcake.core.edit
 
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
 
 /**
- * 编辑会话的**可持久化记录**（v0.7.2：进程死亡恢复，§19.4 遗留项的全量落地）。
- *
- * ## 解决什么
- *
- * AppRoot 的全部状态都是 `remember`（无 ViewModel），进程在后台被杀后用户回来，
- * 只剩一张空首页 —— RAW 重导 + 整段重修。本记录把「还原图」所需的最小集合持久化：
- * 源 uri + 旋转圈数 + **整条编辑时间线**（含撤销/重做位置）。恢复时重新解码源图、
- * 从 pristine 重推旋转、重建历史 —— 会话无缝续上。
- *
- * ## 与 [EditDocument] 的关系
- *
- * 时间线的每一步复用 [EditDocument]（params/retouch/layers 的既有 JSON 文档，
- * T1 的唯一入口），本类只补「uri + 旋转 + 时间线位置」三个外壳字段 ——
- * JSON 兼容性纪律（新增字段带默认值）原样继承。
- *
- * ## 持久化时机与清除（调用方契约，见 MainActivity）
- *
- * - **写**：编辑器打开期间，可观察状态（params/retouch/layers/旋转/uri）每次变化
- *   防抖落盘（编辑是低频写、SharedPreferences 单键覆盖，无放大风险）；
- * - **清**：`editorOnBack`（用户主动退出）与换图瞬间 —— 前者是「会话结束」的语义，
- *   后者由新会话的首笔写入覆盖；App 冷启动恢复成功后同样清除（一次性凭据）。
- * - **权限**：源 uri 必须是可持久化授权（SAF / Photo Picker 均可 `takePersistableUriPermission`）；
- *   不可持久化的授权（部分机型 picker 拒绝）恢复时解码失败 ⇒ 按损坏处理清除，不留幽灵会话。
+ * 会话持久化（进程死亡恢复，v0.7.2）的纯 JVM 回归：
+ * ① EditHistory 时间线导出/恢复 round-trip（含撤销/重做位置）；
+ * ② SessionRecord ⇄ JSON round-trip 与无效记录拒绝。
  */
-@Serializable
-data class SessionRecord(
-    val version: Int = SessionJson.CURRENT_VERSION,
-    /** 源图 uri（字符串形式；恢复时 parse 回 Uri） */
-    val srcUri: String,
-    /** 旋转圈数（0..3）。恢复时从 pristine 重推，零累积损失 —— 与会话内旋转同一条路径 */
-    val rotationQuarterTurns: Int = 0,
-    /** 时间线中「当前态」的下标（= EditHistory.step） */
-    val position: Int = 0,
-    /** 整条编辑时间线（undo 栈 + 当前 + redo 栈，时间序） */
-    val timeline: List<EditDocument> = emptyList()
-)
+class SessionPersistenceTest {
 
-/**
- * [SessionRecord] ⇄ JSON 的唯一入口（与 [EditSnapshotJson] 同一套兼容性纪律）。
- */
-object SessionJson {
+    private fun snap(ev: Float): EditSnapshot = EditSnapshot(params = EditParams(exposureEv = ev))
+    private fun doc(ev: Float): EditDocument = EditDocument(params = EditParams(exposureEv = ev))
 
-    const val CURRENT_VERSION = 1
+    @Test
+    fun timeline_roundTrip_preservesUndoRedoPosition() {
+        val h = EditHistory(snap(0.0f))
+        h.push(snap(0.5f))
+        h.push(snap(1.0f))
+        h.push(snap(1.5f))
+        h.undo() // current = 1.0，redo 栈里有 1.5
+        assertEquals(2, h.step)
+        assertEquals(1.0f, h.current.params.exposureEv)
 
-    private val json = Json {
-        ignoreUnknownKeys = true
-        encodeDefaults = true
-        isLenient = false
+        val (timeline, position) = h.exportTimeline()
+        // 时间线 = [0.0, 0.5, 1.0, 1.5]，当前在下标 2
+        assertEquals(4, timeline.size)
+        assertEquals(2, position)
+
+        val restored = EditHistory(snap(9.9f))
+        restored.importTimeline(timeline, position)
+        assertEquals(1.0f, restored.current.params.exposureEv)
+        assertEquals(2, restored.step)
+        assertTrue(restored.canRedo)
+        restored.redo()
+        assertEquals(1.5f, restored.current.params.exposureEv)
+        restored.undo()
+        restored.undo()
+        restored.undo()
+        assertEquals(0.0f, restored.current.params.exposureEv)
+        assertFalse(restored.canUndo)
     }
 
-    /** 编码。永不失败（全部字段是基本类型与 List）。 */
-    fun encode(record: SessionRecord): String = json.encodeToString(SessionRecord.serializer(), record)
+    @Test
+    fun importTimeline_ignoresInvalidInput() {
+        val h = EditHistory(snap(3.21f))
+        h.importTimeline(emptyList(), 0)
+        h.importTimeline(listOf(snap(1f)), 5)
+        assertEquals(3.21f, h.current.params.exposureEv)
+        assertFalse(h.canUndo)
+    }
 
-    /**
-     * 解码。null = 不是本格式的 JSON（旧版本残留 / 手改坏）—— 调用方按「无会话」处理。
-     * 时间线为空或 position 越界的记录同样视为无效（半截写入的保护）。
-     */
-    fun decode(text: String): SessionRecord? {
-        val record = try {
-            json.decodeFromString(SessionRecord.serializer(), text)
-        } catch (t: Throwable) {
-            return null
+    @Test
+    fun timeline_roundTrip_preservesPerStepRotation() {
+        // v0.7.3（运行时审计 P2-1）：旋转发生在时间线中途 —— 每步文档必须各自携带
+        // 当时的旋转圈数，否则「撤销回旋转之前」在进程死亡恢复后失效。
+        val h = EditHistory(snap(0.0f))
+        h.push(EditSnapshot(params = EditParams(exposureEv = 0.5f), rotationQuarterTurns = 1))
+        h.push(EditSnapshot(params = EditParams(exposureEv = 1.0f), rotationQuarterTurns = 1))
+        h.push(EditSnapshot(params = EditParams(exposureEv = 1.5f), rotationQuarterTurns = 0))
+        val (timeline, position) = h.exportTimeline()
+        val record = SessionRecord(
+            srcUri = "u", rotationQuarterTurns = 0, position = position,
+            timeline = timeline.map {
+                EditDocument(
+                    params = it.params, retouch = it.retouch,
+                    layers = it.layers, rotationQuarterTurns = it.rotationQuarterTurns
+                )
+            }
+        )
+        val restored = SessionJson.decode(SessionJson.encode(record))!!
+        val snapshots = restored.timeline.map {
+            EditSnapshot(
+                params = it.params, retouch = it.retouch,
+                layers = it.layers, rotationQuarterTurns = it.rotationQuarterTurns
+            )
         }
-        if (record.srcUri.isBlank() || record.timeline.isEmpty() ||
-            record.position < 0 || record.position >= record.timeline.size
-        ) return null
-        return record
+        assertEquals(listOf(0, 1, 1, 0), snapshots.map { it.rotationQuarterTurns })
+    }
+
+    @Test
+    fun sessionJson_roundTrip() {
+        val record = SessionRecord(
+            srcUri = "content://media/external/images/media/23",
+            rotationQuarterTurns = 2,
+            position = 1,
+            timeline = listOf(doc(0.0f), doc(0.7f))
+        )
+        val decoded = SessionJson.decode(SessionJson.encode(record))
+        assertEquals(record, decoded)
+    }
+
+    @Test
+    fun sessionJson_rejectsInvalidRecords() {
+        // 空时间线 / 越位 position / 非 JSON 三类都必须拒绝 —— 半截写入与脏数据不能复活成会话
+        assertNull(SessionJson.decode("""{"version":1,"srcUri":"","position":0,"timeline":[]}"""))
+        assertNull(
+            SessionJson.decode(
+                SessionJson.encode(SessionRecord(srcUri = "u", timeline = listOf(doc(0f)), position = 3))
+            )
+        )
+        assertNull(SessionJson.decode("not json at all"))
+    }
+
+    @Test
+    fun sessionJson_unknownKeysIgnored() {
+        // 新版本写的 JSON 被旧代码读到：丢弃未知键继续（兼容性纪律）
+        val text = SessionJson.encode(SessionRecord(srcUri = "u", timeline = listOf(doc(1f))))
+            .replace("""{"version":1""", """{"version":1,"futureField":true""")
+        val decoded = SessionJson.decode(text)
+        assertEquals("u", decoded?.srcUri)
     }
 }

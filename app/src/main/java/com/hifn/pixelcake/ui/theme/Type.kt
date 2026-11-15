@@ -48,7 +48,6 @@ val Typography = Typography(
         fontWeight = FontWeight.Medium,
         fontSize = 13.sp,
         lineHeight = 18.sp,
-        letterSpacing = 0.3.sp,
         // 同上：滑块数值/分组读数集中在 labelMedium（CJK 字形无 tnum 变体时原样渲染，无副作用）。
         fontFeatureSettings = "tnum"
     ),
@@ -57,8 +56,7 @@ val Typography = Typography(
         fontFamily = FontFamily.Default,
         fontWeight = FontWeight.Normal,
         fontSize = 11.sp,
-        lineHeight = 16.sp,
-        letterSpacing = 0.4.sp
+        lineHeight = 16.sp
     ),
     // `bodySmall` 与 labelMedium 同号会撞级，这里别名到 caption 档（11sp），
     // 而不是去改所有历史调用点：一处收敛，全局立刻合规。

@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -87,6 +88,7 @@ import java.io.File
 @Composable
 fun HomeScreen(
     settings: AppSettings,
+    onOpenSettings: () -> Unit = {},
     onImportPhoto: () -> Unit,
     onImportArw: () -> Unit,
     loading: Boolean = false,
@@ -117,7 +119,7 @@ fun HomeScreen(
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
-            HomeTopBar()
+            HomeTopBar(onOpenSettings = onOpenSettings)
 
             // 状态消息只在「解码失败」这类真需要看见的场景出现，因此不占固定高度。
             if (message.isNotEmpty() && !loading) {
@@ -165,7 +167,7 @@ fun HomeScreen(
  * 首页顶栏：只有标题。`statusBarsPadding()` 不可省（`enableEdgeToEdge()` 后内容从 y=0 起画）。
  */
 @Composable
-private fun HomeTopBar() {
+private fun HomeTopBar(onOpenSettings: () -> Unit = {}) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -174,7 +176,27 @@ private fun HomeTopBar() {
             .padding(horizontal = Spacing.page),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text("调色台", style = MaterialTheme.typography.titleMedium)
+        // v0.7.3（审计 A7）：顶栏字标 20sp → 15sp SemiBold（§02 `.wm` 15px）
+        Text(
+            "调色台",
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold
+        )
+        Spacer(Modifier.weight(1f))
+        // v0.7.3（审计 A7）：规范 §02 右上角 sliders 入口钮（进设置页）
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .clip(Radius.pill)
+                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.55f))
+                .clickable(
+                    interactionSource = null,
+                    indication = null
+                ) { onOpenSettings() },
+            contentAlignment = Alignment.Center
+        ) {
+            PathIcon(def = AppIcons.Sliders, tint = MaterialTheme.colorScheme.onSurface, size = 19.dp)
+        }
     }
 }
 
@@ -211,6 +233,9 @@ private fun HeroCard(
     Box(
         modifier = modifier
             .fillMaxWidth()
+            // v0.7.3（审计 C5）：成片卡高度 ≈42% 屏（mock .hero-card 344/812）——
+            // 旧版 weight(1f) 撑满余屏（~75%），卡片吞掉「最近编辑」区。
+            .heightIn(max = 344.dp)
             .clip(Radius.shell)
             .background(
                 // 规范 `.ph-golden` 的 5 个停靠点（v0.7.2 补齐第 4/5 档，审计 A-P3-11/Q7）：

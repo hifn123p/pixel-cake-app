@@ -105,7 +105,19 @@ android {
             versionNameSuffix = "-debug"
         }
         release {
-            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
+            // v0.7.3（安全审计 中-1）：fail-closed —— 旧口径静默回落到**公开在仓库里**
+            // 的 debug.keystore，任何能读到本仓库的人都能造出同签名 APK 覆盖安装。
+            // 本地确需 debug 签名 release 时显式传 -PallowDebugSignedRelease=true。
+            signingConfig = signingConfigs.findByName("release")
+                ?: if (project.findProperty("allowDebugSignedRelease") == "true") {
+                    logger.warn("release APK 将使用公开的 debug 密钥签名（仅限本地实验，禁止分发）")
+                    signingConfigs.getByName("debug")
+                } else {
+                    throw GradleException(
+                        "assembleRelease 需要签名配置（KEYSTORE_PATH 等）；" +
+                            "拒绝用公开的 debug 密钥签名 release（本地实验请加 -PallowDebugSignedRelease=true）"
+                    )
+                }
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(

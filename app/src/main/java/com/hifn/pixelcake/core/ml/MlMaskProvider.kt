@@ -111,18 +111,26 @@ object MlMaskProvider {
     // ---- 推理统计（v0.7.2，UI3.0 §N「推理概况」的进程内落地）----
     // 非持久化：进程重启归零（§09 已豁免跨进程聚合）；写点都在推理线程，
     // 读点在模型中心的快照刷新 —— 单写多读的 Long/Int，JVM 下可见性足够诊断用。
+    // v0.7.3（审计 P3-1）：@Volatile —— 写点在推理线程、读点在 UI 快照刷新
+    @Volatile
     var inferenceCountForUi: Int = 0
         private set
+    @Volatile
     var totalInferenceMsForUi: Long = 0
         private set
+    @Volatile
     var lastInferenceMsForUi: Long = 0
         private set
-    /** GPU delegate 加载失败 → CPU 接管的次数（降级链的现场证据）。 */
+    /** GPU delegate 尝试失败 → CPU 接管的次数（降级链的现场证据）。 */
+    @Volatile
     var gpuDowngradeCountForUi: Int = 0
         private set
-    /** 模型资产的 SHA-256（前 16 位用于展示；加载成功后一次性计算）。 */
+    /** 模型资产的 SHA-256（前 16 位用于展示；后台一次性计算）。 */
+    @Volatile
     var modelSha256ForUi: String? = null
         private set
+    @Volatile
+    private var shaJobStarted = false
 
     /** 模型中心（UI 3.0 §N）的行数据：键 = 展示名，值 = 展示值。只读快照。 */
     fun diagnostics(): Map<String, String> = mapOf(
@@ -270,7 +278,7 @@ object MlMaskProvider {
             model?.let { return it }
             if (modelResolved || permanentlyDisabled) return null
             modelResolved = true
-            val m = LiteRtSkinMaskModel.createOrNull(context.applicationContext)
+            val m = LiteRtSkinMaskModel.createOrNull(context.applicationContext) { gpuDowngradeCountForUi += 1 }
             model = m
             if (m == null) {
                 DebugLog.w(
@@ -281,23 +289,29 @@ object MlMaskProvider {
                 // createOrNull 内部吞掉异常只留 DebugLog —— 这里取不到堆栈摘要时
                 // 至少标记「创建返回 null（资产缺失 / 委托初始化失败）」。
                 lastLoadErrorForUi = "createOrNull 返回 null（资产缺失或加速器初始化失败，详见日志）"
-                gpuDowngradeCountForUi += 1
             } else {
                 lastLoadErrorForUi = null
                 // SHA-256：加载成功后一次性算（16MB 资产 ≈ 百毫秒级，发生在已处于
                 // 后台的加载线程上，不占推理热路径）；失败不致命，诊断页显示「—」。
-                modelSha256ForUi = runCatching {
-                    val dig = java.security.MessageDigest.getInstance("SHA-256")
-                    context.assets.open(LiteRtSkinMaskModel.MODEL_ASSET).use { input ->
-                        val buf = ByteArray(1 shl 16)
-                        while (true) {
-                            val n = input.read(buf)
-                            if (n < 0) break
-                            dig.update(buf, 0, n)
-                        }
-                        dig.digest().joinToString("") { "%02x".format(it) }
+                // v0.7.3（审计 P3-2）：SHA 移出 synchronized 关键路径 —— 后台一次性协程
+                // 懒算（16MB ≈ 百毫秒），期间诊断页显示「—」，不阻塞首次推理。
+                if (!shaJobStarted) {
+                    shaJobStarted = true
+                    CoroutineScope(Dispatchers.Default).launch {
+                        modelSha256ForUi = runCatching {
+                            val dig = java.security.MessageDigest.getInstance("SHA-256")
+                            context.assets.open(LiteRtSkinMaskModel.MODEL_ASSET).use { input ->
+                                val buf = ByteArray(1 shl 16)
+                                while (true) {
+                                    val n = input.read(buf)
+                                    if (n < 0) break
+                                    dig.update(buf, 0, n)
+                                }
+                                dig.digest().joinToString("") { "%02x".format(it) }
+                            }
+                        }.getOrNull()
                     }
-                }.getOrNull()
+                }
                 DebugLog.i(
                     DebugLog.TAG_ML,
                     "skin mask model loaded",
