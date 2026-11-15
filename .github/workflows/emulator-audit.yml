@@ -49,10 +49,22 @@ jobs:
           ls -l /dev/kvm || true
           test -e /dev/kvm && echo "KVM OK" || echo "WARN: no /dev/kvm (software emulation will be slow)"
 
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
       - name: Assemble debug APK + unit tests
         run: |
           set -o pipefail
-          ./gradlew assembleDebug testDebugUnitTest --stacktrace 2>&1 | tee build-and-test.log
+          ./gradlew --no-build-cache assembleDebug testDebugUnitTest --stacktrace 2>&1 | tee build-and-test.log
+
+      - name: Commit failure log (git 是唯一匿名可读通道；-f 顶掉 gitignore)
+        if: failure()
+        run: |
+          git config user.name "ci-log-bot"
+          git config user.email "ci-log-bot@users.noreply.github.com"
+          git add -f build-and-test.log emulator-boot.log 2>/dev/null || true
+          git commit -m "ci-log: emulator-audit failure (run ${{ github.run_id }})" || true
+          git push origin HEAD:emulator-audit || true
 
       - name: Create AVD
         run: |
