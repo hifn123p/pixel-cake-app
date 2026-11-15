@@ -186,6 +186,19 @@ shot("05_editor_first_frame")
 editor_in = "导出" in txt or "撤销" in txt
 results.append(f"EDITOR OPEN: {editor_in}")
 print("editor open:", editor_in)
+# ⚠️ 等首帧渲染完成再动参数（最多 90s）：「渲染中…」消失 = 首帧就绪。
+# 首帧时长 = 解码 + 全分辨率线性转换 + ML 预热 —— 模拟器软渲染下可能数十秒。
+first_frame = False
+for i in range(45):
+    root, t = dump("render_wait")
+    if t and ("渲染中" not in t):
+        first_frame = True
+        results.append(f"first frame ready after ~{i * 2}s")
+        break
+    time.sleep(2)
+if not first_frame:
+    results.append("FIRST FRAME STALL: 渲染中… 未消失（90s 超时）—— 渲染管线/ML 挂起嫌疑")
+shot("05b_editor_first_ready")
 
 # ———— C. Rail 六工具 + 各 deck ————
 for i, rail in enumerate(["明暗", "颜色", "曲线", "细节", "预设", "人像"]):

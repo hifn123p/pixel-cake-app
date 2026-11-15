@@ -132,6 +132,9 @@ jobs:
           mkdir -p audit-art/shots audit-art/xml
           adb logcat -c
           python3 scripts/emulator_audit_drive.py || true
+          # 应用私有调试日志（DebugLog 只写文件不上 logcat）—— 平色渲染/ML 失败的第一手证据
+          adb exec-out run-as com.hifn.pixelcake.debug sh -c 'ls files/debug 2>/dev/null; cat files/debug/log_*.txt 2>/dev/null' > audit-art/app-debuglog.txt || true
+          tail -30 audit-art/app-debuglog.txt || true
           adb logcat -d -v time > audit-art/logcat-full.txt
           adb logcat -d -v time -s AndroidRuntime:E DEBUG:C > audit-art/logcat-crash.txt || true
           echo "--- crash lines ---"; cat audit-art/logcat-crash.txt || true
