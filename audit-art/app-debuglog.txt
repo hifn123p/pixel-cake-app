@@ -1,1 +1,22 @@
-log_20261115_100957.txt
+log_20261115_112305.txt
+2026-11-15 11:23:05.648 [INFO] LIFECYCLE: DebugLog initialized {file=/data/user/0/com.hifn.pixelcake.debug/files/debug/log_20261115_112305.txt}
+2026-11-15 11:23:05.671 [INFO] LIFECYCLE: boot snapshot {summary=manufacturer=Google model=sdk_gphone64_x86_64 soc=ranchu android=16(36) abi=x86_64 totalMem=3920MiB availMem=1803MiB wideColorGamut=false tier=low fullRes=4096 proxy=1024}
+2026-11-15 11:23:21.062 [INFO] IMPORT: pick {uri=content://com.android.providers.media.documents/document/image%3A16}
+2026-11-15 11:23:21.508 [INFO] DECODE: decoded {w=800, h=1000, raw=false, mime=image/jpeg, linear=false}
+2026-11-15 11:23:22.747 [WARN] ML: CompiledModel.create failed {accel=GPU, err=Failed to compile model}
+2026-11-15 11:23:22.992 [INFO] ML: skin mask model loaded {accel=CPU, side=256, asset=models/selfie_multiclass_256x256.tflite}
+2026-11-15 11:23:23.381 [INFO] EDIT: preset thumbs ready {count=44, px=192}
+2026-11-15 11:23:35.529 [INFO] ML: object masks ready {key=content://com.android.providers.media.documents/document/image%3A16#800x1000#1, side=256, accel=CPU}
+2026-11-15 11:23:35.575 [INFO] ML: object scopes probed {available=true, empty=人物,皮肤,面部,头发,衣服,配饰}
+2026-11-15 11:23:35.666 [INFO] ML: skin mask ready {key=content://com.android.providers.media.documents/document/image%3A16#800x1000#1, grid=256, accel=CPU}
+2026-11-15 11:23:35.717 [DEBUG] EDIT: render done {w=800, h=1000, stamp=1, ms=13179, layers=0}
+2026-11-15 11:24:15.961 [DEBUG] EDIT: render done {w=800, h=1000, stamp=2, ms=252, layers=0}
+2026-11-15 11:24:16.333 [DEBUG] EDIT: render done {w=800, h=1000, stamp=3, ms=311, layers=0}
+2026-11-15 11:24:16.548 [DEBUG] EDIT: render done {w=800, h=1000, stamp=4, ms=187, layers=0}
+2026-11-15 11:24:38.570 [INFO] EDIT: preset thumbs ready {count=44, px=192}
+2026-11-15 11:24:49.448 [INFO] ML: object masks ready {key=content://com.android.providers.media.documents/document/image%3A16#1000x800#1, side=256, accel=CPU}
+2026-11-15 11:24:49.449 [INFO] EDIT: auto enhance {ev=-0.06078434, c=0.0}
+2026-11-15 11:24:49.451 [INFO] ML: object scopes probed {available=true, empty=人物,皮肤,面部,身体,头发,衣服,配饰}
+2026-11-15 11:24:49.453 [INFO] ML: skin mask ready {key=content://com.android.providers.media.documents/document/image%3A16#1000x800#1, grid=256, accel=CPU}
+2026-11-15 11:24:50.023 [INFO] EDIT: preset thumbs ready {count=44, px=192}
+2026-11-15 11:25:00.957 [INFO] ML: object masks ready {key=content://com.android.providers.media.documents/document/image%3A16#800x1000#1, side=256, accel=CPU}
