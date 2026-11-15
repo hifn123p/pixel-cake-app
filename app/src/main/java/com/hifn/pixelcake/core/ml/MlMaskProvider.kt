@@ -1,6 +1,7 @@
 package com.hifn.pixelcake.core.ml
 
 import android.content.Context
+import android.os.SystemClock
 import android.graphics.Bitmap
 import com.hifn.pixelcake.diag.DebugLog
 
@@ -107,6 +108,22 @@ object MlMaskProvider {
     var lastLoadErrorForUi: String? = null
         private set
 
+    // ---- 推理统计（v0.7.2，UI3.0 §N「推理概况」的进程内落地）----
+    // 非持久化：进程重启归零（§09 已豁免跨进程聚合）；写点都在推理线程，
+    // 读点在模型中心的快照刷新 —— 单写多读的 Long/Int，JVM 下可见性足够诊断用。
+    var inferenceCountForUi: Int = 0
+        private set
+    var totalInferenceMsForUi: Long = 0
+        private set
+    var lastInferenceMsForUi: Long = 0
+        private set
+    /** GPU delegate 加载失败 → CPU 接管的次数（降级链的现场证据）。 */
+    var gpuDowngradeCountForUi: Int = 0
+        private set
+    /** 模型资产的 SHA-256（前 16 位用于展示；加载成功后一次性计算）。 */
+    var modelSha256ForUi: String? = null
+        private set
+
     /** 模型中心（UI 3.0 §N）的行数据：键 = 展示名，值 = 展示值。只读快照。 */
     fun diagnostics(): Map<String, String> = mapOf(
         "模型已加载" to (model != null).toString(),
@@ -115,6 +132,13 @@ object MlMaskProvider {
         "本会话禁用" to disabled.toString(),
         "永久关闭" to permanentlyDisabled.toString(),
         "OOM 计数" to oomCount.toString(),
+        "推理次数" to inferenceCountForUi.toString(),
+        "平均 / 最近耗时" to
+            (if (inferenceCountForUi > 0)
+                "${totalInferenceMsForUi / inferenceCountForUi} / ${lastInferenceMsForUi} ms"
+            else "—"),
+        "加速器降级(GPU→CPU)" to gpuDowngradeCountForUi.toString(),
+        "模型 SHA-256" to ((modelSha256ForUi?.take(16))?.plus("…") ?: "—"),
         "概率缓存边长" to (if (cacheSide > 0) cacheSide.toString() else "未推理"),
         "缓存键" to (cacheKey?.take(24) ?: "无")
     )
@@ -193,7 +217,12 @@ object MlMaskProvider {
             small.getPixels(argb, 0, side, 0, 0, side, side)
             if (small !== src) small.recycle()
 
+            val t0 = SystemClock.elapsedRealtime()
             val probs = m.inferProbs(argb) ?: return false
+            // 推理统计（模型中心展示用）：单点计时，无锁 —— 写点唯一（推理串行于 @Synchronized）
+            lastInferenceMsForUi = SystemClock.elapsedRealtime() - t0
+            totalInferenceMsForUi += lastInferenceMsForUi
+            inferenceCountForUi += 1
             cacheKey = key
             cacheProbs = probs
             cacheSide = side
@@ -252,8 +281,23 @@ object MlMaskProvider {
                 // createOrNull 内部吞掉异常只留 DebugLog —— 这里取不到堆栈摘要时
                 // 至少标记「创建返回 null（资产缺失 / 委托初始化失败）」。
                 lastLoadErrorForUi = "createOrNull 返回 null（资产缺失或加速器初始化失败，详见日志）"
+                gpuDowngradeCountForUi += 1
             } else {
                 lastLoadErrorForUi = null
+                // SHA-256：加载成功后一次性算（16MB 资产 ≈ 百毫秒级，发生在已处于
+                // 后台的加载线程上，不占推理热路径）；失败不致命，诊断页显示「—」。
+                modelSha256ForUi = runCatching {
+                    val dig = java.security.MessageDigest.getInstance("SHA-256")
+                    context.assets.open(LiteRtSkinMaskModel.MODEL_ASSET).use { input ->
+                        val buf = ByteArray(1 shl 16)
+                        while (true) {
+                            val n = input.read(buf)
+                            if (n < 0) break
+                            dig.update(buf, 0, n)
+                        }
+                        dig.digest().joinToString("") { "%02x".format(it) }
+                    }
+                }.getOrNull()
                 DebugLog.i(
                     DebugLog.TAG_ML,
                     "skin mask model loaded",

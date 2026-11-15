@@ -66,6 +66,9 @@ private const val KEY_EXPORT_FORMAT = "export_format"
 private const val KEY_JPEG_QUALITY = "jpeg_quality"
 private const val KEY_AUTO_MASK = "auto_mask"
 private const val KEY_LARGE_TEXT = "large_text"
+private const val KEY_CAMERA_AUTO_OPEN = "camera_auto_open"
+private const val KEY_TETHER_AUTO_EXPORT = "tether_auto_export"
+private const val KEY_CAMERA_PRESET = "camera_default_preset"
 
 /** 版本戳存放的键。它自己不需要迁移，也不对应任何设置项。 */
 private const val KEY_SETTINGS_VERSION = "settings_version"
@@ -250,6 +253,46 @@ class AppSettings internal constructor(private val prefs: SharedPreferences) {
             prefs.edit().putBoolean(KEY_LARGE_TEXT, value).apply()
         }
 
+    /**
+     * USB 相机接入后自动打开相机面板（UI3.0 §M「连接后自动打开会话」）。
+     * 由 HomeScreen 的 USB_STATE 接收器消费 —— AppSettings 是唯一状态源，
+     * 相机面板不持本地副本（两份必漂移，§2 的老教训）。
+     */
+    private var cameraAutoOpenState by mutableStateOf(prefs.getBoolean(KEY_CAMERA_AUTO_OPEN, false))
+    var cameraAutoOpen: Boolean
+        get() = cameraAutoOpenState
+        set(value) {
+            cameraAutoOpenState = value
+            prefs.edit().putBoolean(KEY_CAMERA_AUTO_OPEN, value).apply()
+        }
+
+    /**
+     * 系留到达流「完成后自动导出相册」（UI3.0 §M）。关闭 = 只下载到面板缓存，
+     * 由用户在相机面板手动批量导出 —— 导出语义的开关必须长在导出执行的那条链路上。
+     */
+    private var tetherAutoExportState by mutableStateOf(prefs.getBoolean(KEY_TETHER_AUTO_EXPORT, true))
+    var tetherAutoExport: Boolean
+        get() = tetherAutoExportState
+        set(value) {
+            tetherAutoExportState = value
+            prefs.edit().putBoolean(KEY_TETHER_AUTO_EXPORT, value).apply()
+        }
+
+    /**
+     * 相机批量 / 系留的默认修图参数 id（UI3.0 §M「拍摄后自动套用」）。
+     * 从 CameraPanel 的本地状态上移而来：设置页与相机面板读写**同一个**键，
+     * 两处 UI 才不会漂移（§2 两份状态必漂移的教训）。
+     */
+    private var cameraDefaultPresetIdState by mutableStateOf(
+        prefs.getString(KEY_CAMERA_PRESET, "portra") ?: "portra"
+    )
+    var cameraDefaultPresetId: String
+        get() = cameraDefaultPresetIdState
+        set(value) {
+            cameraDefaultPresetIdState = value
+            prefs.edit().putString(KEY_CAMERA_PRESET, value).apply()
+        }
+
     /** 自动蒙版（AI 皮肤识别）默认开关。编辑页里的开关与它是**同一个状态**。 */
     private var autoMaskState by mutableStateOf(prefs.getBoolean(KEY_AUTO_MASK, true))
     var autoMask: Boolean
@@ -273,6 +316,9 @@ class AppSettings internal constructor(private val prefs: SharedPreferences) {
         themeMode = ThemeMode.System
         lowTransparency = false
         largeText = false
+        cameraAutoOpen = false
+        tetherAutoExport = true
+        cameraDefaultPresetId = "portra"
         exportFormat = ExportFormat.JPEG
         jpegQuality = JpegQuality.Standard
         autoMask = true

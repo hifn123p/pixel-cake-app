@@ -46,6 +46,7 @@ import com.hifn.pixelcake.camera.CameraProbe
 import com.hifn.pixelcake.camera.CameraSession
 import com.hifn.pixelcake.camera.CameraSessionResult
 import com.hifn.pixelcake.camera.UsbCameraScanner
+import com.hifn.pixelcake.ui.settings.AppSettings
 import com.hifn.pixelcake.camera.UsbDeviceSummary
 import android.graphics.Bitmap
 import android.net.Uri
@@ -96,6 +97,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 @Composable
 fun CameraPanel(
     longEdge: Int,
+    settings: AppSettings,
     onOpenLocalFile: (File) -> Unit = {},
     // v0.7.2（审计 C-F1）：把「面板正忙」上报给容器 —— CameraSheet 据此拦截关闭手势，
     // 让 KDoc 里「批量过程中不要关本面板」从一句提示变成真实约束。
@@ -121,7 +123,9 @@ fun CameraPanel(
     var batchLines by remember { mutableStateOf(emptyList<String>()) }
     // —— 系留出片（UI3.0 §J/K/L）——
     var tetherOn by remember { mutableStateOf(false) }
-    var defaultPresetId by remember { mutableStateOf("portra") }
+    // v0.7.2（§M）：默认修图参数上移到 AppSettings —— 设置页「相机直连」组与这里
+    // 读写**同一个键**（两份状态必漂移的教训）；本文件只读，写入经设置项 setter。
+    var defaultPresetId by settings::cameraDefaultPresetId
     var tetherParams by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var arrivalLog by remember { mutableStateOf(emptyList<String>()) }
     // 批 5 可测化：轮询的「谁是新片 / 坏对象记账 / 基线播种」决策抽进 TetherProcessor
@@ -235,8 +239,14 @@ fun CameraPanel(
                             }
                             // ③ 回收进 finally：compress 是 OOM 高发点，抛出去就泄漏一整块
                             try {
-                                val expUri = Exporter.export(context, rawBmp, ExportFormat.JPEG, 92)
-                                log(photo.info.filename + if (expUri != null) " · 已导出 ✓" else " · 导出失败")
+                                // v0.7.2（§M「完成后自动导出」）：开关关闭 = 只下载到面板缓存，
+                                // 用户在批量链路里手动导出；下载本身是系留的固有语义，不受此开关影响。
+                                if (settings.tetherAutoExport) {
+                                    val expUri = Exporter.export(context, rawBmp, ExportFormat.JPEG, 92)
+                                    log(photo.info.filename + if (expUri != null) " · 已导出 ✓" else " · 导出失败")
+                                } else {
+                                    log(photo.info.filename + " · 已下载（自动导出已关闭，留在缓存待手动导出）")
+                                }
                             } finally {
                                 rawBmp.recycle()
                             }
@@ -261,8 +271,12 @@ fun CameraPanel(
                                         log(photo.info.filename + " · 渲染尺寸不匹配")
                                         continue
                                     }
-                                    val expUri = Exporter.export(context, bmp, ExportFormat.JPEG, 92)
-                                    log(photo.info.filename + if (expUri != null) " · 已导出 ✓" else " · 导出失败")
+                                    if (settings.tetherAutoExport) {
+                                        val expUri = Exporter.export(context, bmp, ExportFormat.JPEG, 92)
+                                        log(photo.info.filename + if (expUri != null) " · 已导出 ✓" else " · 导出失败")
+                                    } else {
+                                        log(photo.info.filename + " · 已下载（自动导出已关闭，留在缓存待手动导出）")
+                                    }
                                 } finally {
                                     // 单一出口覆盖全部路径：渲染失败 continue / 渲染或导出抛异常 / 成功
                                     bmp.recycle()

@@ -1444,3 +1444,20 @@ EditorScreen 40+ 回调、MainActivity→EditorScreen 全部实参、Home/Camera
    判据：改「某类控件的全局观感」时，`grep 该控件类名` 穷举全部调用点，逐一收编或注释豁免。
 2. **运行时证据必须可匿名回读**：CI 产物的截图/日志若只进 artifact（需鉴权），对「无本地环境、
    无 token」的接手者等于不存在 —— 一律 git 提交回传（或 README 附直达链接）。
+
+### 19.7 「未代做」清单的全量落地（v0.7.2，2026-11-15 第二批）
+
+> 项目所有人拍板「全量完成剩下未代做的」⇒ §19.4 的裁决项全部转为实施（§19.4 同步作废），
+> 本节为落地台账。提交序列见 emulator-audit 分支。
+
+| 项 | 落地方式 |
+|---|---|
+| **进程死亡会话恢复**（架构级） | `SessionRecord/SessionJson`（core/edit，复用 EditDocument 文档格式与兼容纪律）+ `SessionStore`（独立 prefs——会话是一次性凭据，与用户偏好生命周期不同，刻意不混进 AppSettings）+ `EditHistory.exportTimeline/importTimeline`（纯 JVM，round-trip 有单测）。接线：导入时 `takePersistableUriPermission`（SAF/Picker 均带 persistable；拒绝则按不可恢复处理）；编辑态防抖 1.2s 落盘（历史不可观察 ⇒ 借「历史操作必伴随可观察态变化」不变式触发）；退出/换图清档；冷启动恢复 = 重解码 → pristine 重推旋转（走既有代次护栏）→ 重建时间线（含撤销/重做位置）→ 进编辑器 |
+| **蒙版虚线轮廓**（marching squares） | `core/ml/MaskContour`（纯 Kotlin：网格外视为 0 的 padding 语义、16-case 线段、端点吸附链环、断链段丢弃；JVM 单测钉住 全满/方块/环形/空网格 四类）；EditorScreen 拾取蒙版层叠加 2dp 琥珀虚线（与填充同源网格、阈值 0.5 与羽化口径一致） |
+| **设置页「相机直连」组**（§M 三条例） | AppSettings 新增 `cameraAutoOpen` / `tetherAutoExport` / `cameraDefaultPresetId`（默认修图参数从 CameraPanel 本地状态**上移**，两处 UI 同键防漂移）；HomeScreen 注册 USB_STATE 接收器 + 到场探测（targetSdk 34+ 显式 RECEIVER_NOT_EXPORTED）；系留导出闸门落在两条导出链路上（关闭 = 只下载留缓存待手动批量导出） |
+| **模型中心 SHA-256 / 推理统计**（§N 推理概况） | 进程内计数（推理次数 / 平均与最近耗时 / GPU→CPU 降级次数）+ 资产 SHA-256（加载成功后一次性计算，失败显示「—」）；diagnostics() 新五行，模型中心 Sheet 自动渲染 |
+| **平色疑点复现探针** | 走查脚本新增「首帧渲染期间横拖」探针（shot 74/75）+ app-debuglog 取证；坐实即转 P1 专项，未复现则维持记录 |
+| **v0.7.2 tag / Release** | versionCode 24 / versionName 0.7.2；README 徽章 + 会话恢复与云端走查两条特性；CI 全绿后推 `v0.7.2` tag 触发 Publish Release（签名 Secrets 缺失时按 check-signing 的既有门优雅跳过） |
+
+**仍为有意决策（不随本轮翻案）**：顶栏玻璃胶囊 / Deck 贴底形态、双极滑块零点刻度、
+GlassTabBar 标签「调色台」（产品语言）—— 三者的裁决理由见 §19.4 原文，改动需整批重验。

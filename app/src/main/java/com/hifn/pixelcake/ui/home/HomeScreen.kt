@@ -1,5 +1,9 @@
 package com.hifn.pixelcake.ui.home
 
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -19,6 +23,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -43,6 +48,8 @@ import com.hifn.pixelcake.ui.theme.HeroCardGlow
 import com.hifn.pixelcake.ui.theme.HeroCardMid
 import com.hifn.pixelcake.ui.theme.HeroCardTop
 import com.hifn.pixelcake.ui.theme.HeroCardWarm
+import com.hifn.pixelcake.camera.UsbCameraScanner
+import com.hifn.pixelcake.ui.settings.AppSettings
 import com.hifn.pixelcake.ui.theme.Radius
 import com.hifn.pixelcake.ui.theme.SeedOnDark
 import com.hifn.pixelcake.ui.theme.Spacing
@@ -79,6 +86,7 @@ import java.io.File
  */
 @Composable
 fun HomeScreen(
+    settings: AppSettings,
     onImportPhoto: () -> Unit,
     onImportArw: () -> Unit,
     loading: Boolean = false,
@@ -90,6 +98,22 @@ fun HomeScreen(
     val profile = remember { context.probeCapabilities().resolutionProfile() }
 
     var showCamera by remember { mutableStateOf(false) }
+    // v0.7.2（§M「连接后自动打开会话」）：USB 状态广播 + 到场探测。USB_STATE 是系统
+    // 保护广播（targetSdk 34+ 的运行时接收器仍需显式 flag）；组合时相机可能已插着
+    // （设置刚打开 / 冷启动），所以除了接收器还当场探测一次。
+    if (settings.cameraAutoOpen) {
+        DisposableEffect(Unit) {
+            val receiver = object : BroadcastReceiver() {
+                override fun onReceive(c: Context?, i: Intent?) {
+                    if (UsbCameraScanner.scan(context).isNotEmpty()) showCamera = true
+                }
+            }
+            val filter = IntentFilter("android.hardware.usb.action.USB_STATE")
+            context.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
+            if (UsbCameraScanner.scan(context).isNotEmpty()) showCamera = true
+            onDispose { context.unregisterReceiver(receiver) }
+        }
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -125,6 +149,7 @@ fun HomeScreen(
         if (showCamera) {
             CameraSheet(
                 longEdge = profile.fullResLongEdge,
+                settings = settings,
                 onOpenLocalFile = onOpenLocalFile,
                 onDismiss = { showCamera = false }
             )

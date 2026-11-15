@@ -9,7 +9,7 @@
 [![targetSdk](https://img.shields.io/badge/targetSdk-36-blue)](https://developer.android.com)
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.2.21-7F52FF?logo=kotlin)](https://kotlinlang.org)
 [![Compose](https://img.shields.io/badge/Jetpack%20Compose-Material3%204285F4?logo=jetpackcompose)](https://developer.android.com/jetpack/compose)
-[![Version](https://img.shields.io/badge/version-v0.7.1-success)](https://github.com/hifn123p/pixel-cake-app/releases)
+[![Version](https://img.shields.io/badge/version-v0.7.2-success)](https://github.com/hifn123p/pixel-cake-app/releases)
 [![Build](https://img.shields.io/badge/Build-GitHub%20Actions-2088FF?logo=githubactions)](https://github.com/features/actions)
 [![License](https://img.shields.io/badge/License-TBD-lightgrey)](#许可)
 
@@ -87,6 +87,8 @@ git clone --recurse-submodules https://github.com/hifn123p/pixel-cake-app.git
 | 💾 导出 | JPEG / PNG（可选画质）；**可取消**（逐带检查点，取消不留幽灵文件）；**最小 EXIF 回写**（机身/拍摄参数 + 方向恒正）；RAW 全分辨率分带渲染，非 RAW 按设备档位选分辨率；导出成功后按钮切换形态 |
 | 📊 工具 | 曲线编辑器（黑场/中间调/白场锚点）+ **RGB 三通道直方图**（明暗页，叠加显示） |
 | 🐞 调试日志 | 结构化端侧日志（`files/debug/log_<session>.txt`），可通过系统分享导出 |
+| ♻️ 会话恢复 | 进程死亡后重新打开 App：上次编辑的照片、参数、历史（含撤销/重做位置）与旋转完整续上（v0.7.2） |
+| 🔍 云端模拟器走查 | CI 在 KVM runner 上无头启动模拟器，按 UI3.0 全链路截图走查（`emulator-audit.yml`，v0.7.2） |
 
 ### 规划中
 

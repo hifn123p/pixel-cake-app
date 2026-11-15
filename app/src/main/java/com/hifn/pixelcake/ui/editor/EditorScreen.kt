@@ -72,7 +72,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
@@ -104,6 +106,8 @@ import com.hifn.pixelcake.core.edit.upsert
 import com.hifn.pixelcake.core.edit.without
 import com.hifn.pixelcake.core.edit.preset.CustomPreset
 import com.hifn.pixelcake.core.edit.preset.Preset
+import com.hifn.pixelcake.core.ml.FloatGrid
+import com.hifn.pixelcake.core.ml.MaskContour
 import com.hifn.pixelcake.core.ml.ObjectMasks
 import com.hifn.pixelcake.ui.components.CapsuleNote
 import com.hifn.pixelcake.ui.components.LocalHudReporter
@@ -844,7 +848,7 @@ fun EditorScreen(
                     // 本版先不做（填充已能表达「AI 认出了什么」），记录为后续打磨项。
                     // ⚠️ 坐标口径与 `scopeAt` / 渲染蒙版一致：推理输入是整图拉伸到 256²
                     // （MlMaskProvider.ensureProbs 的 createScaledBitmap），网格坐标即图像归一化坐标。
-                    val pickMask by produceState<ImageBitmap?>(null, objectMasks, scope) {
+                    val pickMask by produceState<Pair<ImageBitmap, List<List<Pair<Float, Float>>>>?>(null, objectMasks, scope) {
                         val masksNow = objectMasks ?: return@produceState
                         val sc = scope ?: return@produceState
                         value = null
@@ -854,16 +858,22 @@ fun EditorScreen(
                                 val m = masksNow.maskFor(sc).resampleTo(side, side)
                                 val bmp = Bitmap.createBitmap(side, side, Bitmap.Config.ARGB_8888)
                                 val px = IntArray(side * side)
+                                val data = FloatArray(side * side)
                                 var i = 0
                                 for (y in 0 until side) {
                                     for (x in 0 until side) {
-                                        val a = (m.sample(x, y) * 0.26f * 255f).roundToInt().coerceIn(0, 255)
+                                        val v = m.sample(x, y)
+                                        data[i] = v
+                                        val a = (v * 0.26f * 255f).roundToInt().coerceIn(0, 255)
                                         px[i] = if (a > 0) ((a shl 24) or 0xFFB454) else 0
                                         i++
                                     }
                                 }
                                 bmp.setPixels(px, 0, side, 0, 0, side, side)
-                                bmp.asImageBitmap()
+                                // v0.7.2：marching squares 琥珀虚线轮廓（规范 §D）—— 与填充同源网格，
+                                // 阈值 0.5 与蒙版羽化口径一致；几何层有 JVM 单测（MaskContourTest）
+                                val loops = MaskContour.contours(FloatGrid(data, side, side))
+                                Pair(bmp.asImageBitmap(), loops)
                             }.getOrNull()
                         }
                     }
@@ -877,13 +887,38 @@ fun EditorScreen(
                         .offset { IntOffset(previewPan.x.roundToInt(), previewPan.y.roundToInt()) }
                         .clip(Radius.chip)
                         .alpha(maskAlpha)
-                    pickMask?.let {
+                    // 轮廓用色在组合期捕获（Canvas draw lambda 不是 composable 上下文）
+                    val contourColor = MaterialTheme.colorScheme.primary
+                    pickMask?.let { (bmp, loops) ->
                         Image(
-                            bitmap = it,
+                            bitmap = bmp,
                             contentDescription = "当前作用域蒙版预览",
                             contentScale = ContentScale.FillBounds,
                             modifier = maskFrame
                         )
+                        if (loops.isNotEmpty()) {
+                            Canvas(modifier = maskFrame) {
+                                val strokeW = 2.dp.toPx()
+                                for (loop in loops) {
+                                    val path = Path()
+                                    loop.forEachIndexed { idx, (u, v) ->
+                                        val pt = Offset(u * size.width, v * size.height)
+                                        if (idx == 0) path.moveTo(pt.x, pt.y) else path.lineTo(pt.x, pt.y)
+                                    }
+                                    path.close()
+                                    drawPath(
+                                        path,
+                                        contourColor,
+                                        style = Stroke(
+                                            width = strokeW,
+                                            pathEffect = PathEffect.dashPathEffect(
+                                                floatArrayOf(strokeW * 5f, strokeW * 3.5f)
+                                            )
+                                        )
+                                    )
+                                }
+                            }
+                        }
                     }
                     CapsuleNote(
                         "点一下要调整的对象",
