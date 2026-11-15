@@ -125,10 +125,34 @@ def back():
     time.sleep(1.2)
 
 
+PKG = "com.hifn.pixelcake.debug"  # debug 变体的 applicationId（suffix=.debug）
+
+
+def foreground():
+    r = run(["shell", "dumpsys", "window", "window", "|", "grep", "-E", "mCurrentFocus|mFocusedApp"])
+    # dumpsys 的 grep 由设备端 shell 执行 —— 直接管道不走本地 grep
+    r2 = run(["shell", "dumpsys", "window"])
+    for line in r2.stdout.splitlines():
+        if "mCurrentFocus" in line or "mFocusedApp" in line:
+            return line.strip()
+    return ""
+
+
 def wake_and_start_app():
     run(["shell", "input", "keyevent", "224"])  # wake
-    run(["shell", "am", "start", "-n", "com.hifn.pixelcake/.MainActivity"])
+    # ⚠️ 组件名 = 「applicationId/真实类路径」：debug 变体 applicationId 带 .debug 后缀，
+    # 但 Activity 类仍在 com.hifn.pixelcake 包下 —— 首轮走查用错包名导致整轮在桌面游荡。
+    run(["shell", "am", "start", "-n", f"{PKG}/com.hifn.pixelcake.MainActivity"])
     time.sleep(4.0)
+    # 前台校验：不在 App 内就用 monkey 兜底再试一次；仍不在则记录（后续步骤会全部 NOT FOUND）
+    focus = foreground()
+    if PKG not in focus:
+        results.append(f"am start miss (focus={focus!r}) -> monkey retry")
+        run(["shell", "monkey", "-p", PKG, "1"])
+        time.sleep(4.0)
+        focus = foreground()
+    results.append(f"foreground={focus!r}")
+    print("foreground:", focus)
 
 
 # ———— A. 首页 ————
@@ -220,6 +244,7 @@ tap("text", "完成", "54_receipt_done", wait=1.5, allow_missing=True)
 
 # ———— J. 退出编辑器 → 首页 ————
 tap("content-desc", "返回", "60_back_to_home", wait=2.5, contains=True, allow_missing=True)
+results.append(f"focus after back={foreground()!r}")
 root, _ = dump("home_after")
 shot("61_home_after_back")
 
