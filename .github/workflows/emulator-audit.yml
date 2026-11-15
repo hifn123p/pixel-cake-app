@@ -70,8 +70,11 @@ jobs:
 
       - name: Boot emulator (headless, software GPU)
         run: |
-          emulator -accel-check || true
-          emulator -avd pixelcake-audit \
+          # ⚠️ setup-android 不把 $ANDROID_HOME/emulator 加进 PATH —— 必须全路径调用
+          #（前几轮 boot 失败 20 分钟的唯一原因就这一行 `emulator: command not found`）
+          EMU="$ANDROID_HOME/emulator/emulator"
+          "$EMU" -accel-check || true
+          "$EMU" -avd pixelcake-audit \
             -no-window -no-audio -no-boot-anim -no-snapshot \
             -gpu swiftshader_indirect \
             -camera-back none -camera-front none \
