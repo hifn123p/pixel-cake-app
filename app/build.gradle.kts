@@ -159,18 +159,19 @@ kotlin {
 // v0.7.3（安全审计 中-1）：release 打包的签名闸门 —— 没有 KEYSTORE_PATH 等签名配置
 // 时拒绝用公开在仓库里的 debug 密钥打 release（同签名 = 任何人可造覆盖安装的恶意更新）。
 // 本地实验显式传 -PallowDebugSignedRelease=true。
-// ⚠️ .kts 里 `gradle.taskGraph.whenReady { }` 的 receiver 推断不过（首轮 CI 实证），
-// 改用 whenTaskAdded：task 在 android{} 求值后才注册，届时布尔已定。
-tasks.whenTaskAdded {
-    val wantsReleaseArtifact = name.startsWith("assembleRelease") || name.startsWith("bundleRelease")
-    if (wantsReleaseArtifact &&
-        !releaseSigningPresent &&
-        project.findProperty("allowDebugSignedRelease") != "true"
-    ) {
-        throw GradleException(
-            "release 打包需要签名配置（KEYSTORE_PATH 等）；" +
-                "拒绝用公开的 debug 密钥签名（本地实验请加 -PallowDebugSignedRelease=true）"
-        )
+// ⚠️ 两轮实证：配置期抛（buildTypes 内）连 assembleDebug 都炸；whenTaskAdded 在
+// AGP 注册 assembleRelease 任务本身时就触发（配置期）照样炸 ⇒ 闸门放在 **doFirst**
+// （执行期）：只有真正开始打 release 包时才拦，其余构建零影响。
+tasks.matching { it.name == "assembleRelease" || it.name == "bundleRelease" }.configureEach {
+    doFirst {
+        if (!releaseSigningPresent &&
+            project.findProperty("allowDebugSignedRelease") != "true"
+        ) {
+            throw GradleException(
+                "release 打包需要签名配置（KEYSTORE_PATH 等）；" +
+                    "拒绝用公开的 debug 密钥签名（本地实验请加 -PallowDebugSignedRelease=true）"
+            )
+        }
     }
 }
 
