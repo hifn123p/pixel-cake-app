@@ -76,6 +76,18 @@ import com.hifn.pixelcake.ui.theme.Spacing
  * @param singleRow 钉死单行并横向滚动（面板用）。默认 false = 按宽度换行。
  * @param compact   收紧 label 的左右内边距（面板用）。默认 false。
  */
+/**
+ * 全 App chip 选中态的**唯一**配色来源（规范 `.g.on`：琥珀 14% 底 + 琥珀字）。
+ * ExportSheet 等自带 `FilterChip` 的调用点必须用它 —— 第一轮审计（A-P1-1）就漏在
+ * 「配色只修了 GlassChipRow 一处、散落的裸 FilterChip 各自为政」，这条教训与
+ * 「chip 的生成逻辑必须只有一份」同源。
+ */
+@Composable
+fun amberChipColors() = FilterChipDefaults.filterChipColors(
+    selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+    selectedLabelColor = MaterialTheme.colorScheme.primary
+)
+
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
 fun <T> GlassChipRow(
@@ -98,10 +110,7 @@ fun <T> GlassChipRow(
     // 「暗房 + 安全灯」的琥珀语言脱节。规范 `.g.on` 是 `amber-soft(14%)` 底 + 琥珀字，
     // 与 Rail / 导出胶囊手工写的 `primary.copy(alpha = 0.14f)` 同口径；此处收敛后
     // 全部调用点（分组 / 二级 / 作用域 / LUT / 设置 / 导出格式 / 相机预设）一并生效。
-    val selectedChipColors = FilterChipDefaults.filterChipColors(
-        selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
-        selectedLabelColor = MaterialTheme.colorScheme.primary
-    )
+    val selectedChipColors = amberChipColors()
     val chipRow: @Composable () -> Unit = {
         items.forEach { item ->
             FilterChip(
