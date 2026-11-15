@@ -1,1 +1,5 @@
-/home/runner/work/_temp/a5c2a050-2657-4c97-9b26-049990a1ede3.sh: line 2: emulator: command not found
+INFO         | Android emulator version 37.2.13.0 (build_id 16740729) (CL:N/A)
+INFO         | Graphics backend: gfxstream
+ERROR        | Unknown AVD name [pixelcake-audit], use -list-avds to see valid list.
+ERROR        | HOME is defined but there is no file pixelcake-audit.ini in $HOME/.android/avd
+ERROR        | (Note: Directories are searched in the order $ANDROID_AVD_HOME, $ANDROID_SDK_HOME/avd and $HOME/.android/avd)
