@@ -1,5 +1,45 @@
 INFO         | Android emulator version 37.2.13.0 (build_id 16740729) (CL:N/A)
 INFO         | Graphics backend: gfxstream
-ERROR        | Unknown AVD name [pixelcake-audit], use -list-avds to see valid list.
-ERROR        | HOME is defined but there is no file pixelcake-audit.ini in $HOME/.android/avd
-ERROR        | (Note: Directories are searched in the order $ANDROID_AVD_HOME, $ANDROID_SDK_HOME/avd and $HOME/.android/avd)
+INFO         | Found systemPath /usr/local/lib/android/sdk/system-images/android-36/google_apis/x86_64/
+ProbeKVM: This user doesn't have permissions to use KVM (/dev/kvm).
+The KVM line in /etc/group is: [kvm:x:991:]
+
+If the current user has KVM permissions,
+the KVM line in /etc/group should end with ":" followed by your username.
+
+If we see LINE_NOT_FOUND, the kvm group may need to be created along with permissions:
+    sudo groupadd -r kvm
+    # Then ensure /lib/udev/rules.d/50-udev-default.rules contains something like:
+    # KERNEL=="kvm", GROUP="kvm", MODE="0660"
+    # and then run:
+    sudo gpasswd -a $USER kvm
+
+If we see kvm:... but no username at the end, running the following command may allow KVM access:
+    sudo gpasswd -a $USER kvm
+
+You may need to log out and back in for changes to take effect.
+
+INFO         | Saving last run QEMU version for the AVD to 2
+INFO         | Guest usage of host flag 'VulkanVirtualQueue' will be ignored.
+INFO         | Guest GLES Driver: Auto (ext controls)
+INFO         | emuglConfig_init: vulkan_mode_selected:swiftshader gles_mode_selected:swiftshader
+INFO         | Checking system compatibility:
+INFO         |   Checking: hasSufficientDiskSpace
+INFO         |      Ok: Disk space requirements to run avd: `pixelcake-audit` are met
+INFO         |   Checking: hasSufficientHwGpu
+INFO         |      Ok: Hardware GPU compatibility checks are not required
+INFO         |   Checking: hasSufficientSystem
+INFO         |      Ok: System requirements to run avd: `pixelcake-audit` are met
+WARNING      | Feature QuickbootFileBacked is disabled due to stability issues, if you really want that, the environment variable ANDROID_EMU_FORCE_QUICKBOOT_FILE_BACKED need to set to 1
+ERROR        | x86_64 emulation currently requires hardware acceleration!
+CPU acceleration status: This user doesn't have permissions to use KVM (/dev/kvm).
+The KVM line in /etc/group is: [kvm:x:991:]
+
+If the current user has KVM permissions,
+the KVM line in /etc/group should end with ":" followed by your username.
+
+If we see LINE_NOT_FOUND, the kvm gr
+More info on configuring VM acceleration on Linux:
+https://developer.android.com/studio/run/emulator-acceleration#vm-linux
+General information on acceleration: https://developer.android.com/studio/run/emulator-acceleration.
+

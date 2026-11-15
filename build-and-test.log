@@ -32,18 +32,19 @@ Starting a Gradle Daemon (subsequent builds will be faster)
 	Namespace 'com.google.ai.edge.litert' is used in multiple modules and/or libraries: com.google.ai.edge.litert:litert:2.2.0, com.google.ai.edge.litert:litert-api:2.2.0. Please ensure that all modules and libraries have a unique namespace. For more information, See https://developer.android.com/studio/build/configure-app-module#set-namespace
 
 > Task :app:processDebugManifest
-> Task :app:processDebugManifestForPackage
 > Task :app:javaPreCompileDebug
 > Task :app:mergeDebugShaders
 > Task :app:compileDebugShaders NO-SOURCE
 > Task :app:generateDebugAssets UP-TO-DATE
 > Task :app:mergeDebugAssets
 > Task :app:desugarDebugFileDependencies
+> Task :app:processDebugManifestForPackage
 > Task :app:compressDebugAssets
 > Task :app:processDebugResources
 > Task :app:checkDebugDuplicateClasses
 > Task :app:compileDebugKotlin
 > Task :app:mergeExtDexDebug
+> Task :app:mergeLibDexDebug
 
 > Task :app:compileDebugKotlin
 w: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/core/decode/Exporter.kt:40:23 'static field TAG_ISO_SPEED_RATINGS: String' is deprecated. Deprecated in Java.
@@ -55,14 +56,13 @@ w: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/
 w: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/core/edit/retouch/Beauty.kt:148:13 Expected performance impact from inlining is insignificant. Inlining works best for functions with parameters of function types.
 w: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/home/DeviceCapabilities.kt:59:46 'val supportedHdrTypes: IntArray!' is deprecated. Deprecated in Java.
 
+> Task :app:configureCMakeDebug[arm64-v8a]
 > Task :app:compileDebugJavaWithJavac NO-SOURCE
 > Task :app:dexBuilderDebug
 > Task :app:mergeDebugGlobalSynthetics
 > Task :app:processDebugJavaRes
-> Task :app:mergeLibDexDebug
 > Task :app:mergeProjectDexDebug
 > Task :app:mergeDebugJavaResource
-> Task :app:configureCMakeDebug[arm64-v8a]
 
 > Task :app:buildCMakeDebug[arm64-v8a]
 C/C++: ninja: Entering directory `/home/runner/work/pixel-cake-app/pixel-cake-app/app/.cxx/Debug/3b456c6d/arm64-v8a'
@@ -81,8 +81,8 @@ C/C++: 1 warning generated.
 > Task :app:preDebugUnitTestBuild UP-TO-DATE
 > Task :app:javaPreCompileDebugUnitTest
 > Task :app:bundleDebugClassesToCompileJar
-> Task :app:bundleDebugClassesToRuntimeJar
 > Task :app:mergeDebugNativeLibs
+> Task :app:bundleDebugClassesToRuntimeJar
 > Task :app:stripDebugDebugSymbols
 > Task :app:packageDebug
 > Task :app:createDebugApkListingFileRedirect
@@ -96,5 +96,5 @@ w: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/test/java/com/
 > Task :app:processDebugUnitTestJavaRes
 > Task :app:testDebugUnitTest
 
-BUILD SUCCESSFUL in 3m 50s
+BUILD SUCCESSFUL in 2m 41s
 45 actionable tasks: 45 executed
