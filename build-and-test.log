@@ -38,31 +38,12 @@ Starting a Gradle Daemon (subsequent builds will be faster)
 > Task :app:generateDebugAssets UP-TO-DATE
 > Task :app:mergeDebugAssets
 > Task :app:desugarDebugFileDependencies
-> Task :app:processDebugManifestForPackage
 > Task :app:compressDebugAssets
-> Task :app:processDebugResources
 > Task :app:checkDebugDuplicateClasses
-> Task :app:compileDebugKotlin
+> Task :app:configureCMakeDebug[arm64-v8a]
+> Task :app:processDebugManifestForPackage
 > Task :app:mergeExtDexDebug
 > Task :app:mergeLibDexDebug
-
-> Task :app:compileDebugKotlin
-w: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/core/decode/Exporter.kt:40:23 'static field TAG_ISO_SPEED_RATINGS: String' is deprecated. Deprecated in Java.
-w: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/core/edit/EditEngine.kt:312:13 Expected performance impact from inlining is insignificant. Inlining works best for functions with parameters of function types.
-w: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/core/edit/EditRotation.kt:132:29 The corresponding parameter in the supertype 'RetouchMask' is named 'w'. This may cause problems when calling this function with named arguments.
-w: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/core/edit/EditRotation.kt:132:38 The corresponding parameter in the supertype 'RetouchMask' is named 'h'. This may cause problems when calling this function with named arguments.
-w: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/core/edit/Mask.kt:86:29 The corresponding parameter in the supertype 'RetouchMask' is named 'w'. This may cause problems when calling this function with named arguments.
-w: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/core/edit/Mask.kt:86:38 The corresponding parameter in the supertype 'RetouchMask' is named 'h'. This may cause problems when calling this function with named arguments.
-w: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/core/edit/retouch/Beauty.kt:148:13 Expected performance impact from inlining is insignificant. Inlining works best for functions with parameters of function types.
-w: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/home/DeviceCapabilities.kt:59:46 'val supportedHdrTypes: IntArray!' is deprecated. Deprecated in Java.
-
-> Task :app:configureCMakeDebug[arm64-v8a]
-> Task :app:compileDebugJavaWithJavac NO-SOURCE
-> Task :app:dexBuilderDebug
-> Task :app:mergeDebugGlobalSynthetics
-> Task :app:processDebugJavaRes
-> Task :app:mergeProjectDexDebug
-> Task :app:mergeDebugJavaResource
 
 > Task :app:buildCMakeDebug[arm64-v8a]
 C/C++: ninja: Entering directory `/home/runner/work/pixel-cake-app/pixel-cake-app/app/.cxx/Debug/3b456c6d/arm64-v8a'
@@ -80,10 +61,27 @@ C/C++: 1 warning generated.
 > Task :app:writeDebugSigningConfigVersions
 > Task :app:preDebugUnitTestBuild UP-TO-DATE
 > Task :app:javaPreCompileDebugUnitTest
-> Task :app:bundleDebugClassesToCompileJar
 > Task :app:mergeDebugNativeLibs
-> Task :app:bundleDebugClassesToRuntimeJar
+> Task :app:processDebugResources
 > Task :app:stripDebugDebugSymbols
+> Task :app:compileDebugKotlin
+w: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/core/decode/Exporter.kt:40:23 'static field TAG_ISO_SPEED_RATINGS: String' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/core/edit/EditEngine.kt:312:13 Expected performance impact from inlining is insignificant. Inlining works best for functions with parameters of function types.
+w: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/core/edit/EditRotation.kt:132:29 The corresponding parameter in the supertype 'RetouchMask' is named 'w'. This may cause problems when calling this function with named arguments.
+w: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/core/edit/EditRotation.kt:132:38 The corresponding parameter in the supertype 'RetouchMask' is named 'h'. This may cause problems when calling this function with named arguments.
+w: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/core/edit/Mask.kt:86:29 The corresponding parameter in the supertype 'RetouchMask' is named 'w'. This may cause problems when calling this function with named arguments.
+w: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/core/edit/Mask.kt:86:38 The corresponding parameter in the supertype 'RetouchMask' is named 'h'. This may cause problems when calling this function with named arguments.
+w: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/core/edit/retouch/Beauty.kt:148:13 Expected performance impact from inlining is insignificant. Inlining works best for functions with parameters of function types.
+w: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/home/DeviceCapabilities.kt:59:46 'val supportedHdrTypes: IntArray!' is deprecated. Deprecated in Java.
+
+> Task :app:compileDebugJavaWithJavac NO-SOURCE
+> Task :app:dexBuilderDebug
+> Task :app:mergeDebugGlobalSynthetics
+> Task :app:processDebugJavaRes
+> Task :app:bundleDebugClassesToRuntimeJar
+> Task :app:bundleDebugClassesToCompileJar
+> Task :app:mergeProjectDexDebug
+> Task :app:mergeDebugJavaResource
 > Task :app:packageDebug
 > Task :app:createDebugApkListingFileRedirect
 > Task :app:assembleDebug
@@ -96,5 +94,5 @@ w: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/test/java/com/
 > Task :app:processDebugUnitTestJavaRes
 > Task :app:testDebugUnitTest
 
-BUILD SUCCESSFUL in 2m 41s
+BUILD SUCCESSFUL in 4m
 45 actionable tasks: 45 executed
