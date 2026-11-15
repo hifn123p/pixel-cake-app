@@ -17,7 +17,7 @@ jobs:
   audit:
     name: Build + boot emulator + walkthrough
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     # 失败日志要按「git 是唯一匿名可读通道」纪律提交回分支（与 android.yml 同口径）——
     # 缺这条默认是只读 token，push 会被静默拒绝（首跑 ×2 的教训）。
     permissions:
