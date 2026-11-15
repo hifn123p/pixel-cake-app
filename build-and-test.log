@@ -23,24 +23,11 @@
 > Task :app:generateDebugAssets UP-TO-DATE
 > Task :app:mergeDebugAssets
 > Task :app:desugarDebugFileDependencies
-> Task :app:compressDebugAssets
 > Task :app:checkDebugDuplicateClasses
+> Task :app:compressDebugAssets
 > Task :app:configureCMakeDebug[arm64-v8a]
 
 > Task :app:compileDebugKotlin FAILED
-e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/core/ml/MlMaskProvider.kt:300:21 Unresolved reference 'CoroutineScope'.
-e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/core/ml/MlMaskProvider.kt:300:36 Unresolved reference 'Dispatchers'.
-e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt:1042:53 None of the following candidates is applicable:
-fun Modifier.padding(start: Dp = ..., top: Dp = ..., end: Dp = ..., bottom: Dp = ...): Modifier
-fun Modifier.padding(horizontal: Dp = ..., vertical: Dp = ...): Modifier
-fun Modifier.padding(all: Dp): Modifier
-fun Modifier.padding(paddingValues: PaddingValues): Modifier
-e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/editor/ParamPanel.kt:447:43 Argument type mismatch: actual type is 'Float', but 'PanelSelection' was expected.
-e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/editor/ParamPanel.kt:447:56 Argument type mismatch: actual type is 'Float', but 'Function1<PanelSelection, Unit>' was expected.
-e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/editor/ParamPanel.kt:447:71 Argument type mismatch: actual type is 'Int', but 'Float' was expected.
-e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/editor/ParamPanel.kt:448:21 Argument type mismatch: actual type is 'PanelSelection', but 'Float' was expected.
-e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/editor/ParamPanel.kt:448:32 Argument type mismatch: actual type is 'Function1<PanelSelection, Unit>', but 'Int' was expected.
-e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/editor/ParamPanel.kt:1771:78 Argument already passed for this parameter.
 e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/home/CameraPanel.kt:896:17 Argument already passed for this parameter.
 e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/settings/SettingsScreen.kt:311:66 Unresolved reference 'dp'.
 e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/settings/SettingsScreen.kt:394:70 Unresolved reference 'dp'.
@@ -257,5 +244,5 @@ Caused by: org.jetbrains.kotlin.gradle.tasks.CompilationErrorException: Compilat
 	... 2 more
 
 
-BUILD FAILED in 1m 8s
+BUILD FAILED in 51s
 24 actionable tasks: 8 executed, 16 up-to-date
