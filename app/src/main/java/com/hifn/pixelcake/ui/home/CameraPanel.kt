@@ -746,7 +746,7 @@ fun CameraPanel(
                                 selected = p.id == presetId,
                                 onClick = { presetId = p.id },
                                 enabled = !busy,
-                                label = { Text(p.name) }
+                                label = { Text(p.name) },
                                 colors = amberChipColors(),
                             )
                         }
