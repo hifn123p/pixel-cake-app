@@ -1060,15 +1060,16 @@ private fun AppRoot(settings: AppSettings) {
                     onRotate = onRotate,
                     onImportPresets = { uri ->
                         scope.launch {
+                            // v0.7.3（安全审计 低-1）：预设文件 5MB 上限 —— 用户被诱导导入
+                            // 超大「预设」时 readText() 全量进内存会 OOM（DoS 本 App）。
                             val text = withContext(Dispatchers.IO) {
-                                context.contentResolver.runCatching {
-                        // v0.7.3（安全审计 低-1）：预设文件 5MB 上限 —— 用户被诱导导入
-                        // 超大「预设」时 readText() 全量进内存会 OOM（DoS 本 App）。
-                        val afd = contentResolver.openAssetFileDescriptor(uri, "r")
-                        val size = afd?.use { it.length } ?: -1L
-                        if (size < 0 || size > 5L * 1024 * 1024) return@runCatching null
-                        contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
-                    }.getOrNull() ?: ""
+                                runCatching {
+                                    val afd = context.contentResolver.openAssetFileDescriptor(uri, "r")
+                                    val size = afd?.use { it.length } ?: -1L
+                                    if (size < 0 || size > 5L * 1024 * 1024) return@runCatching null
+                                    context.contentResolver.openInputStream(uri)
+                                        ?.bufferedReader()?.use { it.readText() }
+                                }.getOrNull()
                             } ?: return@launch
                             val imported = CustomPresets.decode(text)
                             if (imported.isEmpty()) {
