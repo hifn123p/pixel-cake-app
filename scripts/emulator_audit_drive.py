@@ -290,17 +290,28 @@ shot("51_export_sheet")
 # ⚠️ Sheet 主按钮是「导出到相册（JPEG）」—— 顶栏也有一个「导出」，按面积最小编号
 # 会误选顶栏（首轮走查实测：导出从未发生，后面全卡在 Sheet 上）。用独有文案。
 tap("text", "导出到相册", "52_export_go", wait=1.5, contains=True, allow_missing=True, attempts=6)
-# 轮询回执（导出含全分辨率渲染 + EXIF 写回，数秒～数十秒）
+# 轮询回执（导出含全分辨率渲染 + EXIF 写回，数秒～数十秒）。
+# ⚠️ 匹配到的那个 dump 里**顺手取「完成」坐标**：导出后 uiautomator 对该界面
+# 会持续返回竞态快照（实测 6 次重试都缺回执节点），靠后续 dump 点按不可靠。
 receipt = False
+done_coords = None
 for _ in range(14):
     root, t = dump("receipt_poll")
     if t and ("已导出" in t and "分享" in t):
         receipt = True
+        dn = find_nodes(root, "text", "完成")
+        if dn:
+            done_coords = bounds_center(dn[0])
         break
     time.sleep(2.5)
-results.append(f"RECEIPT SHOWN: {receipt}")
+results.append(f"RECEIPT SHOWN: {receipt} done_at={done_coords}")
 shot("53_export_receipt")
-tap("text", "完成", "54_receipt_done", wait=1.5, allow_missing=True, attempts=6)
+if done_coords:
+    run(["shell", "input", "tap", str(done_coords[0]), str(done_coords[1])])
+    results.append(f"receipt 完成 tapped at {done_coords}")
+    time.sleep(1.5)
+else:
+    tap("text", "完成", "54_receipt_done", wait=1.5, allow_missing=True, attempts=6)
 # 兜底：Sheet 还开着（回执未出）就系统返回一次，让后续设置页步骤能走
 root, t = dump("after_done")
 if t and "导出到系统相册" in t:
@@ -308,7 +319,10 @@ if t and "导出到系统相册" in t:
     results.append("export sheet still open -> back()")
 
 # ———— J. 退出编辑器 → 首页 ————
-tap("content-desc", "返回", "60_back_to_home", wait=2.5, contains=True, allow_missing=True, attempts=6)
+# 退出编辑器用系统返回键：回执已关（showExport=false）⇒ BackHandler 链落到
+# editorOnBack —— 与顶栏「返回」完全同一条路径，且不依赖动画期的 uiautomator dump。
+run(["shell", "input", "keyevent", "4"])
+time.sleep(2.5)
 results.append(f"focus after back={foreground()!r}")
 root, _ = dump("home_after")
 shot("61_home_after_back")
