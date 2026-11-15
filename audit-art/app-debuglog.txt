@@ -1,29 +1,29 @@
-log_20261115_145146.txt
-log_20261115_145558.txt
-log_20261115_145616.txt
-log_20261115_145625.txt
-2026-11-15 14:51:46.047 [INFO] LIFECYCLE: DebugLog initialized {file=/data/user/0/com.hifn.pixelcake.debug/files/debug/log_20261115_145146.txt}
-2026-11-15 14:51:46.069 [INFO] LIFECYCLE: boot snapshot {summary=manufacturer=Google model=sdk_gphone64_x86_64 soc=ranchu android=16(36) abi=x86_64 totalMem=3920MiB availMem=1901MiB wideColorGamut=false tier=low fullRes=4096 proxy=1024}
-2026-11-15 14:52:02.782 [INFO] IMPORT: pick {uri=image%3A5}
-2026-11-15 14:52:03.277 [INFO] DECODE: decoded {w=800, h=1000, raw=false, mime=image/jpeg, linear=false}
-2026-11-15 14:52:05.629 [WARN] ML: CompiledModel.create failed {accel=GPU, err=Failed to compile model}
-2026-11-15 14:52:05.760 [INFO] EDIT: detail pass {w=192, h=192, ms=230}
-2026-11-15 14:52:06.019 [INFO] ML: skin mask model loaded {accel=CPU, side=256, asset=models/selfie_multiclass_256x256.tflite}
-2026-11-15 14:52:06.709 [INFO] EDIT: preset thumbs ready {count=44, px=192}
-2026-11-15 14:52:19.769 [INFO] ML: object masks ready {key=content://com.android.providers.media.documents/document/image%3A5#800x1000#1, side=256, accel=CPU}
-2026-11-15 14:52:19.898 [INFO] ML: skin mask ready {key=content://com.android.providers.media.documents/document/image%3A5#800x1000#1, grid=256, accel=CPU}
-2026-11-15 14:52:19.940 [INFO] ML: object scopes probed {available=true, empty=人物,皮肤,面部,头发,衣服,配饰}
-2026-11-15 14:52:19.967 [DEBUG] EDIT: render done {w=800, h=1000, stamp=1, ms=15933, layers=0}
-2026-11-15 14:53:00.665 [DEBUG] EDIT: render done {w=800, h=1000, stamp=2, ms=308, layers=0}
-2026-11-15 14:53:00.874 [DEBUG] EDIT: render done {w=800, h=1000, stamp=3, ms=133, layers=0}
-2026-11-15 14:53:01.121 [DEBUG] EDIT: render done {w=800, h=1000, stamp=4, ms=165, layers=0}
-2026-11-15 14:53:27.326 [INFO] EDIT: preset thumbs ready {count=44, px=192}
-2026-11-15 14:53:37.159 [INFO] ML: object masks ready {key=content://com.android.providers.media.documents/document/image%3A5#1000x800#1, side=256, accel=CPU}
-2026-11-15 14:53:37.167 [INFO] EDIT: auto enhance {ev=-0.06862748, c=0.0}
-2026-11-15 14:53:37.170 [INFO] ML: object scopes probed {available=true, empty=人物,皮肤,面部,身体,头发,衣服,配饰}
-2026-11-15 14:53:37.191 [INFO] ML: skin mask ready {key=content://com.android.providers.media.documents/document/image%3A5#1000x800#1, grid=256, accel=CPU}
-2026-11-15 14:53:37.452 [DEBUG] EDIT: render done {w=1000, h=800, stamp=5, ms=10491, layers=0}
-2026-11-15 14:55:58.306 [INFO] LIFECYCLE: DebugLog initialized {file=/data/user/0/com.hifn.pixelcake.debug/files/debug/log_20261115_145558.txt}
-2026-11-15 14:55:58.313 [INFO] LIFECYCLE: boot snapshot {summary=manufacturer=Google model=sdk_gphone64_x86_64 soc=ranchu android=16(36) abi=x86_64 totalMem=3920MiB availMem=2143MiB wideColorGamut=false tier=low fullRes=4096 proxy=1024}
-2026-11-15 14:56:00.124 [INFO] EDIT: session restored {steps=3, position=2, rot=1}
-2026-11-15 14:56:01.105 [WARN] ML: CompiledModel.create failed {accel=GPU, err=Failed to compile model}
+log_20261115_151807.txt
+log_20261115_152213.txt
+log_20261115_152231.txt
+log_20261115_152240.txt
+2026-11-15 15:18:07.504 [INFO] LIFECYCLE: DebugLog initialized {file=/data/user/0/com.hifn.pixelcake.debug/files/debug/log_20261115_151807.txt}
+2026-11-15 15:18:07.514 [INFO] LIFECYCLE: boot snapshot {summary=manufacturer=Google model=sdk_gphone64_x86_64 soc=ranchu android=16(36) abi=x86_64 totalMem=3920MiB availMem=2074MiB wideColorGamut=false tier=low fullRes=4096 proxy=1024}
+2026-11-15 15:18:21.087 [INFO] IMPORT: pick {uri=image%3A5}
+2026-11-15 15:18:21.438 [INFO] DECODE: decoded {w=1000, h=700, raw=false, mime=image/jpeg, linear=false}
+2026-11-15 15:18:23.301 [WARN] ML: CompiledModel.create failed {accel=GPU, err=Failed to compile model}
+2026-11-15 15:18:23.575 [INFO] ML: skin mask model loaded {accel=CPU, side=256, asset=models/selfie_multiclass_256x256.tflite}
+2026-11-15 15:18:23.945 [INFO] EDIT: preset thumbs ready {count=44, px=192}
+2026-11-15 15:18:37.096 [INFO] ML: object masks ready {key=content://com.android.providers.media.documents/document/image%3A5#1000x700#1, side=256, accel=CPU}
+2026-11-15 15:18:37.293 [INFO] ML: skin mask ready {key=content://com.android.providers.media.documents/document/image%3A5#1000x700#1, grid=256, accel=CPU}
+2026-11-15 15:18:37.332 [INFO] ML: object scopes probed {available=true, empty=人物,皮肤,面部,身体,头发,衣服,配饰}
+2026-11-15 15:18:37.372 [DEBUG] EDIT: render done {w=1000, h=700, stamp=1, ms=15136, layers=0}
+2026-11-15 15:19:16.968 [DEBUG] EDIT: render done {w=1000, h=700, stamp=2, ms=445, layers=0}
+2026-11-15 15:19:17.236 [DEBUG] EDIT: render done {w=1000, h=700, stamp=3, ms=190, layers=0}
+2026-11-15 15:19:43.180 [INFO] EDIT: preset thumbs ready {count=44, px=192}
+2026-11-15 15:19:55.864 [INFO] ML: object masks ready {key=content://com.android.providers.media.documents/document/image%3A5#700x1000#1, side=256, accel=CPU}
+2026-11-15 15:19:55.873 [INFO] EDIT: auto enhance {ev=-0.38627458, c=0.24852942}
+2026-11-15 15:19:55.873 [INFO] ML: object scopes probed {available=true, empty=人物,皮肤,面部,身体,头发,衣服,配饰}
+2026-11-15 15:19:55.886 [INFO] ML: skin mask ready {key=content://com.android.providers.media.documents/document/image%3A5#700x1000#1, grid=256, accel=CPU}
+2026-11-15 15:19:56.098 [DEBUG] EDIT: render done {w=700, h=1000, stamp=4, ms=13724, layers=0}
+2026-11-15 15:19:56.538 [DEBUG] EDIT: render done {w=700, h=1000, stamp=5, ms=407, layers=0}
+2026-11-15 15:20:37.954 [INFO] EDIT: export begin {usedMB=13, totalMB=19, maxMB=192, heapPct=6, thermalHeadroom=0.90}
+2026-11-15 15:22:13.651 [INFO] LIFECYCLE: DebugLog initialized {file=/data/user/0/com.hifn.pixelcake.debug/files/debug/log_20261115_152213.txt}
+2026-11-15 15:22:13.660 [INFO] LIFECYCLE: boot snapshot {summary=manufacturer=Google model=sdk_gphone64_x86_64 soc=ranchu android=16(36) abi=x86_64 totalMem=3920MiB availMem=2174MiB wideColorGamut=false tier=low fullRes=4096 proxy=1024}
+2026-11-15 15:22:15.834 [INFO] EDIT: session restored {steps=3, position=2, rot=1}
+2026-11-15 15:22:17.065 [WARN] ML: CompiledModel.create failed {accel=GPU, err=Failed to compile model}
