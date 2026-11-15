@@ -79,12 +79,22 @@ def find_contains(root, attr, value):
     return [n for n in root.iter("node") if n.get(attr) and value in n.get(attr)]
 
 
-def tap(attr, value, name, wait=1.5, contains=False, allow_missing=False):
-    """按属性定位可点节点并点其中心。返回 True/False。"""
-    root, _ = dump(name)
-    nodes = find_contains(root, attr, value) if contains else find_nodes(root, attr, value)
+def tap(attr, value, name, wait=1.5, contains=False, allow_missing=False, attempts=1):
+    """按属性定位可点节点并点其中心。返回 True/False。
+
+    ⚠️ uiautomator dump 在动画期间会返回**竞态快照**（实测：回执入场动画里
+    「完成」节点整个缺失 ⇒ tap 静默跳过，回执卡永久停留）。attempts > 1 时
+    找不到就隔 2s 重新 dump 再找 —— 关键路径（完成/返回/导出主按钮）用大 attempts。
+    """
+    nodes = []
+    for attempt in range(attempts):
+        root, _ = dump(name if attempt == 0 else f"{name}_retry{attempt}")
+        nodes = find_contains(root, attr, value) if contains else find_nodes(root, attr, value)
+        if nodes:
+            break
+        time.sleep(2.0)
     if not nodes:
-        results.append(f"TAP {name}: NOT FOUND {attr}={value}")
+        results.append(f"TAP {name}: NOT FOUND {attr}={value} (attempts={attempts})")
         if not allow_missing:
             print(f"!! {name}: cannot locate {attr}={value}")
         return False
@@ -279,7 +289,7 @@ tap("text", "导出", "50_open_export", wait=2.0)
 shot("51_export_sheet")
 # ⚠️ Sheet 主按钮是「导出到相册（JPEG）」—— 顶栏也有一个「导出」，按面积最小编号
 # 会误选顶栏（首轮走查实测：导出从未发生，后面全卡在 Sheet 上）。用独有文案。
-tap("text", "导出到相册", "52_export_go", wait=1.5, contains=True, allow_missing=True)
+tap("text", "导出到相册", "52_export_go", wait=1.5, contains=True, allow_missing=True, attempts=6)
 # 轮询回执（导出含全分辨率渲染 + EXIF 写回，数秒～数十秒）
 receipt = False
 for _ in range(14):
@@ -290,7 +300,7 @@ for _ in range(14):
     time.sleep(2.5)
 results.append(f"RECEIPT SHOWN: {receipt}")
 shot("53_export_receipt")
-tap("text", "完成", "54_receipt_done", wait=1.5, allow_missing=True)
+tap("text", "完成", "54_receipt_done", wait=1.5, allow_missing=True, attempts=6)
 # 兜底：Sheet 还开着（回执未出）就系统返回一次，让后续设置页步骤能走
 root, t = dump("after_done")
 if t and "导出到系统相册" in t:
@@ -298,7 +308,7 @@ if t and "导出到系统相册" in t:
     results.append("export sheet still open -> back()")
 
 # ———— J. 退出编辑器 → 首页 ————
-tap("content-desc", "返回", "60_back_to_home", wait=2.5, contains=True, allow_missing=True)
+tap("content-desc", "返回", "60_back_to_home", wait=2.5, contains=True, allow_missing=True, attempts=6)
 results.append(f"focus after back={foreground()!r}")
 root, _ = dump("home_after")
 shot("61_home_after_back")
