@@ -25,24 +25,9 @@
 > Task :app:desugarDebugFileDependencies
 > Task :app:compressDebugAssets
 > Task :app:checkDebugDuplicateClasses
+> Task :app:configureCMakeDebug[arm64-v8a]
 
 > Task :app:compileDebugKotlin FAILED
-e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/MainActivity.kt:943:44 Unresolved reference 'rotationQuarterTurns'.
-e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/MainActivity.kt:984:25 No parameter with name 'rotationQuarterTurns' found.
-e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/MainActivity.kt:1067:35 Unresolved reference 'contentResolver'.
-e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/MainActivity.kt:1068:41 Cannot infer type for type parameter 'T'. Specify it explicitly.
-e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/MainActivity.kt:1068:41 Cannot infer type for type parameter 'R'. Specify it explicitly.
-e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/MainActivity.kt:1068:45 Cannot infer type for type parameter 'T'. Specify it explicitly.
-e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/MainActivity.kt:1068:50 Unresolved reference 'length'.
-e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/MainActivity.kt:1068:59 Inapplicable candidate(s): fun <K> ELVIS_CALL(x: K?, y: K): K
-e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/MainActivity.kt:1069:34 'operator' modifier is required on 'fun <T> Comparable<T>.compareTo(other: T): Int'.
-e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/MainActivity.kt:1069:46 'operator' modifier is required on 'fun <T> Comparable<T>.compareTo(other: T): Int'.
-e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/MainActivity.kt:1070:25 Unresolved reference 'contentResolver'.
-e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/MainActivity.kt:1070:81 Cannot infer type for type parameter 'T'. Specify it explicitly.
-e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/MainActivity.kt:1070:81 Cannot infer type for type parameter 'R'. Specify it explicitly.
-e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/MainActivity.kt:1070:81 Unresolved reference. None of the following candidates is applicable because of a receiver type mismatch:
-fun <T : Closeable?, R> T.use(block: (T) -> R): R
-e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/MainActivity.kt:1070:85 Cannot infer type for type parameter 'T'. Specify it explicitly.
 e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/core/ml/MlMaskProvider.kt:300:21 Unresolved reference 'CoroutineScope'.
 e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/core/ml/MlMaskProvider.kt:300:36 Unresolved reference 'Dispatchers'.
 e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt:1042:53 None of the following candidates is applicable:
@@ -66,7 +51,7 @@ e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/
 e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/settings/SettingsScreen.kt:457:70 Unresolved reference 'dp'.
 e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/settings/SettingsScreen.kt:593:58 Unresolved reference 'dp'.
 
-> Task :app:configureCMakeDebug[arm64-v8a]
+> Task :app:mergeExtDexDebug
 
 FAILURE: Build failed with an exception.
 
@@ -272,5 +257,5 @@ Caused by: org.jetbrains.kotlin.gradle.tasks.CompilationErrorException: Compilat
 	... 2 more
 
 
-BUILD FAILED in 18s
-23 actionable tasks: 7 executed, 16 up-to-date
+BUILD FAILED in 1m 8s
+24 actionable tasks: 8 executed, 16 up-to-date
