@@ -1,22 +1,6 @@
-log_20261115_084001.txt
-2026-11-15 08:40:01.592 [INFO] LIFECYCLE: DebugLog initialized {file=/data/user/0/com.hifn.pixelcake.debug/files/debug/log_20261115_084001.txt}
-2026-11-15 08:40:01.608 [INFO] LIFECYCLE: boot snapshot {summary=manufacturer=Google model=sdk_gphone64_x86_64 soc=ranchu android=16(36) abi=x86_64 totalMem=3920MiB availMem=1894MiB wideColorGamut=false tier=low fullRes=4096 proxy=1024}
-2026-11-15 08:40:18.803 [INFO] IMPORT: pick {uri=content://com.android.providers.media.documents/document/image%3A16}
-2026-11-15 08:40:19.173 [INFO] DECODE: decoded {w=800, h=1000, raw=false, mime=image/jpeg, linear=false}
-2026-11-15 08:40:21.226 [WARN] ML: CompiledModel.create failed {accel=GPU, err=Failed to compile model}
-2026-11-15 08:40:21.474 [INFO] ML: skin mask model loaded {accel=CPU, side=256, asset=models/selfie_multiclass_256x256.tflite}
-2026-11-15 08:40:21.926 [INFO] EDIT: preset thumbs ready {count=44, px=192}
-2026-11-15 08:40:34.922 [INFO] ML: object masks ready {key=content://com.android.providers.media.documents/document/image%3A16#800x1000#1, side=256, accel=CPU}
-2026-11-15 08:40:34.955 [INFO] ML: object scopes probed {available=true, empty=人物,皮肤,面部,头发,衣服,配饰}
-2026-11-15 08:40:35.009 [INFO] ML: skin mask ready {key=content://com.android.providers.media.documents/document/image%3A16#800x1000#1, grid=256, accel=CPU}
-2026-11-15 08:40:35.057 [DEBUG] EDIT: render done {w=800, h=1000, stamp=1, ms=14777, layers=0}
-2026-11-15 08:41:14.122 [DEBUG] EDIT: render done {w=800, h=1000, stamp=2, ms=605, layers=0}
-2026-11-15 08:41:14.365 [DEBUG] EDIT: render done {w=800, h=1000, stamp=3, ms=176, layers=0}
-2026-11-15 08:41:36.415 [INFO] EDIT: preset thumbs ready {count=44, px=192}
-2026-11-15 08:41:47.210 [INFO] ML: object masks ready {key=content://com.android.providers.media.documents/document/image%3A16#1000x800#1, side=256, accel=CPU}
-2026-11-15 08:41:47.212 [INFO] EDIT: auto enhance {ev=-0.06078434, c=0.0}
-2026-11-15 08:41:47.212 [INFO] ML: object scopes probed {available=true, empty=人物,皮肤,面部,身体,头发,衣服,配饰}
-2026-11-15 08:41:47.216 [INFO] ML: skin mask ready {key=content://com.android.providers.media.documents/document/image%3A16#1000x800#1, grid=256, accel=CPU}
-2026-11-15 08:41:47.760 [INFO] EDIT: preset thumbs ready {count=44, px=192}
-2026-11-15 08:41:58.776 [INFO] ML: object masks ready {key=content://com.android.providers.media.documents/document/image%3A16#800x1000#1, side=256, accel=CPU}
-2026-11-15 08:41:58.778 [INFO] ML: object scopes probed {available=true, empty=人物,皮肤,面部,头发,衣服,配饰}
+log_20261115_090049.txt
+2026-11-15 09:00:49.598 [INFO] LIFECYCLE: DebugLog initialized {file=/data/user/0/com.hifn.pixelcake.debug/files/debug/log_20261115_090049.txt}
+2026-11-15 09:00:49.613 [INFO] LIFECYCLE: boot snapshot {summary=manufacturer=Google model=sdk_gphone64_x86_64 soc=ranchu android=16(36) abi=x86_64 totalMem=3920MiB availMem=2080MiB wideColorGamut=false tier=low fullRes=4096 proxy=1024}
+2026-11-15 09:02:52.295 [INFO] IMPORT: pick {uri=content://com.android.providers.media.documents/document/image%3A17}
+2026-11-15 09:02:53.554 [INFO] DECODE: decoded {w=200, h=120, raw=false, mime=image/jpeg, linear=false}
+2026-11-15 09:02:54.814 [WARN] ML: CompiledModel.create failed {accel=GPU, err=Failed to compile model}
