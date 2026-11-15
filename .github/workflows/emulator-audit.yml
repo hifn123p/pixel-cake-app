@@ -125,6 +125,9 @@ jobs:
             adb shell content query --uri content://media/external/images/media --projection _display_name || true
           } 2>&1 | tee media-push.log
           adb shell ls /sdcard/Pictures || true
+          # ⚠️ 等图库真正就绪（上一轮走查在扫描完成前打开 picker ⇒ 空图库）
+          timeout 90 bash -c 'until [ "$(adb shell content query --uri content://media/external/images/media --projection _display_name 2>/dev/null | grep -c portrait_test)" -ge 1 ]; do sleep 3; done' || echo "WARN: portrait_test not in MediaStore after 90s"
+          adb shell content query --uri content://media/external/images/media --projection _display_name || true
 
       - name: Launch app and run UI walkthrough
         run: |
@@ -132,8 +135,9 @@ jobs:
           mkdir -p audit-art/shots audit-art/xml
           adb logcat -c
           python3 scripts/emulator_audit_drive.py || true
-          # 应用私有调试日志（DebugLog 只写文件不上 logcat）—— 平色渲染/ML 失败的第一手证据
-          adb exec-out run-as com.hifn.pixelcake.debug sh -c 'ls files/debug 2>/dev/null; cat files/debug/log_*.txt 2>/dev/null' > audit-art/app-debuglog.txt || true
+          # 应用私有调试日志（DebugLog 只写文件不上 logcat）—— 平色渲染/ML 失败的第一手证据。
+          # ⚠️ 引号必须嵌套到设备端：本地 bash 会吃掉单引号（上一轮 sh -c 只拿到 cat 一个词）
+          adb shell "run-as com.hifn.pixelcake.debug sh -c 'ls files/debug 2>/dev/null; cat files/debug/*.txt 2>/dev/null'" > audit-art/app-debuglog.txt || true
           tail -30 audit-art/app-debuglog.txt || true
           adb logcat -d -v time > audit-art/logcat-full.txt
           adb logcat -d -v time -s AndroidRuntime:E DEBUG:C > audit-art/logcat-crash.txt || true
