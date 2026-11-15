@@ -164,26 +164,28 @@ shot("01_home")
 tap("text", "相册", "02_tap_gallery", wait=3.0)
 root, txt = dump("picker")
 shot("03_photo_picker")
-# Photo Picker 里图片以 content-desc 含文件名或纯图片节点出现：优先文本/描述含 portrait_test
-tapped = tap("content-desc", "portrait_test", "04_pick_image", wait=1.0, contains=True, allow_missing=True)
-if not tapped:
-    tapped = tap("text", "portrait_test", "04b_pick_image_text", wait=1.0, contains=True, allow_missing=True)
-if not tapped:
-    # 兜底：点图集第一格（常见位置 —— 网格第一项通常在标题下方）
-    root, _ = dump("picker_retry")
-    imgs = [n for n in (root.iter("node") if root else []) if n.get("class", "").endswith("ImageView")]
-    if imgs:
-        c = bounds_center(imgs[0])
-        if c:
-            run(["shell", "input", "tap", str(c[0]), str(c[1])])
-            results.append(f"picker fallback tap ImageView at {c}")
-    else:
-        results.append("PICK: no fallback node")
-    time.sleep(2.0)
+# Photo Picker 的条目 desc 是「Photo taken on …」（无文件名）—— 按前缀取**第一格**：
+# 推送顺序决定了最左是 portrait_test（人像 + 色块，走查主素材）。
+root, _ = dump("04_pick_image")
+photo_nodes = find_contains(root, "content-desc", "Photo taken on")
+picked = False
+if photo_nodes:
+    c = bounds_center(photo_nodes[0])
+    if c:
+        run(["shell", "input", "tap", str(c[0]), str(c[1])])
+        results.append(f"picker tap first 'Photo taken on' at {c}")
+        picked = True
+        time.sleep(2.0)
+if not picked:
+    results.append("PICK: no 'Photo taken on' nodes")
 # 选定后编辑器渲染需要时间（解码 + 首帧 + ML 探测）
 time.sleep(6.0)
 root, txt = dump("editor")
 shot("05_editor_first_frame")
+# 进入校验：编辑器的顶栏特征文案（撤销/导出）。没进去就记录，后续步骤自会 NOT FOUND。
+editor_in = "导出" in txt or "撤销" in txt
+results.append(f"EDITOR OPEN: {editor_in}")
+print("editor open:", editor_in)
 
 # ———— C. Rail 六工具 + 各 deck ————
 for i, rail in enumerate(["明暗", "颜色", "曲线", "细节", "预设", "人像"]):
@@ -263,9 +265,18 @@ tap("text", "取消", "69_reset_cancel", wait=1.0, allow_missing=True)
 # ———— L. 边界：tiny.jpg ————
 tap("text", "调色台", "70_back_darkroom", wait=1.5, contains=True, allow_missing=True)
 tap("text", "相册", "71_open_gallery2", wait=3.0, allow_missing=True)
-tap("content-desc", "tiny", "72_pick_tiny", wait=1.0, contains=True, allow_missing=True)
-time.sleep(4.0)
+# tiny 的 desc 同样不带文件名：取**最后一格**（与首页第一格区分；顺序按扫描序）
+root, _ = dump("72_pick_tiny")
+tnodes = find_contains(root, "content-desc", "Photo taken on")
+if tnodes:
+    c = bounds_center(tnodes[-1])
+    if c:
+        run(["shell", "input", "tap", str(c[0]), str(c[1])])
+        results.append(f"tiny tap last 'Photo taken on' at {c}")
+time.sleep(5.0)
+root, ttxt = dump("tiny_editor")
 shot("73_tiny_editor")
+results.append(f"TINY EDITOR OPEN: {'导出' in ttxt or '撤销' in ttxt}")
 tap("content-desc", "返回", "74_back2", wait=2.0, contains=True, allow_missing=True)
 
 print("\n=== WALKTHROUGH RESULT ===")
