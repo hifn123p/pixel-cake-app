@@ -433,4 +433,33 @@ class EditHistory(initial: EditSnapshot = EditSnapshot()) {
         }
         return true
     }
+
+    // ———— 会话持久化（进程死亡恢复，v0.7.2）————
+    //
+    // 把整条时间线（undo 栈 + 当前 + redo 栈，按时间先后排列）导出为有序快照列表，
+    // 以及对应的恢复入口。**只被持久层调用**：丝带/撤销/重做仍走上面的单向演进接口，
+    // 这里是「存档 ⇄ 存档」的对拷，不构成第二条演进路径。
+
+    /**
+     * 导出整条时间线：下标 = 时间序，`position()` = 当前态所在下标。
+     * 恢复用 [importTimeline]，两者构成 round-trip（有单测钉住）。
+     */
+    fun exportTimeline(): Pair<List<EditSnapshot>, Int> =
+        Pair(undoStack + listOf(current) + redoStack, undoStack.size)
+
+    /**
+     * 从持久化时间线恢复（含历史位置）。
+     *
+     * @param timeline 时间线快照（≥1 条）；非法输入（空 / 越界 position）整体忽略，
+     *   保持原状 —— 恢复失败宁可回到空编辑，也不能落到半残的历史上。
+     * @param position 恢复后 current 所在的下标
+     */
+    fun importTimeline(timeline: List<EditSnapshot>, position: Int) {
+        if (timeline.isEmpty() || position < 0 || position >= timeline.size) return
+        undoStack.clear()
+        redoStack.clear()
+        undoStack.addAll(timeline.subList(0, position))
+        current = timeline[position]
+        redoStack.addAll(timeline.subList(position + 1, timeline.size))
+    }
 }

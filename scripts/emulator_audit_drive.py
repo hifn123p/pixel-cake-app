@@ -361,6 +361,14 @@ time.sleep(6.0)
 root, ttxt = dump("tiny_editor")
 shot("73_tiny_editor")
 results.append(f"TINY EDITOR OPEN: {'导出' in ttxt or '撤销' in ttxt}")
+# —— 平色疑点复现探针（§19.5）：首帧渲染期间就横拖参数 ——
+# tier=low 模拟器首帧可达十几秒；此窗口内拖曝光曾在旧轮次复现「渲染完成后短暂平色」。
+# 若 shot 75（渲染沉降后）出现均匀平色 + 直方图三尖峰，疑点坐实（app-debuglog 同步取证）；
+# 否则继续记账为未复现。
+swipe(int(W * 0.30), int(H * 0.40), int(W * 0.70), int(H * 0.40), ms=500, wait=0.5)
+shot("74_drag_during_first_render", delay=0.3)
+time.sleep(12)
+shot("75_after_render_settle")
 tap("content-desc", "返回", "74_back2", wait=2.0, contains=True, allow_missing=True)
 
 print("\n=== WALKTHROUGH RESULT ===")

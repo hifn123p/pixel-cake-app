@@ -16,6 +16,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.activity.compose.BackHandler
 import androidx.compose.ui.Modifier
+import com.hifn.pixelcake.ui.settings.AppSettings
 import com.hifn.pixelcake.ui.theme.Radius
 import com.hifn.pixelcake.ui.theme.Spacing
 import java.io.File
@@ -47,6 +48,7 @@ import java.io.File
 @Composable
 fun CameraSheet(
     longEdge: Int,
+    settings: AppSettings,
     onOpenLocalFile: (File) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -83,6 +85,7 @@ fun CameraSheet(
             )
             CameraPanel(
                 longEdge = longEdge,
+                settings = settings,
                 onOpenLocalFile = onOpenLocalFile,
                 onBusyChange = { panelBusy = it }
             )

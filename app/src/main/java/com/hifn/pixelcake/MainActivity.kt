@@ -7,6 +7,7 @@ import android.graphics.Paint
 import android.graphics.Rect
 import android.net.Uri
 import android.content.Context
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -37,13 +38,16 @@ import com.hifn.pixelcake.core.decode.DecodedImage
 import com.hifn.pixelcake.core.decode.Decoder
 import com.hifn.pixelcake.core.decode.Exporter
 import com.hifn.pixelcake.core.decode.LinearImage
+import com.hifn.pixelcake.session.SessionStore
 import com.hifn.pixelcake.core.edit.BeautyParams
 import com.hifn.pixelcake.core.edit.EditEngine
 import com.hifn.pixelcake.core.edit.EditHistory
 import com.hifn.pixelcake.core.edit.EditRotation
 import com.hifn.pixelcake.core.edit.RotatedMask
 import com.hifn.pixelcake.core.edit.AutoEnhance
+import com.hifn.pixelcake.core.edit.EditDocument
 import com.hifn.pixelcake.core.edit.EditParams
+import com.hifn.pixelcake.core.edit.SessionRecord
 import com.hifn.pixelcake.core.edit.lerped
 import com.hifn.pixelcake.core.edit.EditSnapshot
 import com.hifn.pixelcake.core.edit.FullMask
@@ -89,6 +93,7 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.sample
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.isActive
@@ -608,6 +613,15 @@ private fun AppRoot(settings: AppSettings) {
 
     val openInEditor: (Uri) -> Unit = { uri ->
         DebugLog.i(DebugLog.TAG_IMPORT, "pick", mapOf("uri" to uri.toString()))
+        // 会话持久化（v0.7.2）：拿可持久化授权（SAF/Photo Picker 都带 persistable 标志；
+        // 个别机型 picker 拒绝 ⇒ SecurityException，按「不可恢复」处理即可）。同时清掉
+        // 上一条会话记录 —— 新图导入即新会话，旧记录不能在「新导入解码失败」时复活。
+        runCatching {
+            context.contentResolver.takePersistableUriPermission(
+                uri, Intent.FLAG_GRANT_READ_URI_PERMISSION
+            )
+        }
+        SessionStore.clear(context)
         scope.launch {
             loading = true
             status = EditorStatus(StatusKind.Info, "正在解码…")
@@ -822,6 +836,9 @@ private fun AppRoot(settings: AppSettings) {
                         // 首页 message（= status.text）同理会残留上一会话的编辑器文案。
                         exportReceipt = null
                         status = EditorStatus()
+                        // 会话记录随「用户主动退出」一并清除（v0.7.2）：退出即会话结束，
+                        // 残留记录会让下次冷启动复活一个用户已经关掉的会话。
+                        SessionStore.clear(context)
                         nav.pop()
     }
     // Q5：会话级旋转 —— 从 pristine 重推导 imported（bitmap + linear 一次性重排，零累积损失），
@@ -877,6 +894,90 @@ private fun AppRoot(settings: AppSettings) {
         history.push(EditSnapshot(params, retouch, layers, rotationQuarterTurns = newQ))
     }
     BackHandler(enabled = editorOpen) { editorOnBack() }
+
+    // ———— 会话恢复（v0.7.2，§19.4 遗留项落地：进程死亡后无缝续上）————
+    //
+    // 冷启动读到存档 ⇒ 清除（一次性凭据）→ 重新解码源图 → 从 pristine 重推旋转 →
+    // 重建整条时间线（含撤销/重做位置）→ 进编辑器。与 openInEditor 的差异只有两处：
+    // 历史来自存档而非 reset，以及旋转经 applySessionRotation 的既有代次护栏重推。
+    // 权限凭据失效（部分机型 picker 拒绝持久授权 / 相册被删）⇒ 解码失败按「无会话」处理，
+    // 状态行明说，不留幽灵会话。
+    val restoredSession = remember { SessionStore.load(context) }
+    LaunchedEffect(Unit) {
+        val record = restoredSession ?: return@LaunchedEffect
+        SessionStore.clear(context)
+        loading = true
+        status = EditorStatus(StatusKind.Info, "正在恢复上次的编辑会话…")
+        val uri = Uri.parse(record.srcUri)
+        val dec = try {
+            Decoder.decodeToProxy(context, uri, profile.proxyLongEdge)
+        } catch (c: CancellationException) {
+            throw c
+        } catch (t: Throwable) {
+            DebugLog.w(
+                DebugLog.TAG_DECODE, "session restore decode failed",
+                mapOf("uri" to record.srcUri, "err" to (t.message ?: t.javaClass.simpleName))
+            )
+            null
+        }
+        if (dec == null) {
+            loading = false
+            status = EditorStatus(StatusKind.Error, "上次会话的照片已无法访问，已开新会话")
+            return@LaunchedEffect
+        }
+        imageEpoch.incrementAndGet()
+        srcUri = uri
+        imported = dec
+        pristineDecoded = dec
+        rotationQuarterTurns = 0
+        baselinePending = true
+        history.reset()
+        val timeline = record.timeline.map { doc ->
+            EditSnapshot(
+                params = doc.params, retouch = doc.retouch, layers = doc.layers,
+                rotationQuarterTurns = record.rotationQuarterTurns
+            )
+        }
+        history.importTimeline(timeline, record.position)
+        val current = history.current
+        params = current.params
+        retouch = current.retouch
+        layers = current.layers
+        if (record.rotationQuarterTurns != 0) applySessionRotation(record.rotationQuarterTurns)
+        loading = false
+        status = EditorStatus(StatusKind.Info, "已恢复上次的编辑会话")
+        nav.push(AppScreen.Editor)
+        DebugLog.i(
+            DebugLog.TAG_EDIT, "session restored",
+            mapOf("steps" to timeline.size, "position" to record.position, "rot" to record.rotationQuarterTurns)
+        )
+    }
+
+    // —— 会话持久化：编辑态变化防抖落盘（1.2s sample；单键覆盖写，无放大）——
+    // 历史本身不可观察 ⇒ 借「历史操作必然伴随 params/retouch/layers/旋转/导航变化」
+    // 这条不变式，用可观察态触发；落盘时现读时间线。
+    LaunchedEffect(Unit) {
+        snapshotFlow {
+            Triple(srcUri, rotationQuarterTurns, nav.current) to Triple(params, retouch, layers)
+        }
+            .sample(1200)
+            .collect { _ ->
+                val uri = srcUri ?: return@collect
+                if (nav.current != AppScreen.Editor || loading) return@collect
+                val (timeline, position) = history.exportTimeline()
+                SessionStore.save(
+                    context,
+                    SessionRecord(
+                        srcUri = uri.toString(),
+                        rotationQuarterTurns = rotationQuarterTurns,
+                        position = position,
+                        timeline = timeline.map {
+                            EditDocument(params = it.params, retouch = it.retouch, layers = it.layers)
+                        }
+                    )
+                )
+            }
+    }
 
     // 「降低透明度」的 provide 提升到**两个分支之外**（审计 C-F11）：原版只包住
     // Workspace 分支，编辑器（文本最密、玻璃面最多的一屏）反而收不到 ——
@@ -1405,6 +1506,7 @@ private fun AppRoot(settings: AppSettings) {
         AppShell(current = tab, onSelect = { tab = it }) { currentTab ->
             when (currentTab) {
                 PixelCakeTab.Darkroom -> HomeScreen(
+                    settings = settings,
                     onImportPhoto = { photoLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
                     onImportArw = { arwLauncher.launch(arrayOf("*/*")) },
                     loading = loading,

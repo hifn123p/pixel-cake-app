@@ -29,8 +29,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
+import java.io.File
 import androidx.compose.ui.platform.LocalContext
 import com.hifn.pixelcake.core.decode.ExportFormat
+import com.hifn.pixelcake.core.edit.preset.CustomPresets
+import com.hifn.pixelcake.core.edit.preset.CustomPreset
 import com.hifn.pixelcake.core.ml.MlMaskProvider
 import com.hifn.pixelcake.diag.DebugLog
 import com.hifn.pixelcake.ui.components.GlassCard
@@ -97,6 +100,17 @@ fun SettingsScreen(
     var modelRefresh by remember { mutableStateOf(0) }
     var logExportState by remember { mutableStateOf(LOG_IDLE) }
     var cacheMiB by remember { mutableStateOf<Long?>(null) }
+    // v0.7.2（§M 相机直连组）：默认修图参数的候选 = 内置 3 + 用户预设库（与相机面板同一份）
+    var cameraCustomPresets by remember { mutableStateOf(emptyList<CustomPreset>()) }
+    LaunchedEffect(Unit) {
+        cameraCustomPresets = withContext(Dispatchers.IO) {
+            CustomPresets.Store(File(context.filesDir, "custom_presets.json")).load()
+        }
+    }
+    val cameraPresetOptions = remember(cameraCustomPresets) {
+        listOf("portra" to "波特拉", "jp" to "日系", "none" to "不套用") +
+            cameraCustomPresets.map { it.id to it.name }
+    }
     // 版本号只需读一次（同一个进程内不会变）。
     val version = remember(context) { appVersionLabel(context) }
 
@@ -305,6 +319,56 @@ fun SettingsScreen(
                         cacheMiB = null  // 删除期间显示「统计中…」，不让旧数字冒充已清空
                     }
                 ) { Text("清理缓存") }
+            }
+        }
+
+        // ———— 相机直连（UI3.0 §M 的三条例内设置，v0.7.2 落地）————
+        // 三项分别驱动：HomeScreen 的 USB 自动弹出、相机批量/系留的预设选择、
+        // 系留到达流的自动导出闸门 —— AppSettings 是唯一状态源，相机面板只消费。
+        item {
+            GlassCard {
+                SectionHeader(
+                    title = "相机直连",
+                    subtitle = "USB 相机批量与系留到达流"
+                )
+                Spacer(Modifier.height(Spacing.m))
+
+                SettingSwitchRow(
+                    title = "USB 相机接入后自动打开面板",
+                    subtitle = "插入相机回到首页时，面板自动弹出（默认关闭）",
+                    checked = settings.cameraAutoOpen,
+                    onChange = { settings.cameraAutoOpen = it }
+                )
+
+                Spacer(Modifier.height(Spacing.m))
+
+                SettingChips(
+                    title = "默认修图参数",
+                    subtitle = "相机批量与系留套用的预设；与相机面板里的选择是同一个状态"
+                ) {
+                    ChipSelector(
+                        options = cameraPresetOptions,
+                        selected = settings.cameraDefaultPresetId,
+                        label = { it.second },
+                        onSelect = { settings.cameraDefaultPresetId = it.first }
+                    )
+                }
+
+                Spacer(Modifier.height(Spacing.m))
+
+                SettingSwitchRow(
+                    title = "拍摄完成后自动导出相册",
+                    subtitle = "关闭 = 只下载到面板缓存，由你手动批量导出",
+                    checked = settings.tetherAutoExport,
+                    onChange = { settings.tetherAutoExport = it }
+                )
+
+                Spacer(Modifier.height(Spacing.xs))
+                Text(
+                    "需要 USB 相机（Sony 等 PTP 设备）；功能入口在首页「相机直连」。",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
 
