@@ -34,6 +34,7 @@ import com.hifn.pixelcake.core.decode.ExportFormat
 import com.hifn.pixelcake.core.ml.MlMaskProvider
 import com.hifn.pixelcake.diag.DebugLog
 import com.hifn.pixelcake.ui.components.GlassCard
+import com.hifn.pixelcake.ui.components.amberChipColors
 import com.hifn.pixelcake.ui.components.SectionHeader
 import com.hifn.pixelcake.ui.theme.LocalDarkTheme
 import com.hifn.pixelcake.ui.theme.Ok
@@ -620,7 +621,10 @@ private fun <T> ChipSelector(
                 selected = option == selected,
                 onClick = { onSelect(option) },
                 label = { Text(label(option)) },
-                shape = Radius.chip
+                shape = Radius.chip,
+                // 选中态走共享琥珀配色（截图实测：裸 FilterChip 是 M3 紫灰 —— A-P1-1 的
+                // 第三个漏网点；教训：全局配色纪律必须落在「每一处裸 FilterChip」上）
+                colors = amberChipColors()
             )
         }
     }

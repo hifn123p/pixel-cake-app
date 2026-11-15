@@ -488,7 +488,8 @@ fun CameraPanel(
                         FilterChip(
                             selected = defaultPresetId == id,
                             onClick = { defaultPresetId = id },
-                            label = { Text(name) }
+                            label = { Text(name) },
+                            colors = amberChipColors(),
                         )
                     }
                     // v0.6.6：自定义预设也能作为系留默认修图参数
@@ -496,7 +497,8 @@ fun CameraPanel(
                         FilterChip(
                             selected = defaultPresetId == cp.id,
                             onClick = { defaultPresetId = cp.id },
-                            label = { Text(cp.name) }
+                            label = { Text(cp.name) },
+                            colors = amberChipColors(),
                         )
                     }
                 }
@@ -745,6 +747,7 @@ fun CameraPanel(
                                 onClick = { presetId = p.id },
                                 enabled = !busy,
                                 label = { Text(p.name) }
+                                colors = amberChipColors(),
                             )
                         }
                     }
