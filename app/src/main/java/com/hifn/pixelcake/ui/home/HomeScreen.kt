@@ -37,8 +37,9 @@ import com.hifn.pixelcake.ui.editor.AppIcons
 import com.hifn.pixelcake.ui.editor.IconDef
 import com.hifn.pixelcake.ui.editor.PathIcon
 import com.hifn.pixelcake.ui.theme.Glass
-import com.hifn.pixelcake.ui.theme.GlassTint
 import com.hifn.pixelcake.ui.theme.HeroCardBottom
+import com.hifn.pixelcake.ui.theme.HeroActBg
+import com.hifn.pixelcake.ui.theme.HeroCardGlow
 import com.hifn.pixelcake.ui.theme.HeroCardMid
 import com.hifn.pixelcake.ui.theme.HeroCardTop
 import com.hifn.pixelcake.ui.theme.HeroCardWarm
@@ -187,11 +188,14 @@ private fun HeroCard(
             .fillMaxWidth()
             .clip(Radius.shell)
             .background(
+                // 规范 `.ph-golden` 的 5 个停靠点（v0.7.2 补齐第 4/5 档，审计 A-P3-11/Q7）：
+                // 旧版把 E9A25C 放在卡底，缺了最底部 16% 提亮到 F2C078 的「暖光收边」。
                 Brush.verticalGradient(
                     0f to HeroCardTop,
                     0.34f to HeroCardMid,
                     0.62f to HeroCardWarm,
-                    1f to HeroCardBottom
+                    0.84f to HeroCardBottom,
+                    1f to HeroCardGlow
                 )
             )
             .border(Glass.borderWidth, tint.border, Radius.shell)
@@ -246,9 +250,9 @@ private fun HeroCard(
                     .padding(top = Spacing.l),
                 horizontalArrangement = Arrangement.spacedBy(Spacing.s)
             ) {
-                HeroAction("相册", AppIcons.Image, enabled = !loading, tint = tint, onClick = onPickPhoto, modifier = Modifier.weight(1f))
-                HeroAction("文件 ARW", AppIcons.Folder, enabled = !loading, tint = tint, onClick = onPickArw, modifier = Modifier.weight(1f))
-                HeroAction("相机直连", AppIcons.Camera, enabled = !loading, tint = tint, onClick = onConnectCamera, modifier = Modifier.weight(1f))
+                HeroAction("相册", AppIcons.Image, enabled = !loading, onClick = onPickPhoto, modifier = Modifier.weight(1f))
+                HeroAction("文件 ARW", AppIcons.Folder, enabled = !loading, onClick = onPickArw, modifier = Modifier.weight(1f))
+                HeroAction("相机直连", AppIcons.Camera, enabled = !loading, onClick = onConnectCamera, modifier = Modifier.weight(1f))
             }
         }
 
@@ -279,8 +283,6 @@ private fun HeroAction(
     // 调用点传的是 `AppIcons.Image` 这类 `IconDef` 实例，`PathIcon(def = def)` 随之对上。
     def: IconDef,
     enabled: Boolean,
-    // 玻璃 tint 由 HeroCard 统一解析后传入（§9.3-E：不再硬编码玻璃底 / 描边色）
-    tint: GlassTint,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -288,8 +290,10 @@ private fun HeroAction(
     Column(
         modifier = modifier
             .pressScale(interaction)
-            .clip(Radius.card)
-            .background(Color(0xB8121014))
+            // 规范 `.hc-act`：底 rgba(16,14,17,.45)（原硬编码 0xB8121014 α0.72 偏重 + 违反
+            // §9.3-E 收编纪律，审计 C-F7/A-P3-11）；radius 14px 不在圆角梯上，取 chip 档 12dp。
+            .clip(Radius.chip)
+            .background(HeroActBg)
             .clickable(
                 interactionSource = interaction,
                 indication = null,

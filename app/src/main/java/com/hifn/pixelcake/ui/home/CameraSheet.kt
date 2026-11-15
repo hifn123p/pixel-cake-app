@@ -10,6 +10,11 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.activity.compose.BackHandler
 import androidx.compose.ui.Modifier
 import com.hifn.pixelcake.ui.theme.Radius
 import com.hifn.pixelcake.ui.theme.Spacing
@@ -45,10 +50,20 @@ fun CameraSheet(
     onOpenLocalFile: (File) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    // v0.7.2（审计 C-F1）：批量/传输进行中**拦截一切关闭路径**（下拉 / 返回 / 点遮罩）。
+    // 原版三路都能把 Sheet 收掉，挂在其作用域上的批量任务随之静默取消 ——
+    // 用户无从知道第几张导出成功。KDoc 的「不要关」从提示文字升级为真实约束；
+    // 「退出」途径只剩系统杀进程，与既有语义一致。
+    var panelBusy by remember { mutableStateOf(false) }
+    val sheetState = rememberModalBottomSheetState(
+        skipPartiallyExpanded = true,
+        confirmValueChange = { !panelBusy }
+    )
+
+    BackHandler(enabled = panelBusy) { /* 忙时吞掉返回：等效于拦截下拉关闭 */ }
 
     ModalBottomSheet(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { if (!panelBusy) onDismiss() },
         sheetState = sheetState,
         shape = Radius.sheet,
         containerColor = MaterialTheme.colorScheme.surface,
@@ -61,12 +76,16 @@ fun CameraSheet(
                 .padding(bottom = Spacing.xxl)
         ) {
             Text(
-                "关闭本面板会断开相机连接；批量导入过程中请保持本面板打开。",
+                "关闭本面板会断开相机连接；批量进行中本面板被锁定（完成后可关闭）。",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(bottom = Spacing.s)
             )
-            CameraPanel(longEdge = longEdge, onOpenLocalFile = onOpenLocalFile)
+            CameraPanel(
+                longEdge = longEdge,
+                onOpenLocalFile = onOpenLocalFile,
+                onBusyChange = { panelBusy = it }
+            )
         }
     }
 }

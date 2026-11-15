@@ -77,6 +77,18 @@ fun ModelCenterSheet(onDismiss: () -> Unit) {
                 SpacerRows(faceDiag)
             }
 
+            // 「规划中」占位卡（审计 A-P3-15）：规范 §N 给端侧大模型留了槽位；
+            // 放一张静态卡让「还有东西在路上」可见，也避免「页面就两张卡」的突兀感。
+            GlassCard {
+                SectionHeader(title = "规划中", subtitle = "尚未启用的端侧能力")
+                SpacerRows(
+                    mapOf(
+                        "重 AI 增强" to "规划中（P3 · NAS 引擎）",
+                        "老照片修复 / 超分" to "评估中"
+                    )
+                )
+            }
+
             Text(
                 "模型随包内置（Apache-2.0，见关于页许可）。推理优先 GPU，失败自动降级 CPU；" +
                     "连续 OOM 达到阈值后本会话永久关闭（重启 App 恢复）。",

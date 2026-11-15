@@ -1,6 +1,7 @@
 package com.hifn.pixelcake.ui.home
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -33,6 +34,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -55,6 +57,7 @@ import com.hifn.pixelcake.core.decode.Exporter
 import com.hifn.pixelcake.core.edit.EditEngine
 import com.hifn.pixelcake.core.edit.RetouchScale
 import com.hifn.pixelcake.core.edit.lerped
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import com.hifn.pixelcake.core.edit.preset.CustomPreset
@@ -62,6 +65,7 @@ import com.hifn.pixelcake.core.edit.preset.CustomPresets
 import com.hifn.pixelcake.core.edit.preset.Presets
 import com.hifn.pixelcake.diag.DebugLog
 import com.hifn.pixelcake.ui.components.GlassCard
+import com.hifn.pixelcake.ui.components.amberChipColors
 import com.hifn.pixelcake.ui.theme.Spacing
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -92,7 +96,10 @@ import java.util.concurrent.atomic.AtomicBoolean
 @Composable
 fun CameraPanel(
     longEdge: Int,
-    onOpenLocalFile: (File) -> Unit = {}
+    onOpenLocalFile: (File) -> Unit = {},
+    // v0.7.2（审计 C-F1）：把「面板正忙」上报给容器 —— CameraSheet 据此拦截关闭手势，
+    // 让 KDoc 里「批量过程中不要关本面板」从一句提示变成真实约束。
+    onBusyChange: (Boolean) -> Unit = {}
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -101,6 +108,8 @@ fun CameraPanel(
     var selectedName by remember { mutableStateOf<String?>(null) }
     var scanned by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
+    // 忙态上报（审计 C-F1）：busy 在十来处被写，逐处插回调必漏；单一 effect 出口。
+    LaunchedEffect(busy) { onBusyChange(busy) }
     var phase by remember { mutableStateOf("") }
     var lines by remember { mutableStateOf(emptyList<String>()) }
 
@@ -160,7 +169,14 @@ fun CameraPanel(
     LaunchedEffect(session, tetherOn) {
         val sn = session ?: return@LaunchedEffect
         if (!tetherOn) return@LaunchedEffect
-        val storageId = sn.storageIds.firstOrNull() ?: return@LaunchedEffect
+        val storageId = sn.storageIds.firstOrNull() ?: run {
+            // v0.7.2（审计 C-F4）：无存储（卡未插/未挂载）时原版静默 return —— 开关看着开着、
+            // 什么都不发生，与「坏了」无法区分。给出与播种失败同款的可见反馈。
+            arrivalLog = (arrivalLog + "无可用存储（存储卡未插或未挂载），无法开启系留").takeLast(30)
+            DebugLog.w(DebugLog.TAG_CAMERA, "tether on without storage", mapOf("session" to "1"))
+            tetherOn = false
+            return@LaunchedEffect
+        }
         // 到达流日志上界：P2 债里「arrivalLog 无上界」的最小修 —— 界面只显示最后 5 条，
         // 内存里也只留最后 30 条，长会话不会无限增长。
         val log: (String) -> Unit = { m -> arrivalLog = (arrivalLog + m).takeLast(30) }
@@ -198,6 +214,9 @@ fun CameraPanel(
                         val outcome = sn.download(photo.handle, target) { _, _ -> }
                         if (!outcome.ok) {
                             log(photo.info.filename + " · 传输失败")
+                            // v0.7.2（审计 C-F3）：交还重试 —— 原口径「先记账后下载」让一次
+                            // USB 抖动等于这张照片永久漏导。渲染失败不交还（确定性错误）。
+                            tether.releaseForRetry(photo.handle)
                             continue
                         }
                         log(photo.info.filename + " · 套「" + preset.name + "」")
@@ -451,13 +470,17 @@ fun CameraPanel(
         if (s != null) {
             
             // —— 默认修图参数（§J 系留仪表盘）——
+            // v0.7.2（审计 C-F10）：整行 toggleable（读屏合并语义 + 点行任意处可拨），
+            // Switch 本体 onCheckedChange = null 防双焦点。
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .toggleable(value = tetherOn, role = Role.Switch, onValueChange = { tetherOn = it }),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text("默认修图参数", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                Switch(checked = tetherOn, onCheckedChange = { tetherOn = it })
+                Switch(checked = tetherOn, onCheckedChange = null)
             }
             if (tetherOn) {
                 Row(modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
@@ -466,7 +489,8 @@ fun CameraPanel(
                         FilterChip(
                             selected = defaultPresetId == id,
                             onClick = { defaultPresetId = id },
-                            label = { Text(name) }
+                            label = { Text(name) },
+                            colors = amberChipColors(),
                         )
                     }
                     // v0.6.6：自定义预设也能作为系留默认修图参数
@@ -474,7 +498,8 @@ fun CameraPanel(
                         FilterChip(
                             selected = defaultPresetId == cp.id,
                             onClick = { defaultPresetId = cp.id },
-                            label = { Text(cp.name) }
+                            label = { Text(cp.name) },
+                            colors = amberChipColors(),
                         )
                     }
                 }
@@ -532,6 +557,14 @@ fun CameraPanel(
                                 val list = s.listPhotos()
                                 photoList = list
                                 selected = list.photos.map { it.handle }.toSet()
+                            } catch (c: CancellationException) {
+                                throw c
+                            } catch (t: Throwable) {
+                                // 与批量/系留同一道护栏（审计 C-F2）：会话层逃出的非 CE Throwable
+                                // 若不接住会崩掉整个进程，而不是落进日志行。
+                                lines = lines + "刷新列表失败：${t.message ?: t.javaClass.simpleName}"
+                                DebugLog.w(DebugLog.TAG_CAMERA, "refresh failed",
+                                    mapOf("err" to (t.message ?: t.javaClass.simpleName)))
                             } finally {
                                 busy = false
                                 phase = ""
@@ -666,6 +699,13 @@ fun CameraPanel(
                                                     mapOf("handle" to photo.handle, "msg" to outcome.message)
                                                 )
                                             }
+                                        } catch (c: CancellationException) {
+                                            throw c
+                                        } catch (t: Throwable) {
+                                            // 与批量/系留同一道护栏（审计 C-F2）
+                                            lines = lines + "拉取 ${photo.filename} 异常：${t.message ?: t.javaClass.simpleName}"
+                                            DebugLog.w(DebugLog.TAG_CAMERA, "single pull error",
+                                                mapOf("file" to photo.filename, "err" to (t.message ?: t.javaClass.simpleName)))
                                         } finally {
                                             progress = null
                                             busy = false
@@ -707,7 +747,8 @@ fun CameraPanel(
                                 selected = p.id == presetId,
                                 onClick = { presetId = p.id },
                                 enabled = !busy,
-                                label = { Text(p.name) }
+                                label = { Text(p.name) },
+                                colors = amberChipColors(),
                             )
                         }
                     }

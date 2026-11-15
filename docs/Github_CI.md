@@ -183,7 +183,13 @@ git push https://github.com/hifn123p/pixel-cake-app.git main
 
 ## 7. 遗留（需真机 / 视觉 / 立项）
 
-- **Q4** 热区 26/36/48dp 手感；**Q7** 首页渐变视觉对比；
+- **模拟器云端走查（已落地，12 轮迭代全绿）**：`emulator-audit.yml` 在 ubuntu runner（KVM）上
+  无头启动 API 36 模拟器 → 按 UI3.0 全链路走查（导入→六 deck→双通道/旋转/自动增强→全分辨率
+  导出→回执→设置）→ 截图/dump/应用 DebugLog/logcat **git 提交回传分支**。v0.7.1 的「未装机、
+  未做视觉验收」自此闭环；实测要点：GPU delegate 失败→CPU 级联实证、首帧 tier=low 14.8s、
+  全链路零崩溃。疑点（首帧渲染期拖动短暂平色）与基建教训见 `ENGINEERING_NOTES.md` §19.5；
+- **Q4** 热区 26/36/48dp 手感；**Q7** 首页渐变视觉对比（本轮已按规范补齐第 5 停靠点，
+  待截图验收确认）；
 - **M-2/T5** release 变体（R8 + 资源收缩、native 优化级别）真机性能基线；
 - **TalkBack 走查**；v0.6.6 / v0.7.0 / **v0.7.1（Q5 手动旋转）** 真机验收；
 - **Q5 手动旋转**：代码与单测已落地（`EditRotationTest` 8 例 + `LinearImageRotateTest` 5 例），

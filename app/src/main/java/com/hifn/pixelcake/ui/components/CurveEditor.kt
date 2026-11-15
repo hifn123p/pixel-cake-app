@@ -87,8 +87,9 @@ fun CurveEditor(
     Canvas(
         modifier = modifier
             .fillMaxWidth()
-            // 组件自身尺寸（不是间距），不进 Spacing 标尺：与 64dp 直方图条差一档层次。
-            .height(132.dp)
+            // 规范 §E svg 高 104/110：本版取 110dp（v0.7.2 从 132dp 收档，审计 A-P3-16）。
+            // 曲线页走 Deck L 档（330dp），收 22dp 后锚点热区（全高列）依然宽裕。
+            .height(110.dp)
             .clip(Radius.chip)
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.22f))
             .pointerInput(Unit) {
@@ -183,9 +184,20 @@ fun CurveEditor(
         ).forEach { (anchor, v) ->
             val c = Offset(xOf(ToneCurve.anchorX(anchor)), yOf(v))
             val held = active == anchor
-            // 按住的那个画大一圈 + 加描边：拖到一半松手前必须能确认「我在拖谁」。
-            drawCircle(if (held) lineColor else lineColor.copy(alpha = 0.85f), 7.dp.toPx(), c)
-            drawCircle(Color.White, 3.dp.toPx(), c)
+            // 规范 §E `.curvebox circle`：白底圆 + 琥珀 2.4px 描边环（v0.7.2 从
+            // 「琥珀实心 + 白心」倒置修正，审计 A-P3-16 —— 白底在曲线上更「实体」，
+            // 琥珀环与选中语言一致）。按住的那个描边加粗一圈以示「正在拖谁」。
+            drawCircle(
+                Color.White,
+                7.dp.toPx(),
+                c
+            )
+            drawCircle(
+                if (held) lineColor else lineColor.copy(alpha = 0.85f),
+                7.dp.toPx(),
+                c,
+                style = Stroke(width = (if (held) 3.4.dp else 2.4.dp).toPx())
+            )
         }
 
         // 外框最后画，压住直方图在边缘的溢出

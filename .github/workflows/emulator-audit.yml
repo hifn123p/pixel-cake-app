@@ -1,0 +1,193 @@
+name: Emulator Audit (cloud walkthrough)
+
+# 本机零安装纪律的延伸：CI 也是唯一的模拟器。
+# ubuntu runner（带 KVM）无头启动 API 36 模拟器 → 装 APK → 按 UI3.0 全链路走查
+# （首页 → 导入 → 六个 deck → 手势/旋转 → 导出 → 设置）→ 每步 screencap →
+# 截图 + uiautomator dump + logcat 全部上传为 artifact，供人工/视觉审查。
+on:
+  workflow_dispatch:
+  push:
+    branches: [emulator-audit]
+
+concurrency:
+  group: emulator-audit-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    name: Build + boot emulator + walkthrough
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    # 失败日志要按「git 是唯一匿名可读通道」纪律提交回分支（与 android.yml 同口径）——
+    # 缺这条默认是只读 token，push 会被静默拒绝（首跑 ×2 的教训）。
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Set up Android SDK (base)
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools'
+
+      - name: Install toolchain (SDK / NDK / CMake) — 复用 CI 的 composite action
+        uses: ./.github/actions/setup-android-toolchain
+
+      - name: Install emulator + system image (API 36, google_apis x86_64)
+        run: |
+          sdkmanager --install "emulator" "system-images;android-36;google_apis;x86_64"
+
+      - name: Check KVM
+        run: |
+          sudo apt-get -y install cpu-checker >/dev/null 2>&1 || true
+          ls -l /dev/kvm || true
+          test -e /dev/kvm && echo "KVM OK" || echo "WARN: no /dev/kvm (software emulation will be slow)"
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Assemble debug APK + unit tests
+        run: |
+          set -o pipefail
+          ./gradlew --no-build-cache assembleDebug testDebugUnitTest --stacktrace 2>&1 | tee build-and-test.log
+
+      - name: Create AVD
+        run: |
+          # ⚠️ ANDROID_AVD_HOME 必须在「创建」与「启动」两步显式一致：setup-android 会把
+          # ANDROID_AVD_HOME 指到它自己的临时目录，而 emulator 默认只搜
+          # $ANDROID_AVD_HOME / $ANDROID_SDK_HOME/avd / $HOME/.android/avd ——
+          # 上一轮「Unknown AVD name」就是两边口径分裂
+          export ANDROID_AVD_HOME="$HOME/.android/avd"
+          mkdir -p "$ANDROID_AVD_HOME"
+          echo no | avdmanager create avd --force -n pixelcake-audit \
+            -k "system-images;android-36;google_apis;x86_64" -d pixel_6
+          printf 'hw.ramSize=4096\nhw.mainKeys=no\n' >> "$ANDROID_AVD_HOME/pixelcake-audit.avd/config.ini" || true
+          ls "$ANDROID_AVD_HOME"
+
+      - name: Grant KVM access (udev 0666 —— ProbeKVM 无权限会让 x86_64 模拟直接拒启)
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          ls -l /dev/kvm
+
+      - name: Boot emulator (headless, software GPU)
+        env:
+          ANDROID_AVD_HOME: /home/runner/.android/avd
+        run: |
+          # ⚠️ setup-android 不把 $ANDROID_HOME/emulator 加进 PATH —— 必须全路径调用
+          EMU="$ANDROID_HOME/emulator/emulator"
+          "$EMU" -accel-check || true
+          "$EMU" -avd pixelcake-audit \
+            -no-window -no-audio -no-boot-anim -no-snapshot \
+            -gpu swiftshader_indirect \
+            -camera-back none -camera-front none \
+            > emulator-boot.log 2>&1 &
+          # ⚠️ wait-for-device 必须有超时：模拟器进程若启动即死，原版会无限挂起
+          timeout 300 adb wait-for-device || true
+          timeout 600 bash -c 'until [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = "1" ]; do sleep 5; done' || true
+          BOOTED=$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || echo 0)
+          echo "boot_completed=$BOOTED"
+          echo "--- emulator-boot.log (tail 40) ---"
+          tail -40 emulator-boot.log || true
+          if [ "$BOOTED" != "1" ]; then echo "EMULATOR FAILED TO BOOT"; exit 1; fi
+          adb shell settings put global window_animation_scale 0
+          adb shell settings put global transition_animation_scale 0
+          adb shell settings put global animator_duration_scale 0
+          adb devices
+
+      - name: Push test media into the gallery
+        run: |
+          # 全程 tee 落盘回传（失败时 ci-log 一起提交）；单条失败不中断（走查自会暴露缺图）
+          {
+            pip install --quiet pillow && echo "pillow ok" || echo "pillow FAIL"
+            python3 scripts/emulator_audit_gen_media.py || echo "gen FAIL"
+            ls -la media_out || true
+            adb push media_out/portrait_test.jpg /sdcard/Pictures/portrait_test.jpg || true
+            adb push media_out/landscape_test.jpg /sdcard/Pictures/landscape_test.jpg || true
+            adb push media_out/tiny.jpg /sdcard/Pictures/tiny.jpg || true
+            # 扫描进 MediaStore（Photo Picker 的数据源）；scan_file 不支持时退回 scan_volume
+            for f in portrait_test.jpg landscape_test.jpg tiny.jpg; do
+              adb shell content call --uri content://media/ --method scan_file --arg /sdcard/Pictures/$f || true
+            done
+            adb shell content call --uri content://media/ --method scan_volume --arg external_primary || true
+            echo '--- gallery contents ---'
+            adb shell content query --uri content://media/external/images/media --projection _display_name || true
+          } 2>&1 | tee media-push.log
+          adb shell ls /sdcard/Pictures || true
+          # ⚠️ 等图库真正就绪（上一轮走查在扫描完成前打开 picker ⇒ 空图库）
+          timeout 90 bash -c 'until [ "$(adb shell content query --uri content://media/external/images/media --projection _display_name 2>/dev/null | grep -c portrait_test)" -ge 1 ]; do sleep 3; done' || echo "WARN: portrait_test not in MediaStore after 90s"
+          adb shell content query --uri content://media/external/images/media --projection _display_name || true
+
+      - name: Launch app and run UI walkthrough
+        run: |
+          adb install -r app/build/outputs/apk/debug/app-debug.apk
+          mkdir -p audit-art/shots audit-art/xml
+          adb logcat -c
+          python3 scripts/emulator_audit_drive.py || true
+          # 应用私有调试日志（DebugLog 只写文件不上 logcat）—— 平色渲染/ML 失败的第一手证据。
+          # ⚠️ 引号必须嵌套到设备端：本地 bash 会吃掉单引号（上一轮 sh -c 只拿到 cat 一个词）
+          adb shell "run-as com.hifn.pixelcake.debug sh -c 'ls files/debug 2>/dev/null; cat files/debug/*.txt 2>/dev/null'" > audit-art/app-debuglog.txt || true
+          tail -30 audit-art/app-debuglog.txt || true
+          adb logcat -d -v time > audit-art/logcat-full.txt
+          adb logcat -d -v time -s AndroidRuntime:E DEBUG:C > audit-art/logcat-crash.txt || true
+          echo "--- crash lines ---"; cat audit-art/logcat-crash.txt || true
+
+      - name: Upload audit artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: emulator-audit
+          path: audit-art/
+          if-no-files-found: error
+
+      - name: Commit walkthrough evidence (git 是唯一匿名可读通道 —— artifact 匿名不可下)
+        if: always()
+        run: |
+          git config user.name "ci-log-bot"
+          git config user.email "ci-log-bot@users.noreply.github.com"
+          git add -f audit-art || true
+          git commit -m "ci-shots: emulator walkthrough evidence (run ${{ github.run_id }})" || true
+          git push origin HEAD:emulator-audit || true
+
+      - name: Commit failure log (git 是唯一匿名可读通道；-f 顶掉 gitignore)
+        if: failure()
+        run: |
+          git config user.name "ci-log-bot"
+          git config user.email "ci-log-bot@users.noreply.github.com"
+          # ⚠️ add 必须逐个文件（多 pathspec 任一不匹配 ⇒ 整条 add 原子失败 —— 前两轮
+          # emulator-boot.log 不存在把 build-and-test.log 一起吞了，这就是 246 字节之外
+          # 「提交成功却什么都没有」的根因）
+          {
+            echo "run=${{ github.run_id }} sha=$(git rev-parse HEAD) detached=$(git symbolic-ref -q HEAD || echo detached)"
+            echo "--- status ---"; git status --short | head -20
+            echo "--- files ---"; ls -la build-and-test.log emulator-boot.log 2>&1
+          } > ci-log-diag.txt
+          git add -f build-and-test.log || true
+          git add -f emulator-boot.log || true
+          git add -f media-push.log || true
+          git add -f ci-log-diag.txt || true
+          git commit -m "ci-log: emulator-audit failure (run ${{ github.run_id }})" || true
+          # push 不再吞错误：失败也要落进第二次尝试的文件里
+          git push origin HEAD:emulator-audit 2>&1 | tee push-result.txt || true
+          if ! git merge-base --is-ancestor HEAD origin/emulator-audit 2>/dev/null; then
+            git add -f push-result.txt || true
+            git commit -m "ci-log: push diagnostic (run ${{ github.run_id }})" || true
+            git push origin HEAD:emulator-audit || true
+          fi
+
+      - name: Upload build log (failure evidence)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-and-test-log
+          path: build-and-test.log

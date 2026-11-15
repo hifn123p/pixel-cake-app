@@ -1,6 +1,7 @@
 package com.hifn.pixelcake.ui.settings
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -12,6 +13,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
@@ -26,11 +28,13 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.platform.LocalContext
 import com.hifn.pixelcake.core.decode.ExportFormat
 import com.hifn.pixelcake.core.ml.MlMaskProvider
 import com.hifn.pixelcake.diag.DebugLog
 import com.hifn.pixelcake.ui.components.GlassCard
+import com.hifn.pixelcake.ui.components.amberChipColors
 import com.hifn.pixelcake.ui.components.SectionHeader
 import com.hifn.pixelcake.ui.theme.LocalDarkTheme
 import com.hifn.pixelcake.ui.theme.Ok
@@ -74,6 +78,11 @@ import java.io.File
  * [AppSettings] 的属性本身就是可观察状态 + 自动持久化，读的地方读属性、
  * 写的地方写属性 —— 只有一条路径，不存在「忘记存」。
  */
+/** 导出调试日志的三态（审计 C-F13）：失败也要可见，不能与「还没试过」同貌。 */
+private const val LOG_IDLE = 0
+private const val LOG_EXPORTED = 1
+private const val LOG_EXPORT_FAILED = 2
+
 @Composable
 fun SettingsScreen(
     settings: AppSettings,
@@ -86,7 +95,7 @@ fun SettingsScreen(
     var showModelCenter by remember { mutableStateOf(false) }
     // 「端侧模型」状态的刷新计数：`MlMaskProvider` 没有可观察性，改它做 key 即可重读快照。
     var modelRefresh by remember { mutableStateOf(0) }
-    var logExported by remember { mutableStateOf(false) }
+    var logExportState by remember { mutableStateOf(LOG_IDLE) }
     var cacheMiB by remember { mutableStateOf<Long?>(null) }
     // 版本号只需读一次（同一个进程内不会变）。
     val version = remember(context) { appVersionLabel(context) }
@@ -144,15 +153,15 @@ fun SettingsScreen(
 
                 Spacer(Modifier.height(Spacing.m))
 
-                SettingRow(
+                // v0.7.2（审计 C-F10）：开关行整行 `toggleable(role = Role.Switch)` 合并语义 ——
+                // TalkBack 读得出「降低透明度，开关」，点行任意处都能拨；Switch 本身
+                // `onCheckedChange = null` 避免双焦点。
+                SettingSwitchRow(
                     title = "降低透明度",
-                    subtitle = "毛玻璃换成实心底，提升文字可读性"
-                ) {
-                    Switch(
-                        checked = settings.lowTransparency,
-                        onCheckedChange = { settings.lowTransparency = it }
-                    )
-                }
+                    subtitle = "毛玻璃换成实心底，提升文字可读性",
+                    checked = settings.lowTransparency,
+                    onChange = { settings.lowTransparency = it }
+                )
 
                 Spacer(Modifier.height(Spacing.xs))
                 Text(
@@ -161,6 +170,18 @@ fun SettingsScreen(
                     "注：Android 没有系统级的「降低透明度」开关，因此这是应用内设置。",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Spacer(Modifier.height(Spacing.m))
+
+                // 「放大文本」（UI3.0 §6.1 明文红线：fontScale ≥1.3 需提供独立开关，
+                // 审计 A-P3-14）：生效字号 = max(系统字号, 1.3×)，包装在 MainActivity 的
+                // LocalDensity 里；Deck/Rail 的 heightIn(min) 已经按「只能长高不许裁」设计。
+                SettingSwitchRow(
+                    title = "放大文本",
+                    subtitle = "在系统字号基础上再放大到 1.3×，布局让位不裁切",
+                    checked = settings.largeText,
+                    onChange = { settings.largeText = it }
                 )
             }
         }
@@ -222,15 +243,12 @@ fun SettingsScreen(
                 )
                 Spacer(Modifier.height(Spacing.m))
 
-                SettingRow(
+                SettingSwitchRow(
                     title = "默认开启自动蒙版",
-                    subtitle = "磨皮与液化只作用于 AI 识别出的皮肤区；画笔涂抹可补正"
-                ) {
-                    Switch(
-                        checked = settings.autoMask,
-                        onCheckedChange = { settings.autoMask = it }
-                    )
-                }
+                    subtitle = "磨皮与液化只作用于 AI 识别出的皮肤区；画笔涂抹可补正",
+                    checked = settings.autoMask,
+                    onChange = { settings.autoMask = it }
+                )
 
                 Spacer(Modifier.height(Spacing.s))
                 Text(
@@ -277,9 +295,14 @@ fun SettingsScreen(
                 TextButton(
                     onClick = {
                         // D4：递归删除是潜在几千个文件的磁盘 IO，绝不能在主线程做。
-                        // 立即清零显示值（删除完成后占用本来就归零），删除在 IO 线程跑完。
-                        cacheScope.launch(Dispatchers.IO) { context.cacheDir.clearChildren() }
-                        cacheMiB = 0L
+                        // v0.7.2（审计 C-F6）：删除后**重新测量**而不是乐观置 0 ——
+                        // 个别文件被占用删不掉时（导出中转、in-flight 临时文件），
+                        // 显示值必须反映真实占用。
+                        cacheScope.launch(Dispatchers.IO) {
+                            context.cacheDir.clearChildren()
+                            cacheMiB = context.cacheDir.dirSizeBytes() / (1024L * 1024L)
+                        }
+                        cacheMiB = null  // 删除期间显示「统计中…」，不让旧数字冒充已清空
                     }
                 ) { Text("清理缓存") }
             }
@@ -318,7 +341,28 @@ fun SettingsScreen(
                     title = "恢复默认设置",
                     subtitle = "只重置本页选项；不动缓存，也不会碰你的照片"
                 ) {
-                    TextButton(onClick = { settings.reset() }) { Text("恢复") }
+                    // v0.7.2（审计 C-F12）：一键毁掉主题/透明度/放大文本/导出格式/画质/自动蒙版
+                    // 属破坏性操作，弹确认窗；误触点「取消」即可无损返回。
+                    var confirmReset by remember { mutableStateOf(false) }
+                    TextButton(onClick = { confirmReset = true }) { Text("恢复") }
+                    if (confirmReset) {
+                        AlertDialog(
+                            onDismissRequest = { confirmReset = false },
+                            title = { Text("恢复全部默认设置？") },
+                            text = { Text("主题、透明度、放大文本、导出格式与画质、自动蒙版都会回到默认值。") },
+                            confirmButton = {
+                                TextButton(
+                                    onClick = {
+                                        settings.reset()
+                                        confirmReset = false
+                                    }
+                                ) { Text("恢复") }
+                            },
+                            dismissButton = {
+                                TextButton(onClick = { confirmReset = false }) { Text("取消") }
+                            }
+                        )
+                    }
                 }
 
                 Spacer(Modifier.height(Spacing.s))
@@ -336,15 +380,21 @@ fun SettingsScreen(
 
                 SettingRow(
                     title = "导出调试日志",
-                    subtitle = if (logExported) "已触发系统分享" else "排查真机问题时导出给开发者"
+                    subtitle = when (logExportState) {
+                        LOG_EXPORTED -> "已触发系统分享"
+                        LOG_EXPORT_FAILED -> "导出失败（没有可分享的日志文件）"
+                        else -> "排查真机问题时导出给开发者"
+                    }
                 ) {
-                    TextButton(onClick = { logExported = DebugLog.export(context) }) { Text("导出") }
+                    TextButton(onClick = {
+                        logExportState = if (DebugLog.export(context)) LOG_EXPORTED else LOG_EXPORT_FAILED
+                    }) { Text("导出") }
                 }
 
-                if (logExported) {
+                if (logExportState != LOG_IDLE) {
                     Spacer(Modifier.height(Spacing.xs))
                     Text(
-                        "已导出",
+                        if (logExportState == LOG_EXPORT_FAILED) "导出失败" else "已导出",
                         style = MaterialTheme.typography.labelSmall,
                         // ⚠️ 设置页**跟随系统主题**（不在 `PixelCakeWorkspaceTheme` 里），
                         // 所以成功色要按**生效主题**选，不能写死一个：
@@ -352,7 +402,9 @@ fun SettingsScreen(
                         // 工作台那组 `WsOk`(#4CC38A) 是 8.46:1。
                         // ⚠️ 判据用 [LocalDarkTheme]（生效主题），不是 `isSystemInDarkTheme()` ——
                         // 后者在「编辑页强制深色」的场景下会取错色板（见 Theme.kt 的说明）。
-                        color = if (LocalDarkTheme.current) WsOk else Ok
+                        color = if (logExportState == LOG_EXPORT_FAILED) {
+                            MaterialTheme.colorScheme.error
+                        } else if (LocalDarkTheme.current) WsOk else Ok
                     )
                 }
             }
@@ -422,7 +474,8 @@ private data class ModelStatus(
     val permanent: Boolean,
     val oom: Int,
     val threshold: Int,
-    val cachedSide: Int
+    val cachedSide: Int,
+    val lastError: String? = null
 )
 
 /**
@@ -447,7 +500,8 @@ private fun ModelStatusRows(refreshKey: Int, onRefresh: () -> Unit) {
             permanent = MlMaskProvider.isPermanentlyDisabled,
             oom = MlMaskProvider.oomCountForUi,
             threshold = MlMaskProvider.oomThreshold,
-            cachedSide = MlMaskProvider.cachedSideForUi
+            cachedSide = MlMaskProvider.cachedSideForUi,
+            lastError = MlMaskProvider.lastLoadErrorForUi
         )
     }
     // ⚠️ 顺序有意义：熔断优先于「就绪」。一台设备可能**先成功加载过**（accelerator 非 null）、
@@ -459,19 +513,15 @@ private fun ModelStatusRows(refreshKey: Int, onRefresh: () -> Unit) {
             "本会话已关闭：OOM ${status.oom}/${status.threshold}，换图后会再试"
         status.accelerator != null -> "就绪 · 走 ${status.accelerator}"
         status.resolved -> "已加载，但未报告加速器名"
+        // v0.7.2（审计 C-F5）：把「预热过了但失败」与「还没预热」区分开 ——
+        // 旧文案「打开一张照片后自动预热」在失败场景是误导。
+        status.lastError != null -> "加载失败 · ${status.lastError}"
         else -> "未加载 · 打开一张照片后自动预热"
     }
     SettingRow(title = "模型状态", subtitle = stateText) {
-        Text(
-            "刷新",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.clickable(
-                interactionSource = null,
-                indication = null,
-                onClick = onRefresh
-            )
-        )
+        // v0.7.2（审计 C-F9）：裸 Text 的触达只有 ~30×18dp（全页唯一 <48dp 目标）且无
+        // 按钮语义 —— 换 TextButton 一举两得。
+        TextButton(onClick = onRefresh) { Text("刷新") }
     }
     Spacer(Modifier.height(Spacing.s))
     SettingRow(
@@ -482,6 +532,45 @@ private fun ModelStatusRows(refreshKey: Int, onRefresh: () -> Unit) {
             "空 · 还没推理过任何图片"
         }
     ) {}
+}
+
+/**
+ * 开关行（审计 C-F10）：整行 `toggleable(role = Role.Switch)` + Switch 空回调 ——
+ * M3 无障碍合并语义的标准做法：TalkBack 把行文字读作开关名，点行任意处都能拨；
+ * 视觉上与 [SettingRow] 完全一致。
+ */
+@Composable
+private fun SettingSwitchRow(
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    onChange: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .toggleable(
+                value = checked,
+                role = Role.Switch,
+                onValueChange = onChange
+            ),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(end = Spacing.m)
+        ) {
+            Text(title, style = MaterialTheme.typography.bodyMedium)
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Switch(checked = checked, onCheckedChange = null)
+    }
 }
 
 @Composable
@@ -532,7 +621,10 @@ private fun <T> ChipSelector(
                 selected = option == selected,
                 onClick = { onSelect(option) },
                 label = { Text(label(option)) },
-                shape = Radius.chip
+                shape = Radius.chip,
+                // 选中态走共享琥珀配色（截图实测：裸 FilterChip 是 M3 紫灰 —— A-P1-1 的
+                // 第三个漏网点；教训：全局配色纪律必须落在「每一处裸 FilterChip」上）
+                colors = amberChipColors()
             )
         }
     }

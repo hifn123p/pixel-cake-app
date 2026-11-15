@@ -10,6 +10,8 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -44,6 +46,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.TextButton
@@ -119,6 +122,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -192,6 +196,13 @@ private const val DOUBLE_TAP_MS = 280L
  * 底图的作用是给玻璃层提供可透出的色彩信息，不是当壁纸。
  */
 private const val BACKDROP_ALPHA = 0.26f
+
+/**
+ * 中央 HUD 读数的「数值 / 单位」拆分（规范 `.bighud .pv em` 的同构实现）：
+ * 头部 = 带符号数字（含小数点/千位逗号），尾部 = 全部剩余字符（% / ° / K…）。
+ * 整串不匹配（理论上不存在）时调用方回退为单段渲染。
+ */
+private val HUD_VALUE_SPLIT = Regex("^([+-]?[0-9.,]+)(.*)$")
 
 /**
  * 编辑工作台 —— UI 3.0「Aperture」One-Surface 架构。
@@ -471,9 +482,19 @@ fun EditorScreen(
 
     // —— 直方图数据：随每次渲染完成在后台重算（采样步长按像素数分档），
     // 顶部直方图条消费；读取失败（位图竞态兜底）时条不占位。
+    //
+    // ⚠️ 清空时机（审计 B-3，v0.7.2 修订）：原版在**每次**渲染批次都先 `value = null` ——
+    // 拖滑块时每 100~300ms 一个批次，直方图条随之反复卸载，竖屏 Column 里
+    // `Spacer(weight(1f))` 跟着一胀一缩：拖动期间 Deck / 拖高把手 / Rail 整体弹跳，
+    // RGB 条与自动增强按钮闪烁。现在**只在换图时清**（`original` 引用变了才清）：
+    // 同一张图内迟一帧的直方图对启发式（自动增强）是可接受的，跨图陈旧才必须作废。
+    val lastHistogramSource = remember { AtomicReference<Bitmap?>(null) }
     val histogram by produceState<Triple<FloatArray, FloatArray, FloatArray>?>(null, renderVersion, rendered) {
-        // P0-3 A8：换图 / 每帧先清旧值 —— 防止陈旧直方图被 onAutoEnhance 消费
-        value = null
+        // P0-3 A8（修订）：换图先清旧值 —— 防止上一张图的陈旧直方图被 onAutoEnhance 消费
+        if (lastHistogramSource.get() !== original) {
+            value = null
+            lastHistogramSource.set(original)
+        }
         val bmp = rendered ?: return@produceState
         // P1-2 A2：三件事一起修 ——
         // ① 与渲染/回收**共用同一把 `renderMutex`**：`getPixels` 是位图像素读，
@@ -554,6 +575,23 @@ fun EditorScreen(
         animationSpec = Motion.springSpatial(),
         label = "deckHeight"
     )
+    // Deck 用户拖高的覆盖值（竖屏专用；横屏侧栏恒满高，见 landscape 分支）。
+    // ⚠️ 上限 = **L 档 × deckScale**，不是以前的 520dp：规范 §08 硬约束
+    // 「固定高控制台（任何时刻最多 330dp，永远看得见照片）」——520dp 的自由度
+    // 会把 6.7 寸屏的照片区压到不足一半。上限跟 deckScale 走，fontScale 1.3 时为 356dp
+    // （与「L 档随字号放宽」的既有口径一致）；语义把手上的等价点击（默认↔最大）也用它。
+    // 提升到函数级作用域：中央 HUD / PreviewNotes 的 bottom padding 也按覆盖值算（审计 B-10），
+    // 否则拖高 Deck 后 HUD 会画到 Deck 面板底下。
+    var deckHOverride by remember { mutableStateOf<Dp?>(null) }
+    val deckEffH = deckHOverride ?: deckH
+
+    // 回执「预设」行的显示名（审计 B-11）：内置预设查表、自定义预设查用户库，
+    // 都查不到（理论不可达）才回退裸 id —— 自定义 id 是「custom:<uuid 片段>」，显示出来是乱码。
+    val presetReceiptName: () -> String = {
+        presets.firstOrNull { it.id == activePresetId }?.name
+            ?: customPresets.firstOrNull { it.id == activePresetId }?.name
+            ?: activePresetId
+    }
 
     val hudSetter: (Pair<String, String>?) -> Unit = { p ->
         if (p == null) hudActive = false else { hud = p; hudActive = true }
@@ -632,12 +670,19 @@ fun EditorScreen(
                 }
             } else null
 
+            // 照片框的预留区**按方向分流**（审计 B-1，v0.7.2）：
+            // 竖屏 = 顶栏+直方图条（上）与 Deck+Rail（下）；横屏 Deck 是右侧栏，
+            // 底部只剩 Rail ⇒ 预留高度若仍按竖屏算（330+58+16 ≈ 404dp），加上顶部 96dp
+            // 会超过任何手机横屏的高度（≈412dp）⇒ 照片框实测高度归零、画面**整张消失**。
+            // 同时横屏照片框右缘让开 400dp 侧栏：fit 矩形以「可见左列」为准，
+            // 否则照片以全宽居中，右半被不透明侧栏盖住且不居中。
             val photoTopPad = 96.dp // statusbar + topbar + histogram（近似值，onSizeChanged 会给准确值）
-            val photoBottomPad = deckH + RAIL_HEIGHT + 16.dp
+            val photoBottomPad = if (landscape) RAIL_HEIGHT + 24.dp else deckH + RAIL_HEIGHT + 16.dp
+            val photoEndPad = if (landscape) 400.dp else 0.dp
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(top = photoTopPad, bottom = photoBottomPad)
+                    .padding(top = photoTopPad, bottom = photoBottomPad, end = photoEndPad)
                     .onSizeChanged { photoBoxSize = it }
                     .clipToBounds()
                     // T4 无障碍：画布手势是自绘交互，读屏用户需要知道这块能做什么。
@@ -732,7 +777,8 @@ fun EditorScreen(
                                 )
                                 drawCircle(
                                     color = Color.White,
-                                    radius = 9.dp.toPx(),
+                                    // 规范 §09：grip 36px（此前 18dp 偏小，捏在手势密集区不好认）
+                                    radius = 18.dp.toPx(),
                                     center = Offset(x, size.height / 2f)
                                 )
                                 drawCircle(
@@ -770,6 +816,10 @@ fun EditorScreen(
                                         }
                                     }
                             )
+                            // 规范 §09「两端『修后 / 原图』标签」：线的两侧谁是谁（审计 A-P3-8）。
+                            // 规范未指明锚点，这里取相框两上角 —— 分割线靠近边缘时依然可读。
+                            SplitTag("原图", Modifier.align(Alignment.TopStart))
+                            SplitTag("修后", Modifier.align(Alignment.TopEnd))
                         }
                     } else {
                         Image(
@@ -786,6 +836,55 @@ fun EditorScreen(
                 // 拾取模式：整幅照片压暗 + 顶部提示（设计 §D）；单击命中后由 pickNote 回显结果
                 if (pickActive) {
                     Box(Modifier.fillMaxSize().background(Color(0x73000000)))
+                    // —— 蒙版可视化（规范 §D「琥珀虚线轮廓」/ §05「琥珀填充 14%」；
+                    //     审计 A-P2-2：此前拾取命中后只有压暗层与文字，AI 认出了什么完全是黑箱）——
+                    // v1 实现：把选中作用域的蒙版网格物化成 256² 琥珀位图（`maskFor` 懒构建的
+                    // 那份共享网格，一次 ≈ 256KB），按照片同一 fit 变换叠在压暗层之上；
+                    // 400ms alpha 生长做「描完」的观感。虚线描边轮廓需要 marching-squares，
+                    // 本版先不做（填充已能表达「AI 认出了什么」），记录为后续打磨项。
+                    // ⚠️ 坐标口径与 `scopeAt` / 渲染蒙版一致：推理输入是整图拉伸到 256²
+                    // （MlMaskProvider.ensureProbs 的 createScaledBitmap），网格坐标即图像归一化坐标。
+                    val pickMask by produceState<ImageBitmap?>(null, objectMasks, scope) {
+                        val masksNow = objectMasks ?: return@produceState
+                        val sc = scope ?: return@produceState
+                        value = null
+                        value = withContext(Dispatchers.Default) {
+                            runCatching {
+                                val side = masksNow.gridSide
+                                val m = masksNow.maskFor(sc).resampleTo(side, side)
+                                val bmp = Bitmap.createBitmap(side, side, Bitmap.Config.ARGB_8888)
+                                val px = IntArray(side * side)
+                                var i = 0
+                                for (y in 0 until side) {
+                                    for (x in 0 until side) {
+                                        val a = (m.sample(x, y) * 0.26f * 255f).roundToInt().coerceIn(0, 255)
+                                        px[i] = if (a > 0) ((a shl 24) or 0xFFB454) else 0
+                                        i++
+                                    }
+                                }
+                                bmp.setPixels(px, 0, side, 0, 0, side, side)
+                                bmp.asImageBitmap()
+                            }.getOrNull()
+                        }
+                    }
+                    val maskAlpha by animateFloatAsState(
+                        targetValue = if (pickMask != null) 1f else 0f,
+                        animationSpec = tween(Motion.durationFor(400), easing = Motion.easingOut),
+                        label = "pickMaskAlpha"
+                    )
+                    val maskFrame = Modifier
+                        .size(with(density) { dispW.toDp() }, with(density) { dispH.toDp() })
+                        .offset { IntOffset(previewPan.x.roundToInt(), previewPan.y.roundToInt()) }
+                        .clip(Radius.chip)
+                        .alpha(maskAlpha)
+                    pickMask?.let {
+                        Image(
+                            bitmap = it,
+                            contentDescription = "当前作用域蒙版预览",
+                            contentScale = ContentScale.FillBounds,
+                            modifier = maskFrame
+                        )
+                    }
                     CapsuleNote(
                         "点一下要调整的对象",
                         modifier = Modifier
@@ -835,7 +934,9 @@ fun EditorScreen(
                         ) {
                             Crossfade(
                                 targetState = category,
-                                animationSpec = tween(Motion.durationFor(Motion.base), easing = Motion.easingOut),
+                                // 规范 §05：「内容交叉淡入 **120ms**」——原 240ms（Motion.base）是
+                                // 拿全局档位顺手写重了；页签切换要轻快（审计 A-P3-13）。
+                                animationSpec = tween(Motion.durationFor(120), easing = Motion.easingOut),
                                 label = "paramCategory"
                             ) { cat ->
                                 // 每个分类自己的登记簿实例：Crossfade 过渡期新旧内容同在组合，
@@ -947,6 +1048,9 @@ fun EditorScreen(
                         }
                             Spacer(Modifier.weight(1f))
                         // ———— Rail 工具栏（六工具，图标 + 文字）————
+                        // Rail 同 deck 一起进亮档（审计 A-P2-1）：它是悬浮 chrome，
+                        // 亮照片上石墨色玻璃同样「压不住」。
+                        ChromeSkin(lightChrome) {
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -962,16 +1066,22 @@ fun EditorScreen(
                             )
                         }
                         }
-                        Box(
-                            modifier = Modifier
-                                .fillMaxHeight()
-                                .width(400.dp)
-                                .background(
-                                    MaterialTheme.colorScheme.surface,
-                                    RoundedCornerShape(topStart = 20.dp)
-                                )
-                        ) {
-                            deckInner()
+                        }
+                        // 亮档覆盖面（审计 A-P2-1，v0.7.2）：规范 §H「控制台与顶栏的明暗
+                        // **跟随照片**」，deck 是「控制台」本体 —— 侧栏一并进 ChromeSkin。
+                        // §12.1 原记录「规范只要求 .tb/.histstrip 两处」引用有误，已更正。
+                        ChromeSkin(lightChrome) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxHeight()
+                                    .width(400.dp)
+                                    .background(
+                                        MaterialTheme.colorScheme.surface,
+                                        RoundedCornerShape(topStart = 20.dp)
+                                    )
+                            ) {
+                                deckInner()
+                            }
                         }
                     }
                 } else {
@@ -992,8 +1102,7 @@ fun EditorScreen(
                 Spacer(Modifier.weight(1f))
                 // ———— Deck 拖拽调高手柄（用户可自由调整 Deck 高度）————
                 // 上拖 = Deck 变高（更多参数可见），下拖 = 变矮（更多照片可见）。
-                // 拖拽只改 deckHOverride，不触发动画（跟手）。
-                var deckHOverride by remember { mutableStateOf<Dp?>(null) }
+                // 拖拽只改 deckHOverride，不触发动画（跟手）。上限见 deckHOverride 的 KDoc。
                 val deckDragHandle = Modifier
                     .fillMaxWidth()
                     .height(20.dp)
@@ -1002,7 +1111,7 @@ fun EditorScreen(
                             change.consume()
                             val current = deckHOverride ?: deckH
                             deckHOverride = (current - dragAmount.toDp())
-                                .coerceIn(160.dp, 520.dp)
+                                .coerceIn(160.dp, DECK_HEIGHT_L * deckScale)
                         }
                     }
                 Box(
@@ -1034,10 +1143,11 @@ fun EditorScreen(
                 // 实心容器（零 blur），顶部 20dp 圆角。高度由拖拽手柄或分类切换决定。
                 // 作用域行 / 分组 chips 钉在滚动之外；内容区滚动兜底（4 滑块的组）。
                 // ⚠️ 这里是参数的一部分（决定「改谁 / 改什么」），**不**随 chrome 淡出。
+                ChromeSkin(lightChrome) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(deckHOverride ?: deckH)
+                        .height(deckEffH)
                         .background(
                             MaterialTheme.colorScheme.surface,
                             RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
@@ -1045,7 +1155,9 @@ fun EditorScreen(
                 ) {
                     deckInner()
                 }
+                }
                 // ———— Rail 工具栏（六工具，图标 + 文字）————
+                ChromeSkin(lightChrome) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1059,6 +1171,7 @@ fun EditorScreen(
                         onSelect = { category = it },
                         modifier = Modifier.heightIn(min = RAIL_HEIGHT)
                     )
+                }
                 }
                 }
             }
@@ -1094,14 +1207,33 @@ fun EditorScreen(
                 // 中央 HUD：拖动时随读数更新浮现；松手**停 800ms 再 300ms 淡出**
                 // （规范 `.bighud` 口径：读数要让人读完，不是闪一下就跑）。
                 // 数据来自 LocalHudReporter；位置固定在 Deck 上方、照片下三分之一。
+                //
+                // v0.7.2 对齐规范三处（§03 `.bighud`）：
+                // ① 进场带 `translateY(14px) scale(.94)` 上浮，不再只有纯 fadeIn；
+                // ② 退场的裸 `tween(300)` 补上 `Motion.durationFor`（系统关动画时必须坍缩，
+                //    硬约定见 Motion.kt：「漏写就会出现系统关了动画、App 还在动」）；
+                // ③ 读数双色 = **墨白数值 + 琥珀单位**（`.pv{color:var(--ink)} .pv em{color:var(--amber)}`）：
+                //    整串琥珀违反「琥珀只出现在四处」纪律，且 46sp 的大字琥珀压在照片上偏脏。
+                //    尾部非数字段（% / ° / K…）单独 17sp 琥珀 —— 与规范的 `<em>` 结构同构。
+                // 保留胶囊底（规范没有）：HUD 直接压在照片上，无底白字在亮部照片上会读不清，
+                // 这条作为有意取舍记录（对应审计 A-P3-1 的「二选一」）。
                 AnimatedVisibility(
                     visible = hudShown,
-                    enter = fadeIn(tween(Motion.durationFor(Motion.fast), easing = Motion.easingOut)),
-                    exit = fadeOut(tween(300, easing = Motion.easingOut)),
+                    enter = fadeIn(tween(Motion.durationFor(Motion.fast), easing = Motion.easingOut)) +
+                        slideInVertically(
+                            animationSpec = tween(Motion.durationFor(Motion.base), easing = Motion.easingOut),
+                            initialOffsetY = { full -> (full * 0.14f).roundToInt() }
+                        ) +
+                        scaleIn(
+                            initialScale = 0.94f,
+                            animationSpec = tween(Motion.durationFor(Motion.base), easing = Motion.easingOut)
+                        ),
+                    exit = fadeOut(tween(Motion.durationFor(300), easing = Motion.easingOut)),
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .navigationBarsPadding()
-                        .padding(bottom = deckH + RAIL_HEIGHT + 18.dp)
+                        // deckEffH（含用户拖高覆盖值）：拖高 Deck 后 HUD 不能画到面板底下（审计 B-10）
+                        .padding(bottom = deckEffH + RAIL_HEIGHT + 18.dp)
                 ) {
                     hud?.let { (name, value) ->
                         Column(
@@ -1113,23 +1245,56 @@ fun EditorScreen(
                         ) {
                             Text(
                                 text = name,
-                                style = MaterialTheme.typography.labelMedium,
+                                style = MaterialTheme.typography.labelMedium.copy(
+                                    // 规范 `.pn` letter-spacing .1em（13sp × 0.1 ≈ 1.3sp）
+                                    letterSpacing = 1.3.sp
+                                ),
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                            Text(
-                                text = value,
-                                // 规范 `.bighud .pv{font-size:46px;font-weight:300;line-height:1.15}`
-                                // ⇒ 46sp / **Light(300)**（原来 40sp + Normal，尺寸与字重都偏轻，
-                                // 「巨大 HUD」不够巨大）。`tnum` 保持数值等宽（规范要求 tabular-nums）。
-                                style = TextStyle(
-                                    fontFamily = FontFamily.Monospace,
-                                    fontWeight = FontWeight.Light,
-                                    fontSize = 46.sp,
-                                    lineHeight = 53.sp,
-                                    fontFeatureSettings = "tnum"
-                                ),
-                                color = MaterialTheme.colorScheme.primary
-                            )
+                            val hudParts = HUD_VALUE_SPLIT.matchEntire(value)
+                            if (hudParts != null) {
+                                val (num, unit) = hudParts.destructured
+                                Row(verticalAlignment = Alignment.Bottom) {
+                                    Text(
+                                        text = num,
+                                        // 规范 `.bighud .pv{font-size:46px;font-weight:300;line-height:1.15}`
+                                        // ⇒ 46sp / **Light(300)**、数值墨白。`tnum` 保持数值等宽。
+                                        style = TextStyle(
+                                            fontFamily = FontFamily.Monospace,
+                                            fontWeight = FontWeight.Light,
+                                            fontSize = 46.sp,
+                                            lineHeight = 53.sp,
+                                            fontFeatureSettings = "tnum"
+                                        ),
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    if (unit.isNotEmpty()) {
+                                        Text(
+                                            text = unit,
+                                            style = TextStyle(
+                                                fontFamily = FontFamily.Monospace,
+                                                fontWeight = FontWeight.Light,
+                                                fontSize = 17.sp,
+                                                fontFeatureSettings = "tnum"
+                                            ),
+                                            color = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.padding(start = 6.dp, bottom = 8.dp)
+                                        )
+                                    }
+                                }
+                            } else {
+                                Text(
+                                    text = value,
+                                    style = TextStyle(
+                                        fontFamily = FontFamily.Monospace,
+                                        fontWeight = FontWeight.Light,
+                                        fontSize = 46.sp,
+                                        lineHeight = 53.sp,
+                                        fontFeatureSettings = "tnum"
+                                    ),
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
                         }
                     }
                 }
@@ -1138,7 +1303,8 @@ fun EditorScreen(
                     autoMaskNote = autoMaskNote,
                     liquifyNote = liquifyNote,
                     pickNote = pickNote,
-                    bottomPadding = deckH + RAIL_HEIGHT + 76.dp
+                    // deckEffH：与 HUD 同口径，拖高 Deck 后提示胶囊不被盖住（审计 B-10）
+                    bottomPadding = deckEffH + RAIL_HEIGHT + 76.dp
                 )
             }
         }
@@ -1167,8 +1333,17 @@ fun EditorScreen(
     // 与「IS_PENDING 清不掉」两条静默失败（否则相册里会有 0 字节图、界面还报成功）。
     // T2：弹层打开时系统返回**先关弹层**而不是退出编辑器。预测性返回手势下
     // 没有 BackHandler 的弹层等于「一按返回 App 没了」—— 导出单与历史面板都一样。
-    BackHandler(enabled = showExport) { showExport = false }
+    // ⚠️ 导出进行中返回**不关面板**（审计 B-9）：BackHandler 走的这条路不经过
+    // `onDismissRequest` 的 exporting 门，原版一按返回就把进度与「取消导出」一起藏掉，
+    // 导出还在后台跑，用户只能干等。
+    BackHandler(enabled = showExport && !exporting) { showExport = false }
     BackHandler(enabled = showHistory) { showHistory = false }
+    // 拾取模式有自己的出口（准星按钮）：系统返回先退出拾取，而不是整个编辑器
+    // （审计 B-8 —— 原版拾取中按返回直接退掉会话，正在选的对象与未保存的调整一起丢失）。
+    BackHandler(enabled = pickActive) {
+        pickActive = false
+        pickNote = ""
+    }
 
     // ———— 5. 历史丝带（`UI3.0.html` §09 顶栏「历史」）————
     //
@@ -1284,11 +1459,14 @@ fun EditorScreen(
                 .clickable(interactionSource = null, indication = null) { onDismissExportReceipt() },
             contentAlignment = Alignment.BottomCenter
         ) {
+            // v0.7.2 对齐规范 §I（审计 A-P3-9）：radius 24（shell 档）、行间 1px 分隔、
+            // 数值行改墨白（.rv 是 ink，不再是灰的 onSurfaceVariant）、
+            // 「分享」改中性描边次级样式（琥珀只给「完成」主操作）。
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(Spacing.page)
-                    .clip(RoundedCornerShape(28.dp))
+                    .clip(Radius.shell)
                     .background(MaterialTheme.colorScheme.surface)
                     .clickable(interactionSource = null, indication = null) { /* 吃掉点击，别穿透到底下遮罩 */ }
                     .padding(Spacing.xl),
@@ -1299,28 +1477,19 @@ fun EditorScreen(
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurface
                 )
-                Text(
-                    "成片已保存到系统相册",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    "格式 / 质量　${exportFormat.name} · $jpegQuality",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                ReceiptRow("成片已保存到系统相册")
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+                ReceiptRow("格式 / 质量　${exportFormat.name} · $jpegQuality")
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
                 // 导出的是**全分辨率**，所以要报原图尺寸而不是预览尺寸 ——
                 // 报预览尺寸会让用户以为「导出变小了」。
-                Text(
-                    "尺寸　${original.width} × ${original.height}",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                ReceiptRow("尺寸　${original.width} × ${original.height}")
                 if (activePresetId != "none") {
-                    Text(
-                        "预设　$activePresetId",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+                    ReceiptRow(
+                        // 预设行显示**名字**而不是裸 id（审计 B-11）：自定义预设的 id 是
+                        // 「custom:<uuid 片段>」，直接显示对用户是乱码；查不到才回退 id。
+                        "预设　" + presetReceiptName()
                     )
                 }
                 Spacer(Modifier.height(Spacing.s))
@@ -1334,8 +1503,15 @@ fun EditorScreen(
                         modifier = Modifier
                             .weight(1f)
                             .clip(Radius.pill)
-                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f))
-                            .clickable {
+                            .border(
+                                1.dp,
+                                MaterialTheme.colorScheme.outlineVariant,
+                                Radius.pill
+                            )
+                            .clickable(
+                                interactionSource = null,
+                                indication = null
+                            ) {
                                 val send = Intent(Intent.ACTION_SEND).apply {
                                     type = "image/*"
                                     putExtra(Intent.EXTRA_STREAM, exportReceipt)
@@ -1350,7 +1526,7 @@ fun EditorScreen(
                         Text(
                             "分享",
                             style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.primary
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                     }
                     Box(
@@ -1510,7 +1686,7 @@ private fun IconAction(
 ) {
     val tint = when {
         selected -> MaterialTheme.colorScheme.primary
-        !enabled -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
+        !enabled -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
         else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
     Box(
@@ -1570,7 +1746,8 @@ private fun ExportPill(
     ) {
         Text(
             text = if (exporting) "导出中" else "导出",
-            style = MaterialTheme.typography.bodyMedium,
+            // 规范 `.expill`：13px / SemiBold（原 bodyMedium 15sp/Regular 偏大偏松，审计 A-P3-2）
+            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
             color = MaterialTheme.colorScheme.primary
         )
     }
@@ -1584,6 +1761,37 @@ private fun ExportPill(
 private val HIST_R = Color(0xFFFF6B6B)
 private val HIST_G = Color(0xFF58C98B)
 private val HIST_B = Color(0xFF6FA8FF)
+
+/** 回执数值行（规范 §I：标签墨白 13sp）。 */
+@Composable
+private fun ReceiptRow(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurface
+    )
+}
+
+/**
+ * 分割对比两端的角标胶囊（规范 §09「修后 / 原图」）。
+ * 11sp 白字 + 半透明黑底：它标在照片上，白线/白柄同款「靠画面自身对比被看见」的口径。
+ */
+@Composable
+private fun SplitTag(text: String, modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .padding(8.dp)
+            .clip(Radius.pill)
+            .background(Color.Black.copy(alpha = 0.45f))
+            .padding(horizontal = 10.dp, vertical = 4.dp)
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelSmall,
+            color = Color.White
+        )
+    }
+}
 
 /**
  * 顶部直方图条（UI 3.0）：三通道半透明叠加，偏色一眼可见。点击收起 / 展开。
@@ -1604,14 +1812,17 @@ private fun HistogramStrip(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 10.dp, vertical = 6.dp)
-                .clip(Radius.card)
-                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.92f))
+                // 规范 §04-B 直方图条 radius 14px —— 本项目圆角阶梯只有 12/20/28/24+胶囊
+                // （Radius.kt），14 不在梯上；取最近的小控件档 chip（12dp），2dp 偏差作为
+                // 「守梯级优先」的决策记录（审计 A-P3-3）。
+                .clip(Radius.chip)
+                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.82f))
                 .clickable(interactionSource = null, indication = null, onClick = onToggle)
                 // T4 无障碍：直方图是纯 Canvas 自绘，不给语义就是哑块。
                 .semantics { contentDescription = "RGB 直方图，点按可收起或展开" }
                 .padding(horizontal = 12.dp, vertical = 6.dp)
         ) {
-            Canvas(modifier = Modifier.fillMaxWidth().height(26.dp)) {
+            Canvas(modifier = Modifier.fillMaxWidth().height(22.dp)) {
                 val channels = listOf(data.first to HIST_R, data.second to HIST_G, data.third to HIST_B)
                 for ((arr, color) in channels) {
                     val n = arr.size
@@ -1739,6 +1950,11 @@ private fun Modifier.previewGestures(
                         onParamDragEnd()
                     }
                     mode = 2
+                    // ⚠️ 多指手势必须标记为「拖过」（审计 B-2）：原版只有这里的 zoom/pan
+                    // 更新，`dragged` 保持 false ⇒ 每次捏合结束都会落进下面的 tap 判定 ——
+                    // 瑕疵工具捏一下会在捏合原点盖一个祛瑕点、拾取模式捏一下会误触发一次
+                    // 命中测试、280ms 内两次捏合（或点+捏）还会引爆双击缩放跳档。
+                    dragged = true
                     val zf = event.calculateZoom()
                     val pd = event.calculatePan()
                     if (zf != 1f || pd != Offset.Zero) {

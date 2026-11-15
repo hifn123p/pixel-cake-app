@@ -1302,3 +1302,145 @@ EditorScreen 40+ 回调、MainActivity→EditorScreen 全部实参、Home/Camera
    自愈复位 —— 否则退出按钮随能力一起消失，模式永久卡死（用户只能杀 App）。
 4. **异步写回必须有代次**：凡「同步改状态 A + 异步写回状态 B」的链路（渲染/旋转/系留轮询），
    写回前必须验代次；**退出与换图两个入口都要作废在途代次**，否则晚到的写回复活已清理的状态。
+
+---
+## §19 运行时/视觉全量审计批次（v0.7.2 候选，2026-11-15）
+
+> 触发：项目所有人要求「模拟器全量测试审计代码功能，完善 UI，一次性完成」。
+> 本机纪律不变（零安装）⇒ 三路静态子代理审计（规范↔实现比对 / 编辑器运行时 / 首页-设置-相机）
+> + 云端模拟器走查（见 `.github/workflows/emulator-audit.yml`，截图 artifact 回传人工审）。
+> 审计口径共 2 P1 / 11 P2 / 35 P3，本轮落地以下修复；「记录不实现」的项在 §19.4。
+
+### 19.1 已修清单（20 文件，+修复说明按域分组）
+
+**编辑器（EditorScreen.kt 为主）**
+
+| 级 | 缺陷 | 修法 |
+|---|---|---|
+| **P1** | **横屏手机照片层归零**：photoBox 的 bottom pad 仍按竖屏（deck+rail≈404dp）预留，横屏 412dp 高扣掉顶部 96dp 后实测高度为 0 ⇒ 旋转手机后照片**整张消失** | 照片框 padding 按方向分流：横屏 bottom 只留 Rail（+24dp）、end 让开 400dp 侧栏，fit 矩形以可见左列为准 |
+| P2 | **捏合手势漏进 tap 判定**：双指分支不标 `dragged` ⇒ 瑕疵工具捏一下在原点盖祛瑕点、拾取模式捏一下误触发命中、点+捏 280ms 内引爆双击跳档 | `mode = 2` 分支补 `dragged = true`（多指手势永不产生 tap 语义） |
+| P2 | **直方图每批次清空**：produceState 先 `value = null` 再扫 ⇒ 拖滑块时条反复卸载、Deck/把手/Rail 弹跳 | 只在**换图**时清（`lastHistogramSource !== original` 才置 null），同图内迟一帧可接受 |
+| P2 | **Deck 拖高上限 520dp 破规范**（§08 任何时刻 ≤330dp） | 上限收 `DECK_HEIGHT_L * deckScale`（fontScale 1.3 时 356dp，与 L 档放宽口径一致）；把手「最大高度」语义随之对齐 |
+| P2 | **拾取无蒙版可视化**：命中后只有压暗层与文字，AI 认出了什么全靠脑补 | 选中作用域网格物化 256² 琥珀位图（共享 `maskFor` 缓存），按照片同 fit 变换叠加 + 400ms alpha 生长；虚线轮廓（marching-squares）列后续打磨 |
+| P2 | **亮档只覆盖顶栏/直方图条**：§12.1 引用的「规范只有两个选择器」原文不成立 | Deck（含侧栏）与 Rail 全部进 `ChromeSkin`（规范 §H「控制台与顶栏跟随照片」的如实落地） |
+| P2 | HUD 读数整串琥珀违反「琥珀四处」纪律 | 数值墨白 + 尾部单位（%/°/K…）单独 17sp 琥珀（`.pv em` 同构，`HUD_VALUE_SPLIT` 正则） |
+| P3 | HUD 进场无位移/缩放、退出裸 `tween(300)` | 进场 `slideInVertically(14%)+scaleIn(.94)`；退出补 `durationFor`（关动画坍缩）；保留胶囊底（亮照片可读性，记录为有意） |
+| P3 | Deck 内容交叉淡入 240ms ≠ 规范 120ms | `durationFor(120)` |
+| P3 | 回执卡：radius 28≠24、「分享」琥珀软底当次级用、行无分隔、预设显示裸 id | radius 收 `Radius.shell(24)`、分享改中性描边（顺手修掉带涟漪的默认 clickable）、行加 1px 分隔、预设行显示查表名（找不到才回退 id） |
+| P3 | 分割 grip 18dp 偏小、两端无标签 | grip 36dp（规范），加「原图 / 修后」角标胶囊（锚点未在规范指明，取相框两上角，已注释） |
+| P3 | 顶栏禁用 α 0.38≠0.35、导出 pill 字号字重 | 0.35f；`labelMedium + SemiBold`（`.expill` 13px/SemiBold） |
+| P3 | 拾取模式按返回直接退出编辑器；导出中按返回藏掉进度/取消 | 两处 BackHandler 门控（`pickActive` 自吞；`showExport && !exporting`） |
+| P3 | 拖高 Deck 后 HUD / 提示胶囊画到面板底下 | `deckHOverride` 提升作用域，HUD/PreviewNotes 按 `deckEffH` 计 pad |
+
+**MainActivity / 会话**
+
+| 级 | 缺陷 | 修法 |
+|---|---|---|
+| P3 | `presetThumbs` 退出/换图不清 ⇒ 6.5MB 残留 + 新图预设先显示旧图缩略图 | editorOnBack / openInEditor 复位清单补 `emptyMap()` |
+| P3 | 编辑器内换图的 `compareBase.recycle()` 缺 `withFrameNanos`（A4 同窗口） | 与 onBack 同口径：先等帧、再进锁回收 |
+| P3 | 自动增强写回无代次护栏（违反 §18.4-4） | 发起记 `imageEpoch`，写回前验代次 |
+| P2 | `LocalLowTransparency` 只包 Workspace ⇒ 编辑器收不到「降低透明度」（文档称全 App 生效） | provider 提升到两分支之外 |
+| P3 | 进程死亡丢整会话（唯一剩余状态丢失面） | **记录为已接受决策**（§19.4），SavedStateHandle 恢复属架构级立项 |
+
+**组件 / 主题**
+
+| 级 | 缺陷 | 修法 |
+|---|---|---|
+| **P1** | **全 App FilterChip 选中态走 M3 默认紫灰**，违反「琥珀只允许四处」第一处 | GlassChipRow 一处收敛 `filterChipColors(selected = primary 14% + primary 字)`，全调用点生效 |
+| P2 | tabular-nums 只有 HUD 一处；Type.kt KDoc 自称已覆盖 | `bodyMedium` / `labelMedium` 统一 `fontFeatureSettings = "tnum"` |
+| P3 | display 28sp SemiBold ≠ 规范 Bold | 改 Bold（§2.3 真值表） |
+| P3 | 滑块 thumb 20dp≠18px、轨道 α 0.11/0.09≠0.13 | 18dp；`SliderTrackDark/Light` 提到 0x21（0.13） |
+| P3 | 曲线锚点「琥珀实心+白心」与规范「白底+琥珀环」倒置；画布 132dp≠110 | 修正色序（按住描边加粗）；110dp |
+| P3 | 预设强度是普通滑块（README 称「强度环」） | 新增 `StrengthDial`（96dp 环、7dp 琥珀弧、中心 19sp 等宽读数、5% 步进、420ms 生长、拖动跟手 snap、HUD 上报、Dispose 兜底）接入预设页 |
+| P3 | 预设卡形态：方形 1:1 图下注字 | 2 列 1:0.8、名称叠图内左下胶囊、选中右上 18dp 琥珀对勾徽章；radius 走 chip 档（规范 14px 不在梯，取 12，同直方图条决策） |
+| P3 | 直方图条 radius 20/Canvas 26/α 0.92 | chip(12)（记录 2dp 偏差）/22dp/0.82 |
+
+**首页 / 设置 / 壳层**
+
+| 级 | 缺陷 | 修法 |
+|---|---|---|
+| P3 | hero 渐变 4 停靠点缺规范第 5 档（Q7 对齐） | 补 `HeroCardGlow #F2C078` @100%（0.84→E9A25C） |
+| P3 | HeroAction 死 `tint` 参数 + 硬编码 0xB8121014 违反 §9.3-E | 删死参；底色收编 `HeroActBg`（rgba(16,14,17,.45)）；radius chip 档 |
+| P3 | TabBar 纯文字无图标（§02 双 tab 图标+文字） | `PixelCakeTab` 加 `icon`（`AppIcons.Image` / 新增 `AppIcons.Sliders`，与规范 `#a-image/#a-sliders` 同源路径），PathIcon 18dp + 3dp gap |
+| P2 | 相机 Sheet 批量中可被下拉/返回/遮罩关掉 ⇒ 批量静默取消 | `onBusyChange` 上报 + `confirmValueChange` 门 + 忙时 BackHandler 吞返回 |
+| P3 | 单张拉取/刷新列表两个协程缺 `catch(Throwable)`（全文件仅有的两处） | 补齐 CE 重抛 + 日志行落账 |
+| P3 | 系留无存储静默 no-op（开关开着什么都不发生） | 可见反馈 + 开关回弹 false |
+| P3 | 系留传输失败 = 照片永久漏导（先记账后下载） | `TetherProcessor.releaseForRetry`（重试上限 3，防坏对象饿星），CameraPanel 传输失败处接线；+2 条单测钉住 |
+| P3 | 模型加载失败原因不可见（诊断页与「未预热」同貌且文案误导） | `MlMaskProvider.lastLoadErrorForUi`；设置页状态行与模型中心表都新增「加载失败」行 |
+| P3 | 设置页「恢复默认」一键直毁六项偏好 | AlertDialog 确认 |
+| P3 | 调试日志导出失败与未试同貌 | 三态（idle/exported/failed）+ 失败红字 |
+| P3 | 缓存清理乐观置 0（占用文件删不掉时说谎） | 删后重测 |
+| P3 | 模型中心缺「规划中」槽位 | 补静态占位卡（SHA-256/统计聚合仍列 §19.4） |
+| P3 | 「刷新」裸 Text <48dp 无角色 | TextButton |
+| P2 | 三处 Switch 行无合并语义（TalkBack 只读「开关」） | `SettingSwitchRow`（`toggleable(Role.Switch)` + Switch 空回调）×2 + 相机默认修图参数行 |
+| **P2** | **缺「放大文本」开关（UI3.0 §6.1 红线）** | `AppSettings.largeText` + 设置页开关行 + MainActivity `LocalDensity(max(系统,1.3))` 覆写 |
+
+### 19.2 与 §18 纪律的衔接
+
+- 本轮在 §18「接线审计」之上补的是**运行时/视觉/边界态**三类：方向分流（布局）、代次（异步）、
+  语义合并（无障碍）、能力↔模式（卡死）四类判据都来自既有纪律的延伸，无新增范式。
+- `catch(Throwable)` 新增两处均按闸门口径先 CE 重抛。
+
+### 19.3 修正记录
+
+- **§12.1 的规范引用有误**：`.litchrome` 的选择器覆盖面实为 deck/rail/顶栏/直方图条全体
+  （UI3.0.html :266/:270-271/:1080），「只做两处」的前提不成立 —— 本轮已按规范补齐。
+  若后续发现「亮照片上米白控制台难读」，应以**调 PaperChrome 色值**的方式回归，而不是砍覆盖面。
+
+### 19.4 记录不实现（本轮裁决）
+
+| 项 | 级 | 裁决理由 |
+|---|---|---|
+| 进程死亡恢复会话（SavedStateHandle + params JSON） | P3 | 架构级立项（ViewModel/持久层），单独批次做；「remember 不可跨进程死亡」记录为已接受 |
+| 设置页缺「相机直连」组（§M 三 toggle） | P2 | 「连接后自动开会话」是新行为（需 USB 广播接收器），属产品决策；系留自动套用/导出已内建 |
+| 蒙版可视化虚线轮廓 | P3 | marching-squares 另立打磨项；填充版已表达「AI 认出了什么」 |
+| 双极滑块零点刻度、顶栏 pill→card、Deck 悬浮卡形态 | P3 | 顶栏/Deck 的胶囊与贴底是已验收的整体形态；规范值记录在案，若改需整批重验 |
+| 模型中心 SHA-256 / 推理统计聚合 | P3 | SHA 需要后台算 16MB 资产；统计需要 Provider 埋点 —— 与「大模型槽位」一起立项 |
+| 拍摄时间线 UI / 到达徽章 / 扫光动效 | P3 | §12.4 既有遗留，依赖真机系留验收节奏 |
+| GlassTabBar 标签「调色台」≠规范「作品」 | P3 | 命名是产品语言，不代做 |
+
+### 19.5 云端模拟器走查结果（v0.7.2 候选，emulator-audit 分支 12 轮迭代）
+
+> `.github/workflows/emulator-audit.yml` + `scripts/emulator_audit_drive.py`：
+> ubuntu runner（KVM）无头 API 36 模拟器 → 装 APK → adb/uiautomator 黑盒走查
+> （首页 → SAF 导入 → 编辑器六 deck → 双通道/旋转/自动增强/缩放 → 全分辨率导出 → 回执 → 设置）
+> → 每步 screencap + dump + 应用私有 DebugLog + logcat **提交回分支**（artifact 匿名不可下）。
+
+**验证通过（截图为准）**：
+- 全链路零崩溃零 ANR（logcat-crash 空、全 log 无 FATAL）；
+- 双通道调节：照片横拖 → 曝光 +1.20 EV，滑块/HUD/画面三方同步；
+- 旋转 Q5：照片 + 44 缩略图 + 管线一致旋转（全链路同转实测）；
+- 全分辨率导出 → MediaStore 落盘 → 回执卡（分享描边次级 / 完成琥珀主级 / 行分隔）；
+- ML 降级链实况：`CompiledModel.create failed {accel=GPU, err=Failed to compile model}`
+  → **CPU 自动接管**（accel=CPU），对象作用域照常可用 —— GPU→CPU 级联首次在软渲染环境实证；
+- 亮档自适应：亮照片下顶栏/直方图/Deck/Rail 全体切纸色（A-P2-1 修复的实证）；
+- 预设卡 2 列 1:0.8 / 名称叠图 / 琥珀对勾、强度环、tabular-nums、放大文本开关 全部上屏。
+
+**走查新发现（已修，4 文件 +7）**：
+| 级 | 内容 |
+|---|---|
+| P2 | **琥珀选中态还有 4 个漏网点**：ExportSheet 格式 chip、设置页 ChipSelector、相机面板 3 处 —— 裸 `FilterChip` 各自为政。抽 `amberChipColors()` 共享函数收编全部调用点；教训入 §19.6 |
+| P3 | 导出后 uiautomator dump 长时间返回竞态快照（回执节点缺失）—— 走查脚本改为「匹配 dump 里直接取坐标 + 系统返回键」，App 侧无缺陷 |
+
+**疑似缺陷（记录，未修）**：
+- **首帧渲染期间拖参数 → 画面短暂平色**：tier=low 模拟器首帧 14.8s（`EDIT: render done ms=14777`），
+  期间横拖曝光，渲染完成后短暂显示均匀橙色（直方图三尖峰），下一批恢复。疑双缓冲 swap 与
+  拖动批次的代次交互；等待首帧就绪后拖动（后续轮次）不再复现。复现路径与判据已写进走查脚本
+  （`FIRST FRAME STALL` 探针），留待专项。
+
+**走查基建教训（脚本侧，不涉 App）**：
+1. debug 变体 applicationId 带 `.debug` 后缀 —— `am start` 必须用「applicationId/真实类路径」全组件名；
+2. Photo Picker 条目 desc 是「Photo taken on …」无文件名；MediaProvider 在 API 36 模拟器惰性扫描
+   （90s 都未必就绪）⇒ 走查导入改走 SAF（文件系统直读，绕开 MediaStore）；
+3. runner 的 `setup-android` 不把 `$ANDROID_HOME/emulator` 放 PATH；`ANDROID_AVD_HOME` 创建/启动
+   两步必须显式一致；`/dev/kvm` 需 udev 规则放行（MODE=0666）；
+4. artifact 匿名 401 ⇒ 证据全部走 git 提交回传（仓库「git 是唯一匿名可读通道」纪律的延伸）；
+5. `if: failure()` 步骤只对其**之后**的失败生效 —— 排在失败步骤之前等于永远不跑。
+
+### 19.6 新纪律（两条）
+
+1. **全局视觉纪律的收编点必须穷举「裸控件」**：琥珀选中态修了 GlassChipRow 一处≠全局生效 ——
+   ExportSheet / SettingsScreen.ChipSelector / CameraPanel 各有自己的裸 FilterChip。
+   判据：改「某类控件的全局观感」时，`grep 该控件类名` 穷举全部调用点，逐一收编或注释豁免。
+2. **运行时证据必须可匿名回读**：CI 产物的截图/日志若只进 artifact（需鉴权），对「无本地环境、
+   无 token」的接手者等于不存在 —— 一律 git 提交回传（或 README 附直达链接）。

@@ -65,6 +65,7 @@ private const val KEY_LOW_TRANSPARENCY = "low_transparency"
 private const val KEY_EXPORT_FORMAT = "export_format"
 private const val KEY_JPEG_QUALITY = "jpeg_quality"
 private const val KEY_AUTO_MASK = "auto_mask"
+private const val KEY_LARGE_TEXT = "large_text"
 
 /** 版本戳存放的键。它自己不需要迁移，也不对应任何设置项。 */
 private const val KEY_SETTINGS_VERSION = "settings_version"
@@ -236,6 +237,19 @@ class AppSettings internal constructor(private val prefs: SharedPreferences) {
             prefs.edit().putInt(KEY_JPEG_QUALITY, value.value).apply()
         }
 
+    /**
+     * 「放大文本」（UI3.0 §6.1 红线：fontScale ≥1.3 场景需提供独立开关）。
+     * 生效字号 = max(系统字号, 1.3×)，包装在 MainActivity 的 LocalDensity 里 ——
+     * 读取点唯一，避免「设置页开关与实际生效字号」两处状态漂移。
+     */
+    private var largeTextState by mutableStateOf(prefs.getBoolean(KEY_LARGE_TEXT, false))
+    var largeText: Boolean
+        get() = largeTextState
+        set(value) {
+            largeTextState = value
+            prefs.edit().putBoolean(KEY_LARGE_TEXT, value).apply()
+        }
+
     /** 自动蒙版（AI 皮肤识别）默认开关。编辑页里的开关与它是**同一个状态**。 */
     private var autoMaskState by mutableStateOf(prefs.getBoolean(KEY_AUTO_MASK, true))
     var autoMask: Boolean
@@ -258,6 +272,7 @@ class AppSettings internal constructor(private val prefs: SharedPreferences) {
     fun reset() {
         themeMode = ThemeMode.System
         lowTransparency = false
+        largeText = false
         exportFormat = ExportFormat.JPEG
         jpegQuality = JpegQuality.Standard
         autoMask = true

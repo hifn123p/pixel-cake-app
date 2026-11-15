@@ -20,6 +20,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import com.hifn.pixelcake.core.decode.ExportFormat
 import com.hifn.pixelcake.ui.theme.WsOk
+import com.hifn.pixelcake.ui.components.amberChipColors
 import com.hifn.pixelcake.ui.theme.Radius
 import com.hifn.pixelcake.ui.theme.Spacing
 
@@ -105,6 +106,9 @@ fun ExportSheet(
                         onClick = { onExportFormatChange(fmt) },
                         enabled = !exporting,
                         shape = Radius.chip,
+                        // 选中态必须走共享琥珀配色（截图实测：裸 FilterChip 是 M3 紫灰，
+                        // 违反「琥珀四处」纪律 —— A-P1-1 的漏网调用点）
+                        colors = amberChipColors(),
                         label = { Text(name) }
                     )
                 }

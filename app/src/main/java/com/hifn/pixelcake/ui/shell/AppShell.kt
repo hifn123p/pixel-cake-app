@@ -9,7 +9,9 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -27,6 +29,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.hifn.pixelcake.ui.editor.AppIcons
+import com.hifn.pixelcake.ui.editor.IconDef
+import com.hifn.pixelcake.ui.editor.PathIcon
 import com.hifn.pixelcake.ui.theme.Motion
 import com.hifn.pixelcake.ui.theme.Radius
 import com.hifn.pixelcake.ui.theme.Spacing
@@ -39,9 +44,11 @@ import com.hifn.pixelcake.ui.theme.segmentIndicator
  *
  * **刻意只有两个**：`相册历史` 现阶段没有持久化数据源，做了就是空壳，留给 P3（NAS）再提为第三个。
  */
-enum class PixelCakeTab(val label: String) {
-    Darkroom("调色台"),
-    Settings("设置")
+// v0.7.2（审计 A-P3-12）：每个 tab 补上规范 §02 的图标双编码（`#a-image` / `#a-sliders`）——
+// 纯文字 tab 与「作品/设置」双 tab 的形态不符，图标也是选中态之外的第二个识别通道。
+enum class PixelCakeTab(val label: String, val icon: IconDef) {
+    Darkroom("调色台", AppIcons.Image),
+    Settings("设置", AppIcons.Sliders)
 }
 
 private object Shell {
@@ -186,12 +193,20 @@ private fun GlassTabBar(
                             ),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = tab.label,
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
-                            color = if (selected) accent else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            PathIcon(
+                                def = tab.icon,
+                                tint = if (selected) accent else MaterialTheme.colorScheme.onSurfaceVariant,
+                                size = 18.dp
+                            )
+                            Spacer(Modifier.height(3.dp))
+                            Text(
+                                text = tab.label,
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
+                                color = if (selected) accent else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                 }
             }

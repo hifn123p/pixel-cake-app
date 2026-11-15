@@ -28,12 +28,36 @@ class TetherProcessor(
     /** 已记账的对象数（诊断用）。 */
     val knownCount: Int get() = known.size
 
+    /** 下载失败计数（句柄 → 已失败次数）；只对「传输失败」的交还重试有意义。 */
+    private val failCounts = HashMap<Int, Int>()
+
     /**
      * K2：开系留先播种基线 —— 卡上已有的对象全部记为已知。
      * 失败（PTP 失步/拔线）时调用方**不得进入轮询**：无基线的轮询会把全卡当新片。
      */
     fun seedBaseline(handles: Collection<Int>) {
         known.addAll(handles)
+    }
+
+    /**
+     * 下载失败后**交还**句柄（v0.7.2，审计 C-F3）：下一轮重新进入候选 ——
+     * 「先记账后下载」的原口径会把一次 USB 抖动变成这张照片**永久漏导**，而唯一的
+     * 痕迹是一行会被滚出显示区的日志。
+     *
+     * 重试有上界（[MAX_RETRY_PER_PHOTO]）：持续坏对象在记满次数后保持记账、不再
+     * 占每轮名额 —— 否则它会永远挤在 [maxPerRound] 的前排，新片反而进不来（K3 同源）。
+     * **只对传输失败调用**：RAW 渲染失败是确定性错误，重试只会反复白白下载整张卡。
+     */
+    fun releaseForRetry(handle: Int) {
+        val n = (failCounts[handle] ?: 0) + 1
+        failCounts[handle] = n
+        if (n >= MAX_RETRY_PER_PHOTO) {
+            known.add(handle) // 记满：保持记账，停止重试
+            log("对象 #$handle 连续传输失败 $n 次，停止自动重试")
+        } else {
+            known.remove(handle)
+            log("对象 #$handle 传输失败，将在下轮重试（$n/$MAX_RETRY_PER_PHOTO）")
+        }
     }
 
     /**
@@ -65,5 +89,10 @@ class TetherProcessor(
             out.add(CameraPhoto(h, info))
         }
         return out
+    }
+
+    companion object {
+        /** 单张照片的最大自动重试次数（含首次失败）。 */
+        const val MAX_RETRY_PER_PHOTO = 3
     }
 }

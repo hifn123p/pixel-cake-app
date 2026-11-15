@@ -60,6 +60,7 @@ import com.hifn.pixelcake.ui.components.CurveEditor
 import com.hifn.pixelcake.ui.components.GlassChipRow
 import com.hifn.pixelcake.ui.components.ParamSlider
 import com.hifn.pixelcake.ui.components.PresetThumbRow
+import com.hifn.pixelcake.ui.components.StrengthDial
 import com.hifn.pixelcake.ui.theme.Radius
 import com.hifn.pixelcake.ui.theme.Spacing
 import kotlin.math.abs
@@ -1159,6 +1160,9 @@ private fun MyPresetsSection(
     }
 
     if (showManage && customPresets.isNotEmpty()) {
+        // 删除确认（审计 B-12）：删除写的是持久化 JSON，一键即毁、没有撤销 ——
+        // 弹确认窗让误触多一道闸；确认弹窗显示具体名字，删错对象也能在按下前发现。
+        var pendingDelete by remember { mutableStateOf<CustomPreset?>(null) }
         AlertDialog(
             onDismissRequest = { showManage = false },
             title = { Text("管理自定义预设") },
@@ -1175,7 +1179,7 @@ private fun MyPresetsSection(
                                 TextButton(onClick = { exportPreset(cp) }) {
                                     Text("导出")
                                 }
-                                TextButton(onClick = { onDeleteCustom(cp.id) }) {
+                                TextButton(onClick = { pendingDelete = cp }) {
                                     Text("删除")
                                 }
                             }
@@ -1187,6 +1191,29 @@ private fun MyPresetsSection(
                 TextButton(onClick = { showManage = false }) { Text("完成") }
             }
         )
+        pendingDelete?.let { target ->
+            AlertDialog(
+                onDismissRequest = { pendingDelete = null },
+                title = { Text("删除预设「${target.name}」？") },
+                text = {
+                    Text(
+                        "删除后无法恢复。若相机批量或系留正把它设为默认参数，新照片将不自动导出，" +
+                            "需要重新选择默认参数。"
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            onDeleteCustom(target.id)
+                            pendingDelete = null
+                        }
+                    ) { Text("删除") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { pendingDelete = null }) { Text("取消") }
+                }
+            )
+        }
     }
 }
 
@@ -1464,16 +1491,17 @@ private fun PresetParams(
                 onSelect = onPreset
             )
             // 强度环（UI 3.0 §F）：只在套了预设时显示。改量 = 参数栈从基座等比回退。
+            // v0.7.2 把此前的普通滑块换成规范的 96dp 圆环（审计 A-P3-7：lerp 引擎
+            // 早已落地，UI 侧一直没跟上；步长 5% / 松手提交 / HUD 上报口径不变）。
             if (activePresetId != "none") {
-                ParamSlider(
-                    label = "强度",
+                StrengthDial(
                     value = presetAmount,
-                    valueRange = 0f..1f,
-                    step = 0.05f,
-                    format = { "%.0f%%".format(it * 100) },
                     onValueChange = onPresetAmount,
                     onValueChangeFinished = onCommit,
                     onDraggingChange = onDraggingChange,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = Spacing.m),
                 )
             }
             Text(
