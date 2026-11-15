@@ -1398,3 +1398,49 @@ EditorScreen 40+ 回调、MainActivity→EditorScreen 全部实参、Home/Camera
 | 模型中心 SHA-256 / 推理统计聚合 | P3 | SHA 需要后台算 16MB 资产；统计需要 Provider 埋点 —— 与「大模型槽位」一起立项 |
 | 拍摄时间线 UI / 到达徽章 / 扫光动效 | P3 | §12.4 既有遗留，依赖真机系留验收节奏 |
 | GlassTabBar 标签「调色台」≠规范「作品」 | P3 | 命名是产品语言，不代做 |
+
+### 19.5 云端模拟器走查结果（v0.7.2 候选，emulator-audit 分支 12 轮迭代）
+
+> `.github/workflows/emulator-audit.yml` + `scripts/emulator_audit_drive.py`：
+> ubuntu runner（KVM）无头 API 36 模拟器 → 装 APK → adb/uiautomator 黑盒走查
+> （首页 → SAF 导入 → 编辑器六 deck → 双通道/旋转/自动增强/缩放 → 全分辨率导出 → 回执 → 设置）
+> → 每步 screencap + dump + 应用私有 DebugLog + logcat **提交回分支**（artifact 匿名不可下）。
+
+**验证通过（截图为准）**：
+- 全链路零崩溃零 ANR（logcat-crash 空、全 log 无 FATAL）；
+- 双通道调节：照片横拖 → 曝光 +1.20 EV，滑块/HUD/画面三方同步；
+- 旋转 Q5：照片 + 44 缩略图 + 管线一致旋转（全链路同转实测）；
+- 全分辨率导出 → MediaStore 落盘 → 回执卡（分享描边次级 / 完成琥珀主级 / 行分隔）；
+- ML 降级链实况：`CompiledModel.create failed {accel=GPU, err=Failed to compile model}`
+  → **CPU 自动接管**（accel=CPU），对象作用域照常可用 —— GPU→CPU 级联首次在软渲染环境实证；
+- 亮档自适应：亮照片下顶栏/直方图/Deck/Rail 全体切纸色（A-P2-1 修复的实证）；
+- 预设卡 2 列 1:0.8 / 名称叠图 / 琥珀对勾、强度环、tabular-nums、放大文本开关 全部上屏。
+
+**走查新发现（已修，4 文件 +7）**：
+| 级 | 内容 |
+|---|---|
+| P2 | **琥珀选中态还有 4 个漏网点**：ExportSheet 格式 chip、设置页 ChipSelector、相机面板 3 处 —— 裸 `FilterChip` 各自为政。抽 `amberChipColors()` 共享函数收编全部调用点；教训入 §19.6 |
+| P3 | 导出后 uiautomator dump 长时间返回竞态快照（回执节点缺失）—— 走查脚本改为「匹配 dump 里直接取坐标 + 系统返回键」，App 侧无缺陷 |
+
+**疑似缺陷（记录，未修）**：
+- **首帧渲染期间拖参数 → 画面短暂平色**：tier=low 模拟器首帧 14.8s（`EDIT: render done ms=14777`），
+  期间横拖曝光，渲染完成后短暂显示均匀橙色（直方图三尖峰），下一批恢复。疑双缓冲 swap 与
+  拖动批次的代次交互；等待首帧就绪后拖动（后续轮次）不再复现。复现路径与判据已写进走查脚本
+  （`FIRST FRAME STALL` 探针），留待专项。
+
+**走查基建教训（脚本侧，不涉 App）**：
+1. debug 变体 applicationId 带 `.debug` 后缀 —— `am start` 必须用「applicationId/真实类路径」全组件名；
+2. Photo Picker 条目 desc 是「Photo taken on …」无文件名；MediaProvider 在 API 36 模拟器惰性扫描
+   （90s 都未必就绪）⇒ 走查导入改走 SAF（文件系统直读，绕开 MediaStore）；
+3. runner 的 `setup-android` 不把 `$ANDROID_HOME/emulator` 放 PATH；`ANDROID_AVD_HOME` 创建/启动
+   两步必须显式一致；`/dev/kvm` 需 udev 规则放行（MODE=0666）；
+4. artifact 匿名 401 ⇒ 证据全部走 git 提交回传（仓库「git 是唯一匿名可读通道」纪律的延伸）；
+5. `if: failure()` 步骤只对其**之后**的失败生效 —— 排在失败步骤之前等于永远不跑。
+
+### 19.6 新纪律（两条）
+
+1. **全局视觉纪律的收编点必须穷举「裸控件」**：琥珀选中态修了 GlassChipRow 一处≠全局生效 ——
+   ExportSheet / SettingsScreen.ChipSelector / CameraPanel 各有自己的裸 FilterChip。
+   判据：改「某类控件的全局观感」时，`grep 该控件类名` 穷举全部调用点，逐一收编或注释豁免。
+2. **运行时证据必须可匿名回读**：CI 产物的截图/日志若只进 artifact（需鉴权），对「无本地环境、
+   无 token」的接手者等于不存在 —— 一律 git 提交回传（或 README 附直达链接）。
