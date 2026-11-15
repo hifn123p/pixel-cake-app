@@ -32,31 +32,76 @@ Starting a Gradle Daemon (subsequent builds will be faster)
 	Namespace 'com.google.ai.edge.litert' is used in multiple modules and/or libraries: com.google.ai.edge.litert:litert:2.2.0, com.google.ai.edge.litert:litert-api:2.2.0. Please ensure that all modules and libraries have a unique namespace. For more information, See https://developer.android.com/studio/build/configure-app-module#set-namespace
 
 > Task :app:processDebugManifest
+> Task :app:processDebugManifestForPackage
 > Task :app:javaPreCompileDebug
 > Task :app:mergeDebugShaders
 > Task :app:compileDebugShaders NO-SOURCE
 > Task :app:generateDebugAssets UP-TO-DATE
 > Task :app:mergeDebugAssets
-> Task :app:processDebugManifestForPackage
-> Task :app:compressDebugAssets
 > Task :app:desugarDebugFileDependencies
+> Task :app:compressDebugAssets
 > Task :app:processDebugResources
 > Task :app:checkDebugDuplicateClasses
 > Task :app:compileDebugKotlin
 > Task :app:mergeExtDexDebug
+> Task :app:mergeLibDexDebug
 
-> Task :app:compileDebugKotlin FAILED
-e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt:908:55 @Composable invocations can only happen from the context of a @Composable function
-e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt:909:49 Unresolved reference 'Stroke'.
-e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/settings/SettingsScreen.kt:32:16 Conflicting import: imported name 'File' is ambiguous.
-e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/settings/SettingsScreen.kt:50:16 Conflicting import: imported name 'File' is ambiguous.
-e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/settings/SettingsScreen.kt:352:38 Unresolved reference 'second'.
-e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/settings/SettingsScreen.kt:353:74 Unresolved reference 'first'.
+> Task :app:compileDebugKotlin
+w: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/MainActivity.kt:963:14 This declaration is in a preview state and can be changed in a backwards-incompatible manner with a best-effort migration. Its usage should be marked with '@kotlinx.coroutines.FlowPreview' or '@OptIn(kotlinx.coroutines.FlowPreview::class)' if you accept the drawback of relying on preview API
+w: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/core/decode/Exporter.kt:40:23 'static field TAG_ISO_SPEED_RATINGS: String' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/core/edit/EditEngine.kt:312:13 Expected performance impact from inlining is insignificant. Inlining works best for functions with parameters of function types.
+w: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/core/edit/EditRotation.kt:132:29 The corresponding parameter in the supertype 'RetouchMask' is named 'w'. This may cause problems when calling this function with named arguments.
+w: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/core/edit/EditRotation.kt:132:38 The corresponding parameter in the supertype 'RetouchMask' is named 'h'. This may cause problems when calling this function with named arguments.
+w: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/core/edit/Mask.kt:86:29 The corresponding parameter in the supertype 'RetouchMask' is named 'w'. This may cause problems when calling this function with named arguments.
+w: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/core/edit/Mask.kt:86:38 The corresponding parameter in the supertype 'RetouchMask' is named 'h'. This may cause problems when calling this function with named arguments.
+w: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/core/edit/retouch/Beauty.kt:148:13 Expected performance impact from inlining is insignificant. Inlining works best for functions with parameters of function types.
+w: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/home/DeviceCapabilities.kt:59:46 'val supportedHdrTypes: IntArray!' is deprecated. Deprecated in Java.
+
+> Task :app:configureCMakeDebug[arm64-v8a]
+> Task :app:compileDebugJavaWithJavac NO-SOURCE
+> Task :app:dexBuilderDebug
+> Task :app:mergeDebugGlobalSynthetics
+> Task :app:processDebugJavaRes
+> Task :app:mergeProjectDexDebug
+> Task :app:mergeDebugJavaResource
+
+> Task :app:buildCMakeDebug[arm64-v8a]
+C/C++: ninja: Entering directory `/home/runner/work/pixel-cake-app/pixel-cake-app/app/.cxx/Debug/3b456c6d/arm64-v8a'
+C/C++: /home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/cpp/third_party/LibRaw/src/decompressors/losslessjpeg.cpp:24:9: warning: 'ZERO' macro redefined [-Wmacro-redefined]
+C/C++:    24 | #define ZERO(a) do { memset(a,0,sizeof(a));} while(0)
+C/C++:       |         ^
+C/C++: /home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/cpp/third_party/LibRaw/src/decompressors/../../internal/libraw_cxx_defs.h:117:9: note: previous definition is here
+C/C++:   117 | #define ZERO(a) memset(&a, 0, sizeof(a))
+C/C++:       |         ^
+C/C++: 1 warning generated.
+
+> Task :app:mergeDebugJniLibFolders
+> Task :app:validateSigningDebug
+> Task :app:writeDebugAppMetadata
+> Task :app:writeDebugSigningConfigVersions
+> Task :app:preDebugUnitTestBuild UP-TO-DATE
+> Task :app:javaPreCompileDebugUnitTest
+> Task :app:mergeDebugNativeLibs
+> Task :app:bundleDebugClassesToRuntimeJar
+> Task :app:bundleDebugClassesToCompileJar
+> Task :app:stripDebugDebugSymbols
+> Task :app:packageDebug
+> Task :app:createDebugApkListingFileRedirect
+> Task :app:assembleDebug
+
+> Task :app:compileDebugUnitTestKotlin FAILED
+e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/test/java/com/hifn/pixelcake/core/edit/SessionPersistenceTest.kt:20:29 Argument type mismatch: actual type is 'EditDocument', but 'EditSnapshot' was expected.
+e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/test/java/com/hifn/pixelcake/core/edit/SessionPersistenceTest.kt:21:16 Argument type mismatch: actual type is 'EditDocument', but 'EditSnapshot' was expected.
+e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/test/java/com/hifn/pixelcake/core/edit/SessionPersistenceTest.kt:22:16 Argument type mismatch: actual type is 'EditDocument', but 'EditSnapshot' was expected.
+e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/test/java/com/hifn/pixelcake/core/edit/SessionPersistenceTest.kt:23:16 Argument type mismatch: actual type is 'EditDocument', but 'EditSnapshot' was expected.
+e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/test/java/com/hifn/pixelcake/core/edit/SessionPersistenceTest.kt:33:36 Argument type mismatch: actual type is 'EditDocument', but 'EditSnapshot' was expected.
+e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/test/java/com/hifn/pixelcake/core/edit/SessionPersistenceTest.kt:49:29 Argument type mismatch: actual type is 'EditDocument', but 'EditSnapshot' was expected.
+e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/test/java/com/hifn/pixelcake/core/edit/SessionPersistenceTest.kt:51:26 Argument type mismatch: actual type is 'List<EditDocument>', but 'List<EditSnapshot>' was expected.
 
 FAILURE: Build failed with an exception.
 
 * What went wrong:
-Execution failed for task ':app:compileDebugKotlin'.
+Execution failed for task ':app:compileDebugUnitTestKotlin'.
 > A failure occurred while executing org.jetbrains.kotlin.compilerRunner.GradleCompilerRunnerWithWorkers$GradleKotlinCompilerWorkAction
    > Compilation error. See log for more details
 
@@ -66,7 +111,7 @@ Execution failed for task ':app:compileDebugKotlin'.
 > Get more help at https://help.gradle.org.
 
 * Exception is:
-org.gradle.api.tasks.TaskExecutionException: Execution failed for task ':app:compileDebugKotlin'.
+org.gradle.api.tasks.TaskExecutionException: Execution failed for task ':app:compileDebugUnitTestKotlin'.
 	at org.gradle.api.internal.tasks.execution.ExecuteActionsTaskExecuter.lambda$executeIfValid$1(ExecuteActionsTaskExecuter.java:130)
 	at org.gradle.internal.Try$Failure.ifSuccessfulOrElse(Try.java:293)
 	at org.gradle.api.internal.tasks.execution.ExecuteActionsTaskExecuter.executeIfValid(ExecuteActionsTaskExecuter.java:128)
@@ -257,5 +302,5 @@ Caused by: org.jetbrains.kotlin.gradle.tasks.CompilationErrorException: Compilat
 	... 2 more
 
 
-BUILD FAILED in 2m 26s
-23 actionable tasks: 23 executed
+BUILD FAILED in 2m 54s
+43 actionable tasks: 43 executed
