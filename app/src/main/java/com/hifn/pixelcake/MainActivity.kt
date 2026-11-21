@@ -235,6 +235,8 @@ private fun AppRoot(settings: AppSettings) {
     // 调半天一个像素都不动，就是「能操作但无效果」的最坏交互 —— 禁用 + 一句说明。
     var emptyScopes by remember { mutableStateOf(emptySet<ObjectScope>()) }
 
+    // v0.7.4：声明前移到 probe effect 之前 —— Kotlin 禁止 lambda 捕获「声明在后」的局部 var
+    var autoMaskNote by remember { mutableStateOf("") }
     LaunchedEffect(imported) {
         val src = imported ?: return@LaunchedEffect
         objectScopesAvailable = false
@@ -251,6 +253,10 @@ private fun AppRoot(settings: AppSettings) {
             withContext(Dispatchers.Default) { ObjectScope.entries.toSet() - masks.coveredScopes() }
         } else {
             emptySet()
+        }
+        if (masks != null && emptyScopes.isNotEmpty()) {
+            // v0.7.4（用户审计 P1-3）：常驻提示删除后，空作用域信息改为一次性浮出
+            autoMaskNote = "灰色作用域 = 本图未检出该对象（灰色 chip 不可用）"
         }
         DebugLog.i(
             DebugLog.TAG_ML, "object scopes probed",
@@ -306,7 +312,6 @@ private fun AppRoot(settings: AppSettings) {
     // P1p-1b：自动蒙版（AI 皮肤识别）的开关已上移到 `AppSettings.autoMask`（设置页与编辑页共用
     // 同一个状态，并持久化）。这里不再有局部副本 —— 两份状态必然漂移。
     // 自动蒙版状态提示：成功时显示加速器（GPU/CPU），失败时提示已回退。供真机验收核对。
-    var autoMaskNote by remember { mutableStateOf("") }
     // P1p-2c：液化锚点来源提示（人脸检测 / 蒙版质心）。供真机验收核对「锚点到底来自哪」。
     var liquifyNote by remember { mutableStateOf("") }
     // UI-4b（A 档）：预设缩略图（id → 位图）。按**原图**渲染，只在换图时算一次。

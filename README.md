@@ -9,7 +9,7 @@
 [![targetSdk](https://img.shields.io/badge/targetSdk-36-blue)](https://developer.android.com)
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.2.21-7F52FF?logo=kotlin)](https://kotlinlang.org)
 [![Compose](https://img.shields.io/badge/Jetpack%20Compose-Material3%204285F4?logo=jetpackcompose)](https://developer.android.com/jetpack/compose)
-[![Version](https://img.shields.io/badge/version-v0.7.2-success)](https://github.com/hifn123p/pixel-cake-app/releases)
+[![Version](https://img.shields.io/badge/version-v0.7.4-success)](https://github.com/hifn123p/pixel-cake-app/releases)
 [![Build](https://img.shields.io/badge/Build-GitHub%20Actions-2088FF?logo=githubactions)](https://github.com/features/actions)
 [![License](https://img.shields.io/badge/License-TBD-lightgrey)](#许可)
 
@@ -89,6 +89,7 @@ git clone --recurse-submodules https://github.com/hifn123p/pixel-cake-app.git
 | 🐞 调试日志 | 结构化端侧日志（`files/debug/log_<session>.txt`），可通过系统分享导出 |
 | ♻️ 会话恢复 | 进程死亡后重新打开 App：上次编辑的照片、参数、历史（含撤销/重做位置）与旋转完整续上（v0.7.2） |
 | 🔍 云端模拟器走查 | CI 在 KVM runner 上无头启动模拟器，按 UI3.0 全链路截图走查（`emulator-audit.yml`，v0.7.2） |
+| 🖱️ 预览优先交互 | 直方图悬浮小卡、Deck 三档收起（44dp 单行/176/330）、滑块 ± 步进 + 零点磁吸触感，预览面积 49%→65%（v0.7.4） |
 
 ### 规划中
 

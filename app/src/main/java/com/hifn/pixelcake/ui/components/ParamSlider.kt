@@ -4,7 +4,9 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -20,6 +22,7 @@ import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -28,16 +31,18 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.hifn.pixelcake.ui.theme.LocalDarkTheme
 import com.hifn.pixelcake.ui.theme.Motion
@@ -46,30 +51,26 @@ import com.hifn.pixelcake.ui.theme.SliderThumbShadow
 import com.hifn.pixelcake.ui.theme.SliderTrackDark
 import com.hifn.pixelcake.ui.theme.SliderTrackLight
 import com.hifn.pixelcake.ui.theme.Spacing
+import kotlin.math.abs
 import kotlin.math.round
 
 /**
- * 参数滑块（`docs/UI_DESIGN.md` §4.3：带数值气泡）。
+ * 参数滑块（v0.7.4，用户视角审计 P2-1 重设计）。
  *
- * ## 触控热区 48dp（v0.7.3，所有人对 §9.6-Q4 的最终裁决）
+ * ## 比例与精度（「修图时不好控制」的三个解）
  *
- * 旧版把 `LocalMinimumInteractiveComponentSize` 压掉、滑杆交互面只有 26dp —— 「把视觉规范
- * 当交互规范执行」，命中面积砍 46%。本版改为**单层 48dp 盒**：标签/数值行叠布在盒内上半部，
- * Slider 铺满整盒（视觉轨道下移 ≈3dp，肉眼不可辨），触控面 26→48dp 且调用点零改动
- * （Deck 高度预算净 0：旧「标签行 22 + 滑杆 26」≈48，新单盒 48）。
- *
- * ## 自绘轨道（§03 `.sl-track` + `.sl-zero`）
- *
- * 3dp 线（未选段 α0.13 / 选中段琥珀）+ 两端圆帽；**双极参数（量程跨 0）在 50% 处画
- * 1.5×10dp 零点刻度** —— 这是规范明文而实现一直欠着的 `.sl-zero`（§19.4-C9 清账）。
- * M3 默认轨道右端的「停点圆点」一并消失（mock 没有这个元素）。
+ * ① **双层 56dp**：上 22dp 标签/数值行（与轨道各归其位，不再挤在一层），下 34dp 纯轨道区；
+ *    触控 = 整个 56dp 盒（≥48 达标）。轨道 3→**4dp**、拇指 18→**22dp** + 按下 1.15 放大 ——
+ *    「亮照片上 3dp 细线几乎不可见、拇指难抓」的实测反馈。
+ * ② **± 步进钮**：轨道两侧 40dp 圆钮，单击 = ±1 步（无 step 时 = ±1% 量程）——
+ *    「全宽拖动一步 9.5dp 难停在 +0.30」的精度问题由步进兜底，松手即入撤销栈。
+ * ③ **零点磁吸 + 触感**：双极参数（量程跨 0）落进 ±2% 量程自动吸附 0，并给
+ *    [HapticFeedbackType.SegmentTick] —— 「对比度拉回正好 0」不再靠手感。
  *
  * ## 拖动状态上报（[onDraggingChange]）
  *
- * 拖动中回调 `true`，松手回调 `false`。上层据此临时隐藏非参数 UI。撤销栈只在
- * `onValueChangeFinished` 入栈一次（F08）。
- *
- * @param step 量化步长；传 0 表示不量化（连续）。量化在**回调前**完成。
+ * 拖动中回调 `true`，松手回调 `false`。上层据此隐藏非参数 UI；撤销栈只在
+ * `onValueChangeFinished` 入栈一次（F08）。步进钮的瞬时调整按「一次一格」立即走完成语义。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -86,11 +87,8 @@ fun ParamSlider(
     enabled: Boolean = true
 ) {
     var dragging by remember { mutableStateOf(false) }
-    // ⚠️ CompositionLocal.current 只能在组合期读取 —— 拖动回调是非组合 lambda，
-    // 必须在这里先把上报函数捕获成局部量。
     val reportHud = LocalHudReporter.current
-    // 拖动途中本组合被销毁（第二根手指点了未 inert 的 chip ⇒ 面板内容切换）时，
-    // M3 Slider **不会**回调 finished ⇒ 上层 `dragging` 永远收不到 false。onDispose 兜底。
+    val haptic = LocalHapticFeedback.current
     DisposableEffect(Unit) {
         onDispose {
             if (dragging) {
@@ -103,7 +101,7 @@ fun ParamSlider(
     val dark = LocalDarkTheme.current
 
     val valueColor by animateColorAsState(
-        targetValue = if (dragging) accent else MaterialTheme.colorScheme.onSurfaceVariant,
+        targetValue = if (dragging) accent else MaterialTheme.colorScheme.onSurface,
         animationSpec = Motion.springEffects(),
         label = "paramValueColor"
     )
@@ -115,130 +113,203 @@ fun ParamSlider(
 
     val thumbColor = if (dark) Color.White else MaterialTheme.colorScheme.onSurface
     val trackInactive = if (dark) SliderTrackDark else SliderTrackLight
-    val interaction = remember { MutableInteractionSource() }
 
-    // —— 单层 48dp 盒：标签叠布上半部，Slider 铺满整盒（触控 48dp，视觉近似旧版）——
-    Box(modifier = modifier.fillMaxWidth().height(48.dp)) {
-        Row(
+    // 零点磁吸：双极（量程跨 0）且吸附带 = ±2% 量程
+    val bipolar = valueRange.start < 0f && valueRange.endInclusive > 0f
+    val magnetSpan = (valueRange.endInclusive - valueRange.start) * 0.02f
+
+    fun quantize(raw: Float): Float {
+        var out = if (step > 0f) round(raw / step) * step else raw
+        if (bipolar && abs(out) <= magnetSpan && out != 0f) {
+            out = 0f
+            haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
+        }
+        return out.coerceIn(valueRange.start, valueRange.endInclusive)
+    }
+
+    fun nudge(delta: Float) {
+        if (!enabled) return
+        val unit = if (step > 0f) step else (valueRange.endInclusive - valueRange.start) * 0.01f
+        val target = quantize(value + delta * unit)
+        if (target != value) {
+            onValueChange(target)
+            reportHud(Pair(label, format(target)))
+            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            // 步进是瞬时动作：立即走完成语义（撤销栈一次一格）
+            onValueChangeFinished()
+        }
+    }
+
+    val interaction = remember { MutableInteractionSource() }
+    var thumbPressed by remember { mutableStateOf(false) }
+    LaunchedEffect(interaction) {
+        interaction.interactions.collect { ev ->
+            thumbPressed = ev is PressInteraction.Press
+        }
+    }
+
+    Row(modifier = modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        // —— 减步进钮 ——
+        Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 2.dp, start = 4.dp, end = 4.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.Top
+                .size(40.dp)
+                .alpha(if (enabled && value > valueRange.start) 1f else 0.3f)
+                .clip(Radius.pill)
+                .clickable(
+                    interactionSource = null,
+                    indication = null,
+                    enabled = enabled
+                ) { nudge(-1f) }
+                .semantics { contentDescription = "$label 减一格" },
+            contentAlignment = Alignment.Center
         ) {
-            // ⚠️ 必须显式写 `color`（容器不是 Surface，不写就继承外层 contentColor ⇒ 文字消失）。
             Text(
-                text = label,
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Text(
-                text = format(value),
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.Medium,
-                color = valueColor,
-                modifier = Modifier
-                    .scale(valueScale)
-                    .background(
-                        if (dragging) accent.copy(alpha = 0.12f) else Color.Transparent,
-                        Radius.pill
-                    )
-                    .padding(horizontal = Spacing.s, vertical = Spacing.xs)
+                "−",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
-        Slider(
-            value = value,
-            enabled = enabled,
+        // —— 滑杆本体：双层叠布（标签行在上，轨道区在下），触控 = 整盒 ——
+        Box(
             modifier = Modifier
-                .fillMaxSize()
-                // 标签叠布在轨道上方：整体下移让轨道视觉落点与旧版一致（盒中心 24dp → 31dp）
-                .graphicsLayer { translationY = 7.dp.toPx() }
-                .semantics { contentDescription = label },
-            onValueChange = { raw ->
-                if (!dragging) {
-                    dragging = true
-                    onDraggingChange(true)
-                }
-                val out = if (step > 0f) round(raw / step) * step else raw
-                onValueChange(out)
-                reportHud(Pair(label, format(out)))
-            },
-            valueRange = valueRange,
-            onValueChangeFinished = {
-                dragging = false
-                onDraggingChange(false)
-                reportHud(null)
-                onValueChangeFinished()
-            },
-            interactionSource = interaction,
-            colors = SliderDefaults.colors(
-                thumbColor = thumbColor,
-                activeTrackColor = accent,
-                inactiveTrackColor = trackInactive,
-                disabledThumbColor = thumbColor.copy(alpha = 0.38f),
-                disabledActiveTrackColor = accent.copy(alpha = 0.38f),
-                disabledInactiveTrackColor = trackInactive
-            ),
-            thumb = {
-                Box(
-                    modifier = Modifier
-                        .size(18.dp)
-                        .alpha(if (enabled) 1f else 0.38f)
-                        .shadow(
-                            elevation = 4.dp,
-                            shape = Radius.pill,
-                            clip = false,
-                            ambientColor = SliderThumbShadow,
-                            spotColor = SliderThumbShadow
-                        )
-                        .background(thumbColor, Radius.pill)
+                .weight(1f)
+                .height(56.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 1.dp, start = 4.dp, end = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
+            ) {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
-            },
-            track = { state ->
-                // 自绘轨道：3dp 线 + 双极零点刻度（`.sl-zero`），右端 M3 默认停点圆点消失。
-                val fraction = if (state.valueRange.endInclusive - state.valueRange.start > 0f) {
-                    ((state.value - state.valueRange.start) /
-                        (state.valueRange.endInclusive - state.valueRange.start)).coerceIn(0f, 1f)
-                } else 0f
-                val bipolar = state.valueRange.start < 0f && state.valueRange.endInclusive > 0f
-                val trackColor = if (enabled) accent else accent.copy(alpha = 0.38f)
-                Canvas(modifier = Modifier.fillMaxSize()) {
-                    val y = size.height / 2f
-                    val cap = StrokeCap.Round
-                    // 未选中段
-                    drawLine(
-                        color = trackInactive,
-                        start = Offset(0f, y),
-                        end = Offset(size.width, y),
-                        strokeWidth = 3.dp.toPx(),
-                        cap = cap
-                    )
-                    // 选中段
-                    drawLine(
-                        color = trackColor,
-                        start = Offset(0f, y),
-                        end = Offset(size.width * fraction, y),
-                        strokeWidth = 3.dp.toPx(),
-                        cap = cap
-                    )
-                    // 双极参数的零点刻度：1.5×10dp 竖线在 50% 处（`.sl-zero`）
-                    if (bipolar) {
-                        drawLine(
-                            color = thumbColor.copy(alpha = 0.55f),
-                            start = Offset(size.width / 2f, y - 5.dp.toPx()),
-                            end = Offset(size.width / 2f, y + 5.dp.toPx()),
-                            strokeWidth = 1.5.dp.toPx(),
-                            cap = cap
+                Text(
+                    text = format(value),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = valueColor,
+                    modifier = Modifier
+                        .scale(valueScale)
+                        .background(
+                            if (dragging) accent.copy(alpha = 0.12f) else Color.Transparent,
+                            Radius.pill
                         )
+                        .padding(horizontal = Spacing.s, vertical = Spacing.xs)
+                )
+            }
+            Slider(
+                value = value,
+                enabled = enabled,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer { translationY = 8.dp.toPx() }
+                    .semantics { contentDescription = label },
+                onValueChange = { raw ->
+                    if (!dragging) {
+                        dragging = true
+                        onDraggingChange(true)
+                    }
+                    val out = quantize(raw)
+                    onValueChange(out)
+                    reportHud(Pair(label, format(out)))
+                },
+                valueRange = valueRange,
+                onValueChangeFinished = {
+                    dragging = false
+                    onDraggingChange(false)
+                    reportHud(null)
+                    onValueChangeFinished()
+                },
+                interactionSource = interaction,
+                colors = SliderDefaults.colors(
+                    thumbColor = thumbColor,
+                    activeTrackColor = accent,
+                    inactiveTrackColor = trackInactive,
+                    disabledThumbColor = thumbColor.copy(alpha = 0.38f),
+                    disabledActiveTrackColor = accent.copy(alpha = 0.38f),
+                    disabledInactiveTrackColor = trackInactive
+                ),
+                thumb = {
+                    Box(
+                        modifier = Modifier
+                            .size(22.dp)
+                            .scale(if (thumbPressed || dragging) 1.15f else 1f)
+                            .alpha(if (enabled) 1f else 0.38f)
+                            .shadow(
+                                elevation = 4.dp,
+                                shape = Radius.pill,
+                                clip = false,
+                                ambientColor = SliderThumbShadow,
+                                spotColor = SliderThumbShadow
+                            )
+                            .background(thumbColor, Radius.pill)
+                    )
+                },
+                track = { state ->
+                    val fraction = if (state.valueRange.endInclusive - state.valueRange.start > 0f) {
+                        ((state.value - state.valueRange.start) /
+                            (state.valueRange.endInclusive - state.valueRange.start)).coerceIn(0f, 1f)
+                    } else 0f
+                    val bipolarTrack = state.valueRange.start < 0f && state.valueRange.endInclusive > 0f
+                    val trackColor = if (enabled) accent else accent.copy(alpha = 0.38f)
+                    Canvas(modifier = Modifier.fillMaxSize()) {
+                        // 轨道画在盒高 62% 处（标签行正下方），4dp + 圆帽
+                        val y = size.height * 0.62f
+                        drawLine(
+                            color = trackInactive,
+                            start = Offset(0f, y),
+                            end = Offset(size.width, y),
+                            strokeWidth = 4.dp.toPx(),
+                            cap = StrokeCap.Round
+                        )
+                        drawLine(
+                            color = trackColor,
+                            start = Offset(0f, y),
+                            end = Offset(size.width * fraction, y),
+                            strokeWidth = 4.dp.toPx(),
+                            cap = StrokeCap.Round
+                        )
+                        if (bipolarTrack) {
+                            drawLine(
+                                color = thumbColor.copy(alpha = 0.55f),
+                                start = Offset(size.width / 2f, y - 5.dp.toPx()),
+                                end = Offset(size.width / 2f, y + 5.dp.toPx()),
+                                strokeWidth = 1.5.dp.toPx(),
+                                cap = StrokeCap.Round
+                            )
+                        }
                     }
                 }
-            }
-        )
+            )
+        }
+        // —— 加步进钮 ——
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .alpha(if (enabled && value < valueRange.endInclusive) 1f else 0.3f)
+                .clip(Radius.pill)
+                .clickable(
+                    interactionSource = null,
+                    indication = null,
+                    enabled = enabled
+                ) { nudge(1f) }
+                .semantics { contentDescription = "$label 加一格" },
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                "+",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }
 
 /**
- * 拖动读数上报（UI 3.0「中央 HUD」的数据通道）。见类 KDoc。
+ * 拖动读数上报（UI 3.0「中央 HUD」的数据通道）。无编辑器上层时是空实现。
  */
 val LocalHudReporter = staticCompositionLocalOf<((Pair<String, String>?) -> Unit)> { {} }
-

@@ -577,7 +577,6 @@ fun EditorScreen(
         if (!lightChrome && lumaCentroid > 0.66f) lightChrome = true
         else if (lightChrome && lumaCentroid < 0.58f) lightChrome = false
     }
-    var histExpanded by remember { mutableStateOf(true) }
 
     // Deck 高度两档（S/L），切分类时空间弹簧形变。
     val deckExpanded = category == EditorCategory.Portrait ||
@@ -602,6 +601,18 @@ fun EditorScreen(
     // 否则拖高 Deck 后 HUD 会画到 Deck 面板底下。
     var deckHOverride by remember { mutableStateOf<Dp?>(null) }
     val deckEffH = deckHOverride ?: deckH
+    // v0.7.4：顶/底 chrome 实测高度（px）—— 照片保留区与 HUD/提示的定位都吃这两个值
+    var photoTopPx by remember { mutableStateOf(252) }
+    var photoBottomPx by remember { mutableStateOf(656) }
+    // v0.7.4（用户审计 P1-2）：Deck **三档收起** —— 收起态 44dp 单行（展开钮 + 分组 chips），
+    // 预览面积 49% → 65%。捏合放大（>1.5×）自动收起让位（Snapseed 惯例）。
+    var deckCollapsed by remember { mutableStateOf(false) }
+    LaunchedEffect(previewZoom) {
+        if (previewZoom > 1.5f) deckCollapsed = true
+    }
+    // 直方图悬浮化（用户审计 P2-2）：默认收成 132×40 悬浮小卡（读数不是操作面，
+    // 不该常驻挤压预览）；点按展开为全宽条
+    var histMini by remember { mutableStateOf(true) }
 
     // 回执「预设」行的显示名（审计 B-11）：内置预设查表、自定义预设查用户库，
     // 都查不到（理论不可达）才回退裸 id —— 自定义 id 是「custom:<uuid 片段>」，显示出来是乱码。
@@ -694,8 +705,13 @@ fun EditorScreen(
             // 会超过任何手机横屏的高度（≈412dp）⇒ 照片框实测高度归零、画面**整张消失**。
             // 同时横屏照片框右缘让开 400dp 侧栏：fit 矩形以「可见左列」为准，
             // 否则照片以全宽居中，右半被不透明侧栏盖住且不居中。
-            val photoTopPad = 96.dp // statusbar + topbar + histogram（近似值，onSizeChanged 会给准确值）
-            val photoBottomPad = if (landscape) RAIL_HEIGHT + 24.dp else deckH + RAIL_HEIGHT + 16.dp
+            // v0.7.4（用户审计 P1-1）：保留区**实测化** —— 旧版写死 96 / deck+58+16，
+            // 与真实 chrome（直方图 60 + 把手 44 + Rail 容器 40）差出上 52dp / 下 68dp 的
+            // 盲区：放大拖动时照片滑进这两条区域「被遮住看不到」。现在顶/底 chrome 各自
+            // onSizeChanged 上报实测高度，fit 矩形与平移夹取都以实测可见区为准。
+            // 初始值用旧估算兜底（首帧后即被实测值替换）。
+            val photoTopPad = with(density) { photoTopPx.toDp() }
+            val photoBottomPad = with(density) { photoBottomPx.toDp() } + 8.dp
             val photoEndPad = if (landscape) 400.dp else 0.dp
             Box(
                 modifier = Modifier
@@ -952,18 +968,15 @@ fun EditorScreen(
             // 的结构：作用域 chips + 分组 chips 同一横滚 + 准星钉尾）。原先两条钉住行（40+56=96dp）
             // 合并为一行（40dp）—— 这 56dp 是「S 档 248 → 176」预算的主要来源。
             // 提示行同步收敛：只在对象识别异常 / 存在空作用域时出现一行（原先常驻）。
-            val deckTopHint = when {
-                !objectScopesAvailable -> "对象识别不可用，仅支持整图。"
-                category.scopeMode.showsScopeBar && emptyScopes.isNotEmpty() ->
-                    "灰色作用域 = 本图未检出该对象。"
-                else -> null
-            }
+            // v0.7.4（用户审计 P1-3）：常驻「灰色作用域」提示删除（信息改为
+            // ML 探测后的一次性浮出提示，见 autoMaskNote 通道）——钉住行只留 chips。
+            val deckTopHint = if (!objectScopesAvailable) "对象识别不可用，仅支持整图。" else null
             val deckInner: @Composable () -> Unit = {
                 Column(modifier = Modifier.fillMaxSize()) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = Spacing.cardInner, vertical = Spacing.s),
+                                .padding(horizontal = Spacing.cardInner, vertical = 4.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Row(
@@ -1119,11 +1132,13 @@ fun EditorScreen(
                 }
             Column(modifier = Modifier.fillMaxSize()) {
                 // 顶栏：只降 alpha、不收高度（收高度会改照片 fit，画面跳两下）。
+                // v0.7.4（用户审计 P1-1）：onSizeChanged 实测顶栏高度 → 照片保留区顶部。
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .inertUnless(enabled = !dragging)
                         .graphicsLayer { alpha = chromeAlpha }
+                        .onSizeChanged { photoTopPx = it.height }
                 ) {
                     EditorTopBar(
                         showOriginal = showOriginal,
@@ -1153,20 +1168,7 @@ fun EditorScreen(
                 if (landscape) {
                     Row(modifier = Modifier.fillMaxWidth().weight(1f)) {
                         Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
-                        // 直方图条：随 chrome 淡出；点击收起 / 展开（用户主动行为，允许布局变化）。
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .inertUnless(enabled = !dragging)
-                                .graphicsLayer { alpha = chromeAlpha }
-                        ) {
-                            HistogramStrip(
-                                data = histogram,
-                                expanded = histExpanded,
-                                lightChrome = lightChrome,
-                                onToggle = { histExpanded = !histExpanded }
-                            )
-                        }
+                        // v0.7.4：直方图改**悬浮小卡**（见顶部 overlay），横屏不再占流式版面。
                             Spacer(Modifier.weight(1f))
                         // ———— Rail 工具栏（六工具，图标 + 文字）————
                         // Rail 同 deck 一起进亮档（审计 A-P2-1）：它是悬浮 chrome，
@@ -1206,35 +1208,41 @@ fun EditorScreen(
                         }
                     }
                 } else {
-                // 直方图条：随 chrome 淡出；点击收起 / 展开（用户主动行为，允许布局变化）。
-                Box(
+                Column(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .inertUnless(enabled = !dragging)
-                        .graphicsLayer { alpha = chromeAlpha }
+                        .fillMaxSize()
+                        // v0.7.4（用户审计 P1-1）：实测底部 chrome（把手+Deck+Rail 容器）
+                        .onSizeChanged { photoBottomPx = it.height }
                 ) {
-                    HistogramStrip(
-                        data = histogram,
-                        expanded = histExpanded,
-                        lightChrome = lightChrome,
-                        onToggle = { histExpanded = !histExpanded }
-                    )
-                }
                 Spacer(Modifier.weight(1f))
                 // ———— Deck 拖拽调高手柄（用户可自由调整 Deck 高度）————
                 // 上拖 = Deck 变高（更多参数可见），下拖 = 变矮（更多照片可见）。
                 // 拖拽只改 deckHOverride，不触发动画（跟手）。上限见 deckHOverride 的 KDoc。
                 val deckDragHandle = Modifier
                     .fillMaxWidth()
-                    // v0.7.3（审计 B2）：触控 20→44dp —— 这是全面板误触率最高的一根；
-                    // 视觉条 36×4 居中不变。
+                    // v0.7.3（审计 B2）：触控 20→44dp；v0.7.4（用户审计 P1-2）下拖过半
+                    // 即吸附到**收起态 44dp**（三档：收起 44 / S / L），预览面积 +148dp。
                     .height(44.dp)
-                    .pointerInput(Unit) {
-                        detectVerticalDragGestures { change, dragAmount ->
+                    .pointerInput(deckH, deckScale) {
+                        detectVerticalDragGestures(
+                            onDragEnd = {
+                                // 松手吸附：低于 S-40 → 收起态
+                                val cur = deckHOverride ?: deckH
+                                if (cur < DECK_HEIGHT_S - 40.dp) deckCollapsed = true
+                            }
+                        ) { change, dragAmount ->
                             change.consume()
                             val current = deckHOverride ?: deckH
-                            deckHOverride = (current - dragAmount.toDp())
+                            val next = (current - dragAmount.toDp())
                                 .coerceIn(160.dp, DECK_HEIGHT_L * deckScale)
+                            if (next < DECK_HEIGHT_S - 40.dp) {
+                                // 拖过收起阈值：进入收起态（本帧起手柄上方只剩 mini bar）
+                                deckCollapsed = true
+                                deckHOverride = null
+                            } else {
+                                deckCollapsed = false
+                                deckHOverride = next
+                            }
                         }
                     }
                 Box(
@@ -1267,6 +1275,55 @@ fun EditorScreen(
                 // 四角 20dp 圆角（规范 22 不在梯，取 card 档）。高度由拖拽手柄或分类切换决定。
                 // 作用域/分组 chips 钉在滚动之外；内容区滚动兜底。
                 // ⚠️ 这里是参数的一部分（决定「改谁 / 改什么」），**不**随 chrome 淡出。
+                if (deckCollapsed) {
+                    // —— 收起态 44dp 单行：展开钮 + 分组 chips（可原地换组，不必展开）——
+                    ChromeSkin(lightChrome) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 10.dp)
+                                .height(44.dp)
+                                .background(MaterialTheme.colorScheme.surface, Radius.card)
+                                .clickable(
+                                    interactionSource = null,
+                                    indication = null
+                                ) { deckCollapsed = false },
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(44.dp, 44.dp)
+                                    .clickable(
+                                        interactionSource = null,
+                                        indication = null
+                                    ) { deckCollapsed = false }
+                                    .semantics {
+                                        contentDescription = "展开参数面板"
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                PathIcon(
+                                    def = AppIcons.Reset,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    size = 18.dp
+                                )
+                            }
+                            Row(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .horizontalScroll(rememberScrollState()),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                ParamSubBar(
+                                    category = category,
+                                    selection = selection,
+                                    onSelectionChange = { selection = it },
+                                    inline = true
+                                )
+                            }
+                        }
+                    }
+                } else {
                 ChromeSkin(lightChrome) {
                 Box(
                     modifier = Modifier
@@ -1279,6 +1336,7 @@ fun EditorScreen(
                         )
                 ) {
                     deckInner()
+                }
                 }
                 }
                 // ———— Rail 工具栏（六工具，图标 + 文字）————
@@ -1299,9 +1357,65 @@ fun EditorScreen(
                 }
                 }
                 }
+                }
             }
             // 必须在 chrome 之后声明（z 轴更高），否则会被 Deck 盖住。
             Box(modifier = Modifier.fillMaxSize()) {
+                // —— v0.7.4（用户审计 P2-2）：直方图**悬浮小卡** —— 读数不是操作面，
+                // 不该常驻挤压预览（LR 惯例：悬浮小卡，点按展开）。展开/收起都浮在照片上，
+                // 顶部保留区因此只含顶栏（实测化见 photoTopPx）。
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .statusBarsPadding()
+                        .padding(top = 54.dp)
+                        .padding(horizontal = 10.dp)
+                        .inertUnless(enabled = !dragging)
+                        .graphicsLayer { alpha = chromeAlpha },
+                ) {
+                    ChromeSkin(lightChrome) {
+                        Box(
+                            modifier = Modifier
+                                .then(
+                                    if (histMini) Modifier.width(132.dp) else Modifier.fillMaxWidth()
+                                )
+                                .height(if (histMini) 40.dp else 48.dp)
+                                .clip(if (histMini) Radius.pill else Radius.chip)
+                                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.82f))
+                                .clickable(
+                                    interactionSource = null,
+                                    indication = null
+                                ) { histMini = !histMini }
+                                .semantics {
+                                    contentDescription = "RGB 直方图，点按切换悬浮卡 / 全宽条"
+                                }
+                                .padding(horizontal = 10.dp, vertical = if (histMini) 2.dp else 6.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (histogram != null) {
+                                Canvas(modifier = Modifier.fillMaxWidth().height(22.dp)) {
+                                    val (r, g, b) = histogram!!
+                                    val channels = listOf(r to HIST_R, g to HIST_G, b to HIST_B)
+                                    for ((arr, color) in channels) {
+                                        val n = arr.size
+                                        if (n < 2) continue
+                                        val path = Path()
+                                        path.moveTo(0f, size.height)
+                                        for (i in 0 until n) {
+                                            path.lineTo(
+                                                i.toFloat() / (n - 1) * size.width,
+                                                size.height * (1f - arr[i].coerceIn(0f, 1f))
+                                            )
+                                        }
+                                        path.lineTo(size.width, size.height)
+                                        path.close()
+                                        drawPath(path, color.copy(alpha = 0.42f))
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
                 if (previewZoom > 1.01f) {
                     val tint = rememberGlassTint(opaque = true)
                     Box(
@@ -1359,8 +1473,8 @@ fun EditorScreen(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .navigationBarsPadding()
-                        // deckEffH（含用户拖高覆盖值）：拖高 Deck 后 HUD 不能画到面板底下（审计 B-10）
-                        .padding(bottom = deckEffH + RAIL_HEIGHT + 18.dp)
+                        // v0.7.4：实测底部 chrome（含收起态/拖高），读数不再压到 Deck 上沿
+                        .padding(bottom = with(density) { photoBottomPx.toDp() } + 18.dp)
                 ) {
                     hud?.let { (name, value) ->
                         Column(
@@ -1430,8 +1544,8 @@ fun EditorScreen(
                     autoMaskNote = autoMaskNote,
                     liquifyNote = liquifyNote,
                     pickNote = pickNote,
-                    // deckEffH：与 HUD 同口径，拖高 Deck 后提示胶囊不被盖住（审计 B-10）
-                    bottomPadding = deckEffH + RAIL_HEIGHT + 76.dp
+                    // v0.7.4：与 HUD 同口径改实测
+                    bottomPadding = with(density) { photoBottomPx.toDp() } + 76.dp
                 )
             }
         }
@@ -1519,6 +1633,10 @@ fun EditorScreen(
                         IconAction(
                             def = AppIcons.Redo, label = "重做",
                             enabled = canRedo, onClick = onRedo
+                        )
+                        IconAction(
+                            def = AppIcons.Rotate, label = "旋转 90°",
+                            onClick = onRotate
                         )
                     }
                 }
@@ -1776,11 +1894,11 @@ private fun EditorTopBar(
                     // 占宽的长文字（约 40dp）。编辑器是全 App 唯一的编辑界面，照片 + 工具栏
                     // 本身已经说明「你在哪」—— 省下的宽度留给操作本身。
                     Spacer(Modifier.weight(1f))
-                    // v0.7.3（审计 C4/B3）：撤销/重做迁入历史面板 —— 顶栏 8 枚 48dp 热区
-                    // 在 392dp 屏放不下；历史面板本就是栈语义的家（§12.3），顶部两枚 48dp
-                    // 撤/重做与「第 N 步」丝带是同一问题的同一种答案。
-                    // 历史（§09）：与撤销/重做并列 —— 它们回答的是同一个问题「我改过些什么」，
-                    // 只是粒度不同（一步 vs 列出每一步）。
+                    // v0.7.4（用户审计 P2-3）：撤销/重做**回归顶栏** —— LR/Snapseed 用户
+                    // 改坏了第一反应是找撤销，不该埋进历史面板。旋转迁入历史面板头部
+                    // （历史头部本就有撤销/重做一对，凑成编辑动作行）。
+                    IconAction(def = AppIcons.Undo, label = "撤销", enabled = canUndo, onClick = onUndo)
+                    IconAction(def = AppIcons.Redo, label = "重做", enabled = canRedo, onClick = onRedo)
                     IconAction(def = AppIcons.History, label = "历史", onClick = onOpenHistory)
                     // 「重置」已从顶栏移走（移到历史面板底部）：全局重置是低频且破坏性的动作，
                     // 不该和撤销/重做挤在一起；而它本质上是「跳到第 0 步」，归到历史里更自洽。
@@ -1805,13 +1923,8 @@ private fun EditorTopBar(
                         enabled = histogramReady,
                         onClick = onAutoEnhance
                     )
-                    // Q5 手动旋转（审计 §6 Q5 裁决「都要」）：顺时针 90° 步进，
-                    // 会话级旋转 —— 预览/对比/缩略图/导出全链路同转（见 MainActivity.applySessionRotation）。
-                    IconAction(
-                        def = AppIcons.Rotate,
-                        label = "旋转 90°",
-                        onClick = onRotate
-                    )
+                    // v0.7.4：旋转迁入历史面板头部（顶栏容量有限，历史头部本就是
+                    // 编辑动作行：撤销/重做/旋转）。
                     Spacer(Modifier.width(Spacing.s))
                     ExportPill(enabled = !exporting, exporting = exporting, onClick = onExport)
                 }
@@ -1940,64 +2053,6 @@ private fun SplitTag(text: String, modifier: Modifier = Modifier) {
             style = MaterialTheme.typography.labelSmall,
             color = Color.White
         )
-    }
-}
-
-/**
- * 顶部直方图条（UI 3.0）：三通道半透明叠加，偏色一眼可见。点击收起 / 展开。
- * 数据由 [EditorScreen] 的 produceState 随渲染完成在后台重算；null（首帧 / 失败）时不占位。
- */
-@Composable
-private fun HistogramStrip(
-    data: Triple<FloatArray, FloatArray, FloatArray>?,
-    expanded: Boolean,
-    lightChrome: Boolean,
-    onToggle: () -> Unit
-) {
-    if (!expanded || data == null) return
-    // 规范 `.litchrome` 的覆盖面就是 `.tb, .histstrip` 两个 —— Deck / Rail 不跟着切，
-    // 因为它们是「操作面」而不是「信息面」：一块米白的参数台会让滑块读数更难分辨。
-    ChromeSkin(lightChrome) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 6.dp)
-                // v0.7.3（审计 B6）：点击区包一层 48dp 高的外盒（视觉 34dp 条居中不变）
-                .height(48.dp)
-                .clip(Radius.chip)
-                .clickable(interactionSource = null, indication = null, onClick = onToggle)
-                // T4 无障碍：直方图是纯 Canvas 自绘，不给语义就是哑块。
-                .semantics { contentDescription = "RGB 直方图，点按可收起或展开" }
-        ) {
-            // 视觉条 34dp 居中于 48dp 触控盒（规范视觉值不变）
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(34.dp)
-                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.82f), Radius.chip)
-                    .padding(horizontal = 12.dp),
-                contentAlignment = Alignment.Center
-            ) {
-            Canvas(modifier = Modifier.fillMaxWidth().height(22.dp)) {
-                val channels = listOf(data.first to HIST_R, data.second to HIST_G, data.third to HIST_B)
-                for ((arr, color) in channels) {
-                    val n = arr.size
-                    if (n < 2) continue
-                    val path = Path()
-                    path.moveTo(0f, size.height)
-                    for (i in 0 until n) {
-                        path.lineTo(
-                            i.toFloat() / (n - 1) * size.width,
-                            size.height * (1f - arr[i].coerceIn(0f, 1f))
-                        )
-                    }
-                    path.lineTo(size.width, size.height)
-                    path.close()
-                    drawPath(path, color.copy(alpha = 0.42f))
-                }
-            }
-            }
-        }
     }
 }
 
