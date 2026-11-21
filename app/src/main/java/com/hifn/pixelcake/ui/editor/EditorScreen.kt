@@ -43,6 +43,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -1321,7 +1322,7 @@ fun EditorScreen(
                                 contentAlignment = Alignment.Center
                             ) {
                                 PathIcon(
-                                    def = AppIcons.Reset,
+                                    def = IconDef(listOf(IconPath("M6,14l6,-6 6,6"))),
                                     tint = MaterialTheme.colorScheme.primary,
                                     size = 18.dp
                                 )
@@ -2046,7 +2047,7 @@ private fun ExportPill(
             maxLines = 1,
             softWrap = false,
             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-            modifier = Modifier.width(52.dp)
+            modifier = Modifier.widthIn(min = 52.dp)
         )
     }
 }

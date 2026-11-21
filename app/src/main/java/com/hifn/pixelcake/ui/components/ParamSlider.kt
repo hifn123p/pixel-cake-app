@@ -151,13 +151,15 @@ fun ParamSlider(
     }
 
     Row(modifier = modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-        // —— 减步进钮（对齐轨道：v0.7.5 视觉审计 V4 —— 步进钮中心此前落在
-        // 标签行与轨道的中间，与滑轨中线错位 ~7dp）——
+        // —— 减步进钮（对齐轨道 + v0.7.5 复测审计 P1-5：热区 34→48dp，
+        // 视觉圆点保持 34dp 居中于 48dp 命中区）——
         Column(modifier = Modifier.height(56.dp)) {
             Spacer(Modifier.height(22.dp))
             Box(
                 modifier = Modifier
                     .size(34.dp)
+                    // 热区外扩到 48dp（视觉 34dp 不变）
+                    .editorTouchTarget(48.dp)
                 .alpha(if (enabled && value > valueRange.start) 1f else 0.3f)
                 .clip(Radius.pill)
                 .clickable(
@@ -298,6 +300,7 @@ fun ParamSlider(
             Box(
                 modifier = Modifier
                     .size(34.dp)
+                    .editorTouchTarget(48.dp)
                 .alpha(if (enabled && value < valueRange.endInclusive) 1f else 0.3f)
                 .clip(Radius.pill)
                 .clickable(

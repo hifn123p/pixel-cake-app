@@ -191,7 +191,9 @@ private fun PresetThumb(
                 Text(
                     text = "✓",
                     style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                    color = Color.White
+                    // v0.7.5 复测（审计 P1-4）：白字压琥珀 #FFB454 对比 1.76:1 →
+                    // onPrimary (#3A2A05) 对比 7.87:1
+                    color = MaterialTheme.colorScheme.onPrimary
                 )
             }
         }

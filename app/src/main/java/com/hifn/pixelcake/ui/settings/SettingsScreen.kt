@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -451,8 +453,6 @@ fun SettingsScreen(
 
                 Spacer(Modifier.height(Spacing.s))
 
-                Spacer(Modifier.height(Spacing.s))
-
                 SettingRow(
                     title = "模型中心",
                     subtitle = "分割 / 人脸模型的加载状态、加速器与缓存（只读诊断）"
@@ -700,7 +700,10 @@ private fun <T> ChipSelector(
     label: (T) -> String,
     onSelect: (T) -> Unit
 ) {
-    Row(horizontalArrangement = Arrangement.spacedBy(Spacing.s)) {
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(Spacing.s),
+        verticalArrangement = Arrangement.spacedBy(Spacing.xs)
+    ) {
         options.forEach { option ->
             FilterChip(
                 selected = option == selected,

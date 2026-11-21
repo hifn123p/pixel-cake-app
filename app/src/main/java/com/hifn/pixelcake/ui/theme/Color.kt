@@ -17,7 +17,10 @@ import androidx.compose.ui.graphics.Color
  * 琥珀只允许出现在四处：选中态、拖动中的填充与拇指、蒙版轮廓、主 CTA。
  * 中性阶整体偏暖（黄相 +2），与肤色、木、胶片同一温度。
  */
-val Seed = Color(0xFFB8791A)  // 浅色主题强调色：深琥珀（浅底上直接用亮琥珀对比度不足）
+// v0.7.5 复测（审计 P1-2）：浅色 primary 从 #B8791A 压深到 #8A5A0B ——
+// #B8791A 作文字在浅底上对比 3.22:1（WCAG AA 4.5 不达标）；#8A5A0B 给 5.5:1。
+// 视觉变化是琥珀略深 —— 仍是明确的「暖琥珀」语言，只是更沉稳。
+val Seed = Color(0xFF8A5A0B)  // 浅色主题强调色：深琥珀（浅底上直接用亮琥珀对比度不足）
 val Ink = Color(0xFF26241F)
 val NeutralSurface = Color(0xFFF1F0EB)
 val NeutralSurfaceDark = Color(0xFF121211)

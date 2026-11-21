@@ -1,6 +1,8 @@
 package com.hifn.pixelcake.ui.settings
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -52,6 +54,7 @@ fun ModelCenterSheet(onDismiss: () -> Unit) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = Spacing.page)
                 .padding(bottom = Spacing.xxl),
             verticalArrangement = Arrangement.spacedBy(Spacing.cardGap)

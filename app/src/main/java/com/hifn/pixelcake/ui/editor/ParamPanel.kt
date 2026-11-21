@@ -669,7 +669,7 @@ private fun LayerHeader(
         onValueChangeFinished = onCommit,
         onDraggingChange = onDraggingChange
     )
-    Hint("层强度 0% = 临时停用（参数保留，不会丢）。层是**叠加量**：作用在整图调色之后，整图 +0.5EV 加本层 +1EV ⇒ 这块共 +1.5EV。")
+    Hint("层强度 0% = 临时停用（参数保留，不会丢）。层是叠加量：作用在整图调色之后，整图 +0.5EV 加本层 +1EV ⇒ 这块共 +1.5EV。")
 }
 
 /**

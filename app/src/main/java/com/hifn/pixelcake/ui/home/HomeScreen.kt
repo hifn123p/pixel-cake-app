@@ -34,6 +34,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -147,6 +148,36 @@ fun HomeScreen(
                 }
             }
 
+            // v0.7.5 复测（审计 P0-1）：继续上次编辑胶囊**放进 Column 流**（原在 Box
+            // 顶层 TopStart 对齐，压住状态栏与标题）；状态栏 padding + page 对齐一并补齐。
+            if (hasSavedSession) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = Spacing.page)
+                        .padding(bottom = Spacing.m)
+                        .clip(Radius.pill)
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f))
+                        .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f), Radius.pill)
+                        .clickable(
+                            interactionSource = null,
+                            indication = null,
+                            onClick = onResumeSession
+                        )
+                        .padding(horizontal = Spacing.l, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    PathIcon(def = AppIcons.History, tint = MaterialTheme.colorScheme.primary, size = 20.dp)
+                    Spacer(Modifier.width(Spacing.m))
+                    Text(
+                        "继续上次编辑",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+
             HeroCard(
                 loading = loading,
                 onPickPhoto = onImportPhoto,
@@ -156,35 +187,6 @@ fun HomeScreen(
                     .weight(1f)
                     .padding(horizontal = Spacing.page, vertical = Spacing.m)
             )
-        }
-
-        // v0.7.5（流程审计 J2-P1）：继续上次编辑（编辑器退出不清档 —— 误触返回
-        // 不再等于工作全损；恢复成功后存档清空，胶囊随之消失）
-        if (hasSavedSession) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = Spacing.m)
-                    .clip(Radius.pill)
-                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f))
-                    .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f), Radius.pill)
-                    .clickable(
-                        interactionSource = null,
-                        indication = null,
-                        onClick = onResumeSession
-                    )
-                    .padding(horizontal = Spacing.l, vertical = 14.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                PathIcon(def = AppIcons.History, tint = MaterialTheme.colorScheme.primary, size = 20.dp)
-                Spacer(Modifier.width(Spacing.m))
-                Text(
-                    "继续上次编辑",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
         }
 
         if (showCamera) {
@@ -276,6 +278,19 @@ private fun HeroCard(
             // 旧版 weight(1f) 撑满余屏（~75%），卡片吞掉「最近编辑」区。
             .heightIn(max = 344.dp)
             .clip(Radius.shell)
+            // v0.7.5 复测（审计 P1-1）：底部文案区加暗色渐晕 —— 白字压 #E9A25C
+            // 对比度仅 2.15:1，加 scrim 后 ≥4.5:1（WCAG AA 达标）
+            .drawWithContent {
+                drawContent()
+                drawRect(
+                    brush = Brush.verticalGradient(
+                        0f to Color.Transparent,
+                        1f to Color.Black.copy(alpha = 0.45f),
+                        startY = size.height * 0.55f,
+                        endY = size.height
+                    )
+                )
+            }
             .background(
                 // 规范 `.ph-golden` 的 5 个停靠点（v0.7.2 补齐第 4/5 档，审计 A-P3-11/Q7）：
                 // 旧版把 E9A25C 放在卡底，缺了最底部 16% 提亮到 F2C078 的「暖光收边」。

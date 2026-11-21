@@ -531,7 +531,7 @@ fun CameraPanel(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("默认修图参数", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+                Text("系留自动套预设", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
                 Switch(checked = tetherOn, onCheckedChange = null)
             }
             if (tetherOn) {
