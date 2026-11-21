@@ -579,7 +579,7 @@ fun ParamScopeBar(
                 Box(
                     modifier = Modifier
                         .padding(start = Spacing.s)
-                        .size(36.dp)
+                        .size(44.dp)
                         .clip(Radius.pill)
                         .background(
                             if (pickActive) MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)

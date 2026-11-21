@@ -1021,7 +1021,7 @@ fun EditorScreen(
                                 Box(
                                     modifier = Modifier
                                         .padding(start = Spacing.s)
-                                        .size(36.dp)
+                                        .size(44.dp)
                                         .clip(Radius.pill)
                                         .background(
                                             if (pickActive) tint.copy(alpha = 0.14f) else Color.Transparent
@@ -1979,10 +1979,9 @@ private fun IconAction(
     }
     Box(
         modifier = Modifier
-            // v0.7.5（视觉审计 V2→复测修订）：视觉 44→40dp —— 44 仍放不下
-            //（7×44+导出 pill = 400 > 391，复测截图 23b 实证「导出」被挤成竖排）。
-            // 40dp = Q4 辅助档；触控体验靠相邻间距（每枚间 8dp）与手指可悬停补偿。
-            .size(40.dp)
+            // v0.7.5 复测修订：44→40→**44dp**（顶栏去掉对比按钮后 6 枚 ×44+导出
+            // pill = 364 ≤ 391 放得下；40dp 触控偏小是用户复测反馈的可量化问题）
+            .size(44.dp)
             .clip(Radius.chip)
             .clickable(
                 interactionSource = null,
@@ -2034,7 +2033,7 @@ private fun ExportPill(
                 MaterialTheme.colorScheme.primary.copy(alpha = 0.45f),
                 Radius.pill
             )
-            .padding(horizontal = Spacing.m),
+            .padding(horizontal = Spacing.s),
         contentAlignment = Alignment.Center
     ) {
         // v0.7.5 复测：maxLines/softWrap 参数防不了 **布局挤压**（Row 放不下时把

@@ -198,10 +198,11 @@ private fun RailItem(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    // ⚠️ 未选中用 **Ink-3**（`--ink-3: #6B6963`，UI3.0 `.rk{color:var(--ink-3)}`），
-    // 不是 `onSurfaceVariant`（#ABA79E）—— 后者比规范亮一档，会让「未选中」看起来像次要标题。
+    // ⚠️ v0.7.5 复测：未选中从 outline(#6B6963，暗底对比仅 ~3.3:1) 升到
+    // onSurfaceVariant(#A5A29A，暗底 ~7:1) —— 用户实测「深色未选中标签看不清」。
+    // 与选中琥珀仍区分明显（亮度差 + 色相差双重编码）。
     val contentColor = if (selected) MaterialTheme.colorScheme.primary
-    else MaterialTheme.colorScheme.outline
+    else MaterialTheme.colorScheme.onSurfaceVariant
     Column(
         modifier = modifier
             .background(
