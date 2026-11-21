@@ -40,7 +40,7 @@
     <issue
         id="AndroidGradlePluginVersion"
         severity="Warning"
-        message="A newer version of Gradle than 8.13 is available: 8.14.7"
+        message="A newer version of Gradle than 8.13 is available: 8.14.8"
         category="Correctness"
         priority="4"
         summary="Obsolete Android Gradle Plugin Version"
@@ -56,7 +56,7 @@
     <issue
         id="AndroidGradlePluginVersion"
         severity="Warning"
-        message="A newer version of com.android.application than 8.13.2 is available: 9.5.1"
+        message="A newer version of com.android.application than 8.13.2 is available: 9.5.2"
         category="Correctness"
         priority="4"
         summary="Obsolete Android Gradle Plugin Version"
@@ -88,7 +88,7 @@
     <issue
         id="GradleDependency"
         severity="Warning"
-        message="A newer version of androidx.compose:compose-bom than 2025.11.01 is available: 2026.09.00"
+        message="A newer version of androidx.compose:compose-bom than 2025.11.01 is available: 2026.11.01"
         category="Correctness"
         priority="4"
         summary="Obsolete Gradle Dependency"
@@ -136,7 +136,7 @@
     <issue
         id="GradleDependency"
         severity="Warning"
-        message="A newer version of androidx.lifecycle:lifecycle-runtime-ktx than 2.10.0 is available: 2.11.0"
+        message="A newer version of androidx.lifecycle:lifecycle-runtime-ktx than 2.10.0 is available: 2.11.1"
         category="Correctness"
         priority="4"
         summary="Obsolete Gradle Dependency"
@@ -152,7 +152,7 @@
     <issue
         id="GradleDependency"
         severity="Warning"
-        message="A newer version of com.google.ai.edge.litert:litert than 2.2.0 is available: 2.3.2"
+        message="A newer version of com.google.ai.edge.litert:litert than 2.2.0 is available: 2.4.0"
         category="Correctness"
         priority="4"
         summary="Obsolete Gradle Dependency"
@@ -275,7 +275,7 @@
         errorLine2="                              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="/home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/MainActivity.kt"
-            line="1661"
+            line="1666"
             column="31"/>
     </issue>
 
@@ -439,6 +439,38 @@
         priority="3"
         summary="`State&lt;T>` will autobox values assigned to this state. Use a specialized state type instead."
         explanation="Calling `mutableStateOf&lt;T>()` when `T` is either backed by a primitive type on the JVM or is a value class results in a state implementation that requires all state values to be boxed. This usually causes an additional allocation for each state write, and adds some additional work to auto-unbox values when reading the value of the state. Instead, prefer to use a specialized primitive state implementation for `Int`, `Long`, `Float`, and `Double` when the state does not need to track null values and does not override the default `SnapshotMutationPolicy`. See `mutableIntStateOf()`, `mutableLongStateOf()`, `mutableFloatStateOf()`, and `mutableDoubleStateOf()` for more information."
+        errorLine1="    var photoTopPx by remember { mutableStateOf(252) }"
+        errorLine2="                                 ~~~~~~~~~~~~~~">
+        <location
+            file="/home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt"
+            line="605"
+            column="34"/>
+    </issue>
+
+    <issue
+        id="AutoboxingStateCreation"
+        severity="Hint"
+        message="Prefer `mutableIntStateOf` instead of `mutableStateOf`"
+        category="Performance"
+        priority="3"
+        summary="`State&lt;T>` will autobox values assigned to this state. Use a specialized state type instead."
+        explanation="Calling `mutableStateOf&lt;T>()` when `T` is either backed by a primitive type on the JVM or is a value class results in a state implementation that requires all state values to be boxed. This usually causes an additional allocation for each state write, and adds some additional work to auto-unbox values when reading the value of the state. Instead, prefer to use a specialized primitive state implementation for `Int`, `Long`, `Float`, and `Double` when the state does not need to track null values and does not override the default `SnapshotMutationPolicy`. See `mutableIntStateOf()`, `mutableLongStateOf()`, `mutableFloatStateOf()`, and `mutableDoubleStateOf()` for more information."
+        errorLine1="    var photoBottomPx by remember { mutableStateOf(656) }"
+        errorLine2="                                    ~~~~~~~~~~~~~~">
+        <location
+            file="/home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt"
+            line="606"
+            column="37"/>
+    </issue>
+
+    <issue
+        id="AutoboxingStateCreation"
+        severity="Hint"
+        message="Prefer `mutableIntStateOf` instead of `mutableStateOf`"
+        category="Performance"
+        priority="3"
+        summary="`State&lt;T>` will autobox values assigned to this state. Use a specialized state type instead."
+        explanation="Calling `mutableStateOf&lt;T>()` when `T` is either backed by a primitive type on the JVM or is a value class results in a state implementation that requires all state values to be boxed. This usually causes an additional allocation for each state write, and adds some additional work to auto-unbox values when reading the value of the state. Instead, prefer to use a specialized primitive state implementation for `Int`, `Long`, `Float`, and `Double` when the state does not need to track null values and does not override the default `SnapshotMutationPolicy`. See `mutableIntStateOf()`, `mutableLongStateOf()`, `mutableFloatStateOf()`, and `mutableDoubleStateOf()` for more information."
         errorLine1="    var rotationQuarterTurns by remember { mutableStateOf(0) }"
         errorLine2="                                           ~~~~~~~~~~~~~~">
         <location
@@ -475,7 +507,7 @@
         errorLine2="                                  ~~~~~~~~~~~~~~">
         <location
             file="/home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/MainActivity.kt"
-            line="283"
+            line="289"
             column="35"/>
     </issue>
 
@@ -491,7 +523,7 @@
         errorLine2="                                  ~~~~~~~~~~~~~~">
         <location
             file="/home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/MainActivity.kt"
-            line="300"
+            line="306"
             column="35"/>
     </issue>
 
@@ -507,7 +539,7 @@
         errorLine2="                                    ~~~~~~~~~~~~~~">
         <location
             file="/home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/MainActivity.kt"
-            line="302"
+            line="308"
             column="37"/>
     </issue>
 
@@ -859,7 +891,7 @@
         errorLine2="                                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="/home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt"
-            line="873"
+            line="889"
             column="43"/>
     </issue>
 
@@ -875,7 +907,7 @@
         errorLine2="                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="/home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/MainActivity.kt"
-            line="442"
+            line="447"
             column="29"/>
     </issue>
 
@@ -891,7 +923,7 @@
         errorLine2="                  ~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="/home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/MainActivity.kt"
-            line="914"
+            line="919"
             column="19"/>
     </issue>
 
@@ -907,7 +939,7 @@
         errorLine2="                                                             ^">
         <location
             file="/home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/MainActivity.kt"
-            line="1389"
+            line="1394"
             column="62"/>
     </issue>
 
@@ -923,7 +955,7 @@
         errorLine2="                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="/home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/MainActivity.kt"
-            line="1743"
+            line="1748"
             column="18"/>
     </issue>
 
