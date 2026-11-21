@@ -2032,15 +2032,17 @@ private fun ExportPill(
             .padding(horizontal = Spacing.m),
         contentAlignment = Alignment.Center
     ) {
+        // v0.7.5 复测：maxLines/softWrap 参数防不了 **布局挤压**（Row 放不下时把
+        // pill 压到 25dp，文本仍被逐字竖排 —— 复测截图 23b 实证）。结构级修复：
+        // Text 显式宽度 + 居中，任何挤压下都保持单行水平形态。
         Text(
             text = if (exporting) "导出中" else "导出",
-            // 规范 `.expill`：13px / SemiBold（审计 A-P3-2）
-            // v0.7.5（视觉审计 V1）：顶栏 9 元素在 391dp 放不下时会把这个 pill 挤成
-            // 竖排并裁字（截图 23b/40c 实证）—— 禁止换行 + 收紧内边距。
             style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
             color = MaterialTheme.colorScheme.primary,
             maxLines = 1,
-            softWrap = false
+            softWrap = false,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            modifier = Modifier.width(52.dp)
         )
     }
 }
