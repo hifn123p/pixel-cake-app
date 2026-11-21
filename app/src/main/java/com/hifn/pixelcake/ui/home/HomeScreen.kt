@@ -18,11 +18,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -50,6 +52,7 @@ import com.hifn.pixelcake.ui.theme.HeroCardMid
 import com.hifn.pixelcake.ui.theme.HeroCardTop
 import com.hifn.pixelcake.ui.theme.HeroCardWarm
 import com.hifn.pixelcake.camera.UsbCameraScanner
+import com.hifn.pixelcake.session.SessionStore
 import com.hifn.pixelcake.ui.settings.AppSettings
 import com.hifn.pixelcake.ui.theme.Radius
 import com.hifn.pixelcake.ui.theme.SeedOnDark
@@ -89,6 +92,8 @@ import java.io.File
 fun HomeScreen(
     settings: AppSettings,
     onOpenSettings: () -> Unit = {},
+    // v0.7.5（流程审计 J2-P1）：存在未过期的会话存档时，首页给「继续上次编辑」入口
+    onResumeSession: () -> Unit = {},
     onImportPhoto: () -> Unit,
     onImportArw: () -> Unit,
     loading: Boolean = false,
@@ -100,6 +105,11 @@ fun HomeScreen(
     val profile = remember { context.probeCapabilities().resolutionProfile() }
 
     var showCamera by remember { mutableStateOf(false) }
+    // v0.7.5（流程审计 J2-P1）：会话存档在位 ⇒ 首页提供「继续上次编辑」
+    var hasSavedSession by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        hasSavedSession = SessionStore.load(context) != null
+    }
     // v0.7.2（§M「连接后自动打开会话」）：USB 状态广播 + 到场探测。USB_STATE 是系统
     // 保护广播（targetSdk 34+ 的运行时接收器仍需显式 flag）；组合时相机可能已插着
     // （设置刚打开 / 冷启动），所以除了接收器还当场探测一次。
@@ -146,6 +156,35 @@ fun HomeScreen(
                     .weight(1f)
                     .padding(horizontal = Spacing.page, vertical = Spacing.m)
             )
+        }
+
+        // v0.7.5（流程审计 J2-P1）：继续上次编辑（编辑器退出不清档 —— 误触返回
+        // 不再等于工作全损；恢复成功后存档清空，胶囊随之消失）
+        if (hasSavedSession) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = Spacing.m)
+                    .clip(Radius.pill)
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f))
+                    .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f), Radius.pill)
+                    .clickable(
+                        interactionSource = null,
+                        indication = null,
+                        onClick = onResumeSession
+                    )
+                    .padding(horizontal = Spacing.l, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                PathIcon(def = AppIcons.History, tint = MaterialTheme.colorScheme.primary, size = 20.dp)
+                Spacer(Modifier.width(Spacing.m))
+                Text(
+                    "继续上次编辑",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
         }
 
         if (showCamera) {

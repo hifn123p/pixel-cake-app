@@ -27,16 +27,7 @@
 > Task :app:checkDebugDuplicateClasses
 
 > Task :app:compileDebugKotlin FAILED
-e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/MainActivity.kt:257:13 Unresolved reference 'autoMaskNote'.
-e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/components/ParamSlider.kt:156:18 Unresolved reference 'clip'.
-e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/components/ParamSlider.kt:293:18 Unresolved reference 'clip'.
-e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt:1141:55 Assignment type mismatch: actual type is 'Int', but 'Float' was expected.
-e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt:1215:58 Assignment type mismatch: actual type is 'Int', but 'Float' was expected.
-e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt:1371:26 None of the following candidates is applicable:
-fun Modifier.padding(start: Dp = ..., top: Dp = ..., end: Dp = ..., bottom: Dp = ...): Modifier
-fun Modifier.padding(horizontal: Dp = ..., vertical: Dp = ...): Modifier
-fun Modifier.padding(all: Dp): Modifier
-fun Modifier.padding(paddingValues: PaddingValues): Modifier
+e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt:1981:20 Unresolved reference 'modifier'.
 
 > Task :app:configureCMakeDebug[arm64-v8a]
 
@@ -302,5 +293,5 @@ Caused by: org.jetbrains.kotlin.gradle.tasks.CompilationErrorException: Compilat
 	... 2 more
 
 
-BUILD FAILED in 16s
+BUILD FAILED in 11s
 23 actionable tasks: 7 executed, 16 up-to-date

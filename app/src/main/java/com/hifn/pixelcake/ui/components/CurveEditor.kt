@@ -1,5 +1,6 @@
 package com.hifn.pixelcake.ui.components
 
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -86,6 +87,7 @@ fun CurveEditor(
 
     Canvas(
         modifier = modifier
+            .clipToBounds()
             .fillMaxWidth()
             // 规范 §E svg 高 104/110：本版取 110dp（v0.7.2 从 132dp 收档，审计 A-P3-16）。
             // 曲线页走 Deck L 档（330dp），收 22dp 后锚点热区（全高列）依然宽裕。

@@ -8,7 +8,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -148,11 +150,14 @@ fun ParamSlider(
         }
     }
 
-    Row(modifier = modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        // —— 减步进钮 ——
-        Box(
-            modifier = Modifier
-                .size(40.dp)
+    Row(modifier = modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+        // —— 减步进钮（对齐轨道：v0.7.5 视觉审计 V4 —— 步进钮中心此前落在
+        // 标签行与轨道的中间，与滑轨中线错位 ~7dp）——
+        Column(modifier = Modifier.height(56.dp)) {
+            Spacer(Modifier.height(22.dp))
+            Box(
+                modifier = Modifier
+                    .size(34.dp)
                 .alpha(if (enabled && value > valueRange.start) 1f else 0.3f)
                 .clip(Radius.pill)
                 .clickable(
@@ -163,11 +168,12 @@ fun ParamSlider(
                 .semantics { contentDescription = "$label 减一格" },
             contentAlignment = Alignment.Center
         ) {
-            Text(
-                "−",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+                Text(
+                    "−",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
         // —— 滑杆本体：双层叠布（标签行在上，轨道区在下），触控 = 整盒 ——
         Box(
@@ -287,9 +293,11 @@ fun ParamSlider(
             )
         }
         // —— 加步进钮 ——
-        Box(
-            modifier = Modifier
-                .size(40.dp)
+        Column(modifier = Modifier.height(56.dp)) {
+            Spacer(Modifier.height(22.dp))
+            Box(
+                modifier = Modifier
+                    .size(34.dp)
                 .alpha(if (enabled && value < valueRange.endInclusive) 1f else 0.3f)
                 .clip(Radius.pill)
                 .clickable(
@@ -300,11 +308,12 @@ fun ParamSlider(
                 .semantics { contentDescription = "$label 加一格" },
             contentAlignment = Alignment.Center
         ) {
-            Text(
-                "+",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+                Text(
+                    "+",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
 }

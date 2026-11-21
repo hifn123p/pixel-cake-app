@@ -356,6 +356,32 @@ fun CameraPanel(
         )
 
         // ---------------- 1. 检测 ----------------
+        // v0.7.5（流程审计 J6-P3）：打开面板**即自动扫描** —— 旧版要用户自己发现
+        // 并点这个按钮，空态文案也没说「可重扫」。
+        LaunchedEffect(Unit) {
+            if (!scanned && !busy) {
+                busy = true
+                phase = "读取 USB 设备…"
+                scope.launch {
+                    try {
+                        val list = UsbCameraScanner.scan(context)
+                        devices = list
+                        scanned = true
+                        if (list.none { it.deviceName == selectedName }) {
+                            selectedName = list.firstOrNull { CameraProbe.isSonyCamera(it) }?.deviceName
+                        }
+                    } catch (c: CancellationException) {
+                        throw c
+                    } catch (t: Throwable) {
+                        DebugLog.w(DebugLog.TAG_CAMERA, "auto scan failed",
+                            mapOf("err" to (t.message ?: t.javaClass.simpleName)))
+                    } finally {
+                        busy = false
+                        phase = ""
+                    }
+                }
+            }
+        }
         OutlinedButton(
             onClick = {
                 val list = UsbCameraScanner.scan(context)
