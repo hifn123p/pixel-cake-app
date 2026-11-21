@@ -27,8 +27,8 @@
 > Task :app:checkDebugDuplicateClasses
 
 > Task :app:compileDebugKotlin FAILED
-e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/home/CameraSheet.kt:77:18 Unresolved reference 'verticalScroll'.
-e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/home/CameraSheet.kt:77:33 Unresolved reference 'rememberScrollState'.
+e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/components/ParamSlider.kt:162:22 Unresolved reference 'editorTouchTarget'.
+e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/components/ParamSlider.kt:303:22 Unresolved reference 'editorTouchTarget'.
 
 > Task :app:configureCMakeDebug[arm64-v8a]
 
@@ -236,5 +236,5 @@ Caused by: org.jetbrains.kotlin.gradle.tasks.CompilationErrorException: Compilat
 	... 2 more
 
 
-BUILD FAILED in 15s
+BUILD FAILED in 25s
 23 actionable tasks: 7 executed, 16 up-to-date
