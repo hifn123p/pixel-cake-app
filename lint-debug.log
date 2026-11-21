@@ -94,7 +94,7 @@ Lint found 1 error, 50 warnings, 17 hints. First failure:
 
 The full lint text report is located at:
   /home/runner/work/pixel-cake-app/pixel-cake-app/app/build/intermediates/lint_intermediate_text_report/debug/lintReportDebug/lint-results-debug.txt
-gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/__run_3-1795255049131.json
+gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/__run_3-1795256158113.json
 
 FAILURE: Build failed with an exception.
 
@@ -157,5 +157,5 @@ Execution failed for task ':app:lintDebug'.
 > Run with --scan to get full insights.
 > Get more help at https://help.gradle.org.
 
-BUILD FAILED in 1m 21s
+BUILD FAILED in 1m 33s
 28 actionable tasks: 28 executed
