@@ -404,7 +404,7 @@ fun CameraPanel(
                 }
             },
             enabled = !busy,
-            modifier = Modifier.fillMaxWidth().padding(top = Spacing.m)
+            modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp).padding(top = Spacing.m)
         ) {
             Text("1. 检测 USB 设备")
         }

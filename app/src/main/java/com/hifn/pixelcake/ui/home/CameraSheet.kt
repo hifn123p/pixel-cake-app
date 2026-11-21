@@ -74,6 +74,7 @@ fun CameraSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = Spacing.page)
                 .padding(bottom = Spacing.xxl)
         ) {
