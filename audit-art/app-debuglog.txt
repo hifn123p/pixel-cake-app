@@ -1,6 +1,6 @@
-log_20261121_082026.txt
-2026-11-21 08:20:26.743 [INFO] LIFECYCLE: DebugLog initialized {file=/data/user/0/com.hifn.pixelcake.debug/files/debug/log_20261121_082026.txt}
-2026-11-21 08:20:26.753 [INFO] LIFECYCLE: boot snapshot {summary=manufacturer=Google model=sdk_gphone64_x86_64 soc=ranchu android=16(36) abi=x86_64 totalMem=3920MiB availMem=1955MiB wideColorGamut=false tier=low fullRes=4096 proxy=1024}
-2026-11-21 08:20:40.098 [INFO] IMPORT: pick {uri=image%3A5}
-2026-11-21 08:20:40.445 [INFO] DECODE: decoded {w=200, h=120, raw=false, mime=image/jpeg, linear=false}
-2026-11-21 08:20:41.907 [WARN] ML: CompiledModel.create failed {accel=GPU, err=Failed to compile model}
+log_20261121_084121.txt
+2026-11-21 08:41:21.706 [INFO] LIFECYCLE: DebugLog initialized {file=/data/user/0/com.hifn.pixelcake.debug/files/debug/log_20261121_084121.txt}
+2026-11-21 08:41:21.808 [INFO] LIFECYCLE: boot snapshot {summary=manufacturer=Google model=sdk_gphone64_x86_64 soc=ranchu android=16(36) abi=x86_64 totalMem=3920MiB availMem=1880MiB wideColorGamut=false tier=low fullRes=4096 proxy=1024}
+2026-11-21 08:41:37.795 [INFO] IMPORT: pick {uri=image%3A5}
+2026-11-21 08:41:38.149 [INFO] DECODE: decoded {w=800, h=1000, raw=false, mime=image/jpeg, linear=false}
+2026-11-21 08:41:39.565 [WARN] ML: CompiledModel.create failed {accel=GPU, err=Failed to compile model}
