@@ -283,6 +283,8 @@ private fun AppRoot(settings: AppSettings) {
     // 导出回执（UI 3.0 §I）：成功后弹出的那张卡片要「分享 / 完成」两个出口，
     // 而状态行只是一行文字、没有可点的目标。非 null 即表示回执在显示。
     var exportReceipt by remember { mutableStateOf<Uri?>(null) }
+    // v0.7.5（流程审计 J5）：导出真实尺寸（回执显示用）
+    var exportReceiptDims by remember { mutableStateOf<Pair<Int, Int>?>(null) }
     var loading by remember { mutableStateOf(false) }
     val exportCancelled = remember { AtomicBoolean(false) }
     val renderMutex = remember { Mutex() }
@@ -713,6 +715,7 @@ private fun AppRoot(settings: AppSettings) {
                 liquifyNote = ""
                 // 上一张的导出回执不能带进新会话：卡片盖在新照片上、分享的还是旧图 uri
                 exportReceipt = null
+                exportReceiptDims = null
                 status = if (dec.linear != null) {
                     EditorStatus(StatusKind.Info, "RAW 已按 16-bit 线性管线载入")
                 } else {
@@ -843,10 +846,11 @@ private fun AppRoot(settings: AppSettings) {
                         // 下一张照片上，且卡上的「分享」分享的还是上一张图的 uri；
                         // 首页 message（= status.text）同理会残留上一会话的编辑器文案。
                         exportReceipt = null
+                        exportReceiptDims = null
                         status = EditorStatus()
-                        // 会话记录随「用户主动退出」一并清除（v0.7.2）：退出即会话结束，
-                        // 残留记录会让下次冷启动复活一个用户已经关掉的会话。
-                        SessionStore.clear(context)
+                        // v0.7.5（流程审计 J2-P1）：退出**不再清会话记录** —— 首页
+                        // 「继续上次编辑」入口依赖它（误触返回不再等于数十分钟工作全损）。
+                        // 记录的清除点收敛为：新导入 / 恢复成功后。
                         nav.pop()
     }
     // Q5：会话级旋转 —— 从 pristine 重推导 imported（bitmap + linear 一次性重排，零累积损失），
@@ -910,12 +914,16 @@ private fun AppRoot(settings: AppSettings) {
     // 历史来自存档而非 reset，以及旋转经 applySessionRotation 的既有代次护栏重推。
     // 权限凭据失效（部分机型 picker 拒绝持久授权 / 相册被删）⇒ 解码失败按「无会话」处理，
     // 状态行明说，不留幽灵会话。
-    val restoredSession = remember { SessionStore.load(context) }
-    LaunchedEffect(Unit) {
-        val record = restoredSession ?: return@LaunchedEffect
-        SessionStore.clear(context)
-        loading = true
-        status = EditorStatus(StatusKind.Info, "正在恢复上次的编辑会话…")
+    // v0.7.5（流程审计 J2-P1）：恢复入口从「冷启动一次性」升级为**可随时触发** ——
+    // 用户在编辑器误触返回后，首页的「继续上次编辑」胶囊就是回到会话的路。
+    // 记录清除时机：发起恢复即清（防重复触发）；恢复失败按「无会话」处理（既有降级）。
+    var pendingRestore by remember { mutableStateOf(SessionStore.load(context)) }
+    val resumeSession: () -> Unit = resume@{
+        val record = pendingRestore ?: return@resume
+        pendingRestore = null
+        scope.launch {
+            loading = true
+            status = EditorStatus(StatusKind.Info, "正在恢复上次的编辑会话…")
         val uri = Uri.parse(record.srcUri)
         val dec = try {
             Decoder.decodeToProxy(context, uri, profile.proxyLongEdge)
@@ -931,14 +939,16 @@ private fun AppRoot(settings: AppSettings) {
         if (dec == null) {
             loading = false
             status = EditorStatus(StatusKind.Error, "上次会话的照片已无法访问，已开新会话")
-            return@LaunchedEffect
+            return@launch
         }
         imageEpoch.incrementAndGet()
         srcUri = uri
         imported = dec
         pristineDecoded = dec
         rotationQuarterTurns = 0
-        baselinePending = true
+        // v0.7.5（流程审计 J4-P2）：恢复路径**不**抓对比基线 —— 首帧渲染用的是已编辑
+        // 参数，抓下来「按住看原图」会变成编辑后 vs 编辑后（对比看似坏了）。
+        // 不置位时 compare 自然回退到解码预览基准。
         history.reset()
         // v0.7.3（审计 P2-1）：per-step rotation 从每步文档恢复（旧版把最终旋转
         // 盖到每一步上 ⇒ 「撤销回旋转之前」在恢复后失效）。
@@ -957,12 +967,14 @@ private fun AppRoot(settings: AppSettings) {
         if (restoreRot != 0) applySessionRotation(restoreRot)
         loading = false
         status = EditorStatus(StatusKind.Info, "已恢复上次的编辑会话")
-        nav.push(AppScreen.Editor)
-        DebugLog.i(
-            DebugLog.TAG_EDIT, "session restored",
-            mapOf("steps" to timeline.size, "position" to record.position, "rot" to record.rotationQuarterTurns)
-        )
+            nav.push(AppScreen.Editor)
+            DebugLog.i(
+                DebugLog.TAG_EDIT, "session restored",
+                mapOf("steps" to timeline.size, "position" to record.position, "rot" to record.rotationQuarterTurns)
+            )
+        }
     }
+    LaunchedEffect(Unit) { resumeSession() }
 
     // —— 会话持久化：编辑态变化防抖落盘（1.2s sample；单键覆盖写，无放大）——
     // 历史本身不可观察 ⇒ 借「历史操作必然伴随 params/retouch/layers/旋转/导航变化」
@@ -1113,6 +1125,7 @@ private fun AppRoot(settings: AppSettings) {
                     status = status,
                     exporting = exporting,
                     exportReceipt = exportReceipt,
+                    exportedDims = exportReceiptDims,
                     onDismissExportReceipt = { exportReceipt = null },
                     exportFormat = settings.exportFormat,
                     jpegQuality = settings.jpegQuality.value,
@@ -1162,6 +1175,7 @@ private fun AppRoot(settings: AppSettings) {
                     onClearInpaint = { inpaintStrokes = emptyList() },
                     onAutoMaskChange = { settings.autoMask = it },
                     onPreset = { p ->
+                        historyRev++
                         params = p.params
                         retouch = p.retouch
                         activePresetId = p.id
@@ -1172,6 +1186,7 @@ private fun AppRoot(settings: AppSettings) {
                         history.push(EditSnapshot(params, retouch, layers, rotationQuarterTurns))
                     },
                     onReset = {
+                        historyRev++
                         params = EditParams()
                         retouch = RetouchState()
                         // 「重置」= 回到刚导入的状态 ⇒ 对象层也一起清（它同样是编辑的一部分）。
@@ -1495,6 +1510,13 @@ private fun AppRoot(settings: AppSettings) {
                             // （见 `Exporter.export` 的注释），所以这里不需要再判断一次。
                             if (exportedUri != null && !exportCancelled.get()) {
                                 exportReceipt = exportedUri
+                                // v0.7.5（流程审计 J5-P2）：回执报**导出真实尺寸**（全分辨率），
+                                // 不是预览代理尺寸
+                                exportReceiptDims = fitLongEdge(
+                                    pristineDecoded?.width ?: 0,
+                                    pristineDecoded?.height ?: 0,
+                                    profile.fullResLongEdge
+                                )
                             }
                             status = when {
                                 exportCancelled.get() -> EditorStatus(StatusKind.Info, "已取消导出")
@@ -1552,6 +1574,7 @@ private fun AppRoot(settings: AppSettings) {
                 PixelCakeTab.Darkroom -> HomeScreen(
                     settings = settings,
                     onOpenSettings = { tab = PixelCakeTab.Settings },
+                    onResumeSession = { resumeSession() },
                     onImportPhoto = { photoLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
                     onImportArw = { arwLauncher.launch(arrayOf("image/*", "application/octet-stream")) },
                     loading = loading,

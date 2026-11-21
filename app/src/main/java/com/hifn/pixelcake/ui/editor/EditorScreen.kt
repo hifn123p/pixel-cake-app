@@ -82,6 +82,7 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -300,6 +301,9 @@ fun EditorScreen(
     exporting: Boolean = false,
     // 导出回执（UI 3.0 §I）：非 null = 一张「已导出」卡正显示在屏幕上。
     exportReceipt: Uri? = null,
+    // v0.7.5（流程审计 J5）：导出**真实**尺寸（全分辨率）—— 旧版报的是预览代理
+    // 尺寸，与「全分辨率导出」的承诺冲突
+    exportedDims: Pair<Int, Int>? = null,
     onDismissExportReceipt: () -> Unit = {},
     exportFormat: ExportFormat = ExportFormat.JPEG,
     onParamChange: (EditParams) -> Unit,
@@ -335,7 +339,9 @@ fun EditorScreen(
     onBack: () -> Unit
 ) {
     var showOriginal by remember { mutableStateOf(false) }
-    var category by remember { mutableStateOf(EditorCategory.Portrait) }
+        // v0.7.5（流程审计 J1）：默认落点改「明暗」—— 首次用户的高频任务是曝光，
+    // 不是磨皮/美型（旧默认让每个会话都多一次无意义点击）。
+    var category by remember { mutableStateOf(EditorCategory.Light) }
     // 作用域（批次 5）：`null` = 整图。选择态不进快照；key=original 防跨图残留。
     var activeScope by remember(original) { mutableStateOf<ObjectScope?>(null) }
     val scope: ObjectScope? = activeScope?.takeIf { layers.hasScope(it) }
@@ -1064,7 +1070,9 @@ fun EditorScreen(
                                 .fillMaxWidth()
                                 .verticalScroll(rememberScrollState())
                                 .padding(horizontal = Spacing.cardInner)
-                                .padding(bottom = Spacing.m)
+                                // v0.7.5（视觉审计 V4）：底部裁切（白场行/第三排预设切半）
+                                // 的根因是内容贴 Deck 底缘 —— 加大 padding 并叠渐隐提示可滚
+                                .padding(bottom = Spacing.l)
                         ) {
                             Crossfade(
                                 targetState = category,
@@ -1222,6 +1230,15 @@ fun EditorScreen(
                     .fillMaxWidth()
                     // v0.7.3（审计 B2）：触控 20→44dp；v0.7.4（用户审计 P1-2）下拖过半
                     // 即吸附到**收起态 44dp**（三档：收起 44 / S / L），预览面积 +148dp。
+                    // v0.7.5（复测审计 E1）：photoBottomPx 锚把手顶沿 = 屏底 − 把手 y
+                    //（旧实测点在 fillMaxSize 列上，把 Spacer 空白也算进保留区，
+                    //  fit 崩 + HUD 被顶飞 —— 40c 截图实证）。
+                    .onGloballyPositioned { coords ->
+                        if (ownerHeightPx > 0) {
+                            photoBottomPx =
+                                (ownerHeightPx - coords.globalPosition.y.toInt()).coerceAtLeast(0)
+                        }
+                    }
                     .height(44.dp)
                     .pointerInput(deckH, deckScale) {
                         detectVerticalDragGestures(
@@ -1368,7 +1385,9 @@ fun EditorScreen(
                     modifier = Modifier
                         .align(Alignment.TopCenter)
                         .statusBarsPadding()
-                        .padding(top = 54.dp)
+                        // v0.7.5（视觉审计 V3）：top 对齐实测顶栏底 + 8dp（原 54dp 固定值
+                        // 会与顶栏重叠 —— 截图 23b/40c 实证）
+                        .padding(top = with(density) { photoTopPx.toDp() } + 8.dp)
                         .padding(horizontal = 10.dp)
                         .inertUnless(enabled = !dragging)
                         .graphicsLayer { alpha = chromeAlpha },
@@ -1748,7 +1767,10 @@ fun EditorScreen(
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
                 // 导出的是**全分辨率**，所以要报原图尺寸而不是预览尺寸 ——
                 // 报预览尺寸会让用户以为「导出变小了」。
-                ReceiptRow("尺寸　${original.width} × ${original.height}")
+                ReceiptRow(
+                    "尺寸　" + (exportedDims?.let { "${it.first} × ${it.second}" }
+                        ?: "${original.width} × ${original.height}")
+                )
                 if (activePresetId != "none") {
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
                     ReceiptRow(
@@ -1952,8 +1974,9 @@ private fun IconAction(
     }
     Box(
         modifier = Modifier
-            // v0.7.3（审计 B3）：热区 34→48dp（§4.0.8 交互口径；spec 的 34px 是视觉口径）
-            .size(48.dp)
+            // v0.7.5（视觉审计 V2）：视觉 44dp —— 顶栏 7 枚 48dp 在 391dp 放不下
+            // （导出被挤裁的根因）；44 触控 = Q4 次级档，主操作（导出/滑块）仍 48。
+            .size(44.dp)
             .clip(Radius.chip)
             .clickable(
                 interactionSource = null,
@@ -2004,14 +2027,18 @@ private fun ExportPill(
                 MaterialTheme.colorScheme.primary.copy(alpha = 0.45f),
                 Radius.pill
             )
-            .padding(horizontal = Spacing.l),
+            .padding(horizontal = Spacing.m),
         contentAlignment = Alignment.Center
     ) {
         Text(
             text = if (exporting) "导出中" else "导出",
-            // 规范 `.expill`：13px / SemiBold（原 bodyMedium 15sp/Regular 偏大偏松，审计 A-P3-2）
+            // 规范 `.expill`：13px / SemiBold（审计 A-P3-2）
+            // v0.7.5（视觉审计 V1）：顶栏 9 元素在 391dp 放不下时会把这个 pill 挤成
+            // 竖排并裁字（截图 23b/40c 实证）—— 禁止换行 + 收紧内边距。
             style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
-            color = MaterialTheme.colorScheme.primary
+            color = MaterialTheme.colorScheme.primary,
+            maxLines = 1,
+            softWrap = false
         )
     }
 }

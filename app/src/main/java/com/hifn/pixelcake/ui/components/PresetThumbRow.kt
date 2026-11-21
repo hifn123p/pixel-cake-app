@@ -92,7 +92,8 @@ fun <T> PresetThumbRow(
     BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
         val gap = Spacing.m
         // 规范固定两列；`size` 退化为最小宽度提示（防超窄屏）。
-        val cols = ((maxWidth + gap) / (size + gap)).toInt().coerceAtLeast(2)
+        // v0.7.5（视觉审计 V7）：列数自适应 ≥104dp（旧算法在 340dp Deck 里留下死 gutter）
+        val cols = ((maxWidth + gap) / (104.dp + gap)).toInt().coerceAtLeast(2)
         val cellW = (maxWidth - gap * (cols - 1)) / cols
         val cellH = cellW * 0.8f
         FlowRow(

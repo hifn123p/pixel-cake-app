@@ -129,7 +129,7 @@ fun ExportSheet(
                 // 源图分辨率 ≠ 渲染分辨率（见 memory 里的硬约定）：
                 // RAW 走「边解码边分带渲染」的全分辨率路径，非 RAW 则退到代理分辨率。
                 "RAW 按全分辨率导出（边解码边分带渲染，不把 196MB 线性图搬进堆）；" +
-                    "非 RAW 走代理分辨率。",
+                    "非 RAW 也按全分辨率解码导出。",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

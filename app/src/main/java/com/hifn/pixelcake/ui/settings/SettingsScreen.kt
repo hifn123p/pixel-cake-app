@@ -130,7 +130,9 @@ fun SettingsScreen(
             start = Spacing.page,
             end = Spacing.page,
             top = Spacing.xxl,
-            bottom = Spacing.xxxl
+            // v0.7.5（视觉审计 V3）：悬浮 TabBar 高 64dp + insets —— 底部内容不再
+            // 透出导航条（截图 63/63b 实证文字被 TabBar 压住）
+            bottom = Spacing.xxxl + 96.dp
         ),
         verticalArrangement = Arrangement.spacedBy(Spacing.cardGap)
     ) {
