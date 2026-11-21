@@ -1975,9 +1975,10 @@ private fun IconAction(
     }
     Box(
         modifier = Modifier
-            // v0.7.5（视觉审计 V2）：视觉 44dp —— 顶栏 7 枚 48dp 在 391dp 放不下
-            // （导出被挤裁的根因）；44 触控 = Q4 次级档，主操作（导出/滑块）仍 48。
-            .size(44.dp)
+            // v0.7.5（视觉审计 V2→复测修订）：视觉 44→40dp —— 44 仍放不下
+            //（7×44+导出 pill = 400 > 391，复测截图 23b 实证「导出」被挤成竖排）。
+            // 40dp = Q4 辅助档；触控体验靠相邻间距（每枚间 8dp）与手指可悬停补偿。
+            .size(40.dp)
             .clip(Radius.chip)
             .clickable(
                 interactionSource = null,
