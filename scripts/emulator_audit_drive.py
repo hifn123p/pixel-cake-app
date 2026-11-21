@@ -176,14 +176,19 @@ def import_via_saf(tag):
     """打开「文件 ARW」→ Recent 直接点目标文件；不在 Recent 就走根目录导航。"""
     if not tap("text", "文件 ARW", f"{tag}_saf_open", wait=3.0):
         return False
-    root, _ = dump(f"{tag}_saf")
-    # v0.7.3 复测修正：Recent 列表顺序不定 —— 接受**任意**测试图（都走同一条编辑链）
+    # v0.7.4：SAF Recent 首次打开可能为空（ExternalStorageProvider 首扫竞态）
+    # ⇒ 轮询最多 30s，而不是一次 dump 定成败。
     node = None
-    for want in ("portrait_test.jpg", "landscape_test.jpg", "tiny.jpg"):
-        node = find_contains(root, "text", want)
+    for attempt in range(10):
+        root, _ = dump(f"{tag}_saf_try{attempt}")
+        for want in ("portrait_test.jpg", "landscape_test.jpg", "tiny.jpg"):
+            node = find_contains(root, "text", want)
+            if node:
+                results.append(f"{tag}: SAF found {want} (try {attempt})")
+                break
         if node:
-            results.append(f"{tag}: SAF found {want}")
             break
+        time.sleep(3.0)
     if not node:
         # Recent 没有 → 抽屉 → 根目录 → Pictures
         tap("content-desc", "Show roots", f"{tag}_roots", wait=1.5, allow_missing=True)
