@@ -267,9 +267,18 @@ shot("21_dual_channel_drag", delay=0.3)
 tap("text", "曲线", "22_rail_curve", wait=2.0)
 shot("23_curve_deck")
 # —— v0.7.4 复测：Deck 三档收起（用户痛点 1/2：预览被固定背景遮挡）——
-# 上拖手柄（照片区中缝）→ Deck 吸附收起为 44dp 单行 → 预览面积 +148dp
-run(["shell", "input", "swipe", str(int(W * 0.5)), str(int(H * 0.52)),
-    str(int(W * 0.5)), str(int(H * 0.38)), "400"])
+# 上拖手柄 → Deck 吸附收起为 44dp 单行 → 预览面积 +148dp。
+# 复测修正：手柄坐标用 dump 定位（估算坐标会打在 Deck 内容上）。
+root, hDump = dump("23a_handle")
+handle = find_contains(hDump, "content-desc", "调整参数面板高度")
+if handle:
+    c = bounds_center(handle[0])
+    run(["shell", "input", "swipe", str(c[0]), str(c[1]),
+        str(c[0]), str(max(120, c[1] - int(H * 0.25))), "500"])
+else:
+    results.append("HANDLE: not found")
+    run(["shell", "input", "swipe", str(int(W * 0.5)), str(int(H * 0.45)),
+        str(int(W * 0.5)), str(int(H * 0.25)), "500"])
 time.sleep(1.5)
 shot("23b_deck_collapsed")
 root, ct = dump("23c_collapsed_dump")
