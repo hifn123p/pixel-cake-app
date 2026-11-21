@@ -273,8 +273,9 @@ root, hDump = dump("23a_handle")
 handle = find_contains(hDump, "content-desc", "调整参数面板高度")
 if handle:
     c = bounds_center(handle[0])
+    # v0.7.5 复测修正：**下拖** = Deck 变矮（上拖是变高）—— 旧方向反了
     run(["shell", "input", "swipe", str(c[0]), str(c[1]),
-        str(c[0]), str(max(120, c[1] - int(H * 0.25))), "500"])
+        str(c[0]), str(c[1] + int(H * 0.30)), "500"])
 else:
     results.append("HANDLE: not found")
     run(["shell", "input", "swipe", str(int(W * 0.5)), str(int(H * 0.45)),
