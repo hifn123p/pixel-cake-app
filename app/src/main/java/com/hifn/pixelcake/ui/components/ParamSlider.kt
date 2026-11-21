@@ -41,6 +41,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -325,3 +327,19 @@ fun ParamSlider(
  * 拖动读数上报（UI 3.0「中央 HUD」的数据通道）。无编辑器上层时是空实现。
  */
 val LocalHudReporter = staticCompositionLocalOf<((Pair<String, String>?) -> Unit)> { {} }
+
+/**
+ * v0.7.5（审计 P1-5）：视觉尺寸不变、命中区扩到 [target] ——
+ * 步进钮视觉 34dp / 命中 48dp 的分离实现。
+ */
+fun Modifier.editorTouchTarget(target: Dp): Modifier = layout { measurable, _ ->
+    val placeable = measurable.measure(
+        Constraints.fixed(target.roundToPx(), target.roundToPx())
+    )
+    layout(target.roundToPx(), target.roundToPx()) {
+        placeable.placeRelative(
+            (target.roundToPx() - placeable.width) / 2,
+            (target.roundToPx() - placeable.height) / 2
+        )
+    }
+}
