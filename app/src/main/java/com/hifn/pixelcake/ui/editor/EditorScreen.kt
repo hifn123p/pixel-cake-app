@@ -1925,12 +1925,9 @@ private fun EditorTopBar(
                     IconAction(def = AppIcons.History, label = "历史", onClick = onOpenHistory)
                     // 「重置」已从顶栏移走（移到历史面板底部）：全局重置是低频且破坏性的动作，
                     // 不该和撤销/重做挤在一起；而它本质上是「跳到第 0 步」，归到历史里更自洽。
-                    IconAction(
-                        def = AppIcons.Eye,
-                        label = "对比原图",
-                        selected = showOriginal,
-                        onClick = onToggleCompare
-                    )
+                    // v0.7.5 复测：移除「对比原图」顶栏按钮 —— 按住照片即可看原图
+                    //（按压语义内建于 previewGestures），按钮是冗余的第二入口；
+                    // 顶栏 8 元素曾把导出 pill 挤成竖排（复测截图 23b 实证）。
                     // 分割对比（UI 3.0 §09 顶栏入口之一）。`AppIcons.Split` 此前是**声明未使用**
                     // 的悬空图标，正是为这个入口准备的 —— 接上之后它才有意义。
                     IconAction(
@@ -1949,7 +1946,14 @@ private fun EditorTopBar(
                     // v0.7.4：旋转迁入历史面板头部（顶栏容量有限，历史头部本就是
                     // 编辑动作行：撤销/重做/旋转）。
                     Spacer(Modifier.width(Spacing.s))
-                    ExportPill(enabled = !exporting, exporting = exporting, onClick = onExport)
+                    ExportPill(
+                        enabled = !exporting,
+                        exporting = exporting,
+                        onClick = onExport,
+                        // weight(1f, fill=false)：剩余空间全给 pill 作 max 约束，
+                        // 但 pill 尺寸仍由内容决定 —— 无论前面挤不挤，pill 永不被压到竖排
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
                 }
             }
         }
@@ -1974,7 +1978,7 @@ private fun IconAction(
         else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
     Box(
-        modifier = Modifier
+        modifier = modifier
             // v0.7.5（视觉审计 V2→复测修订）：视觉 44→40dp —— 44 仍放不下
             //（7×44+导出 pill = 400 > 391，复测截图 23b 实证「导出」被挤成竖排）。
             // 40dp = Q4 辅助档；触控体验靠相邻间距（每枚间 8dp）与手指可悬停补偿。
@@ -2004,7 +2008,8 @@ private fun IconAction(
 private fun ExportPill(
     enabled: Boolean,
     exporting: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val interaction = remember { MutableInteractionSource() }
     Box(
