@@ -1978,7 +1978,7 @@ private fun IconAction(
         else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
     Box(
-        modifier = modifier
+        modifier = Modifier
             // v0.7.5（视觉审计 V2→复测修订）：视觉 44→40dp —— 44 仍放不下
             //（7×44+导出 pill = 400 > 391，复测截图 23b 实证「导出」被挤成竖排）。
             // 40dp = Q4 辅助档；触控体验靠相邻间距（每枚间 8dp）与手指可悬停补偿。
