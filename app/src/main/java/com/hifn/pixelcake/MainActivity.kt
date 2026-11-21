@@ -967,12 +967,12 @@ private fun AppRoot(settings: AppSettings) {
         if (restoreRot != 0) applySessionRotation(restoreRot)
         loading = false
         status = EditorStatus(StatusKind.Info, "已恢复上次的编辑会话")
-            nav.push(AppScreen.Editor)
-            DebugLog.i(
-                DebugLog.TAG_EDIT, "session restored",
-                mapOf("steps" to timeline.size, "position" to record.position, "rot" to record.rotationQuarterTurns)
-            )
-        }
+        nav.push(AppScreen.Editor)
+        DebugLog.i(
+            DebugLog.TAG_EDIT, "session restored",
+            mapOf("steps" to timeline.size, "position" to record.position, "rot" to record.rotationQuarterTurns)
+        )
+    }
     }
     LaunchedEffect(Unit) { resumeSession() }
 
