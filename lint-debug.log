@@ -11,8 +11,8 @@ Starting a Gradle Daemon (subsequent builds will be faster)
 > Task :app:packageDebugResources
 > Task :app:createDebugCompatibleScreenManifests
 > Task :app:extractDeepLinksDebug
-> Task :app:parseDebugLocalResources
 > Task :app:mergeDebugResources
+> Task :app:parseDebugLocalResources
 
 > Task :app:processDebugMainManifest
 [com.google.ai.edge.litert:litert:2.2.0] /home/runner/.gradle/caches/8.13/transforms/6cd64d3859112caf3769544d574db9c5/transformed/litert-2.2.0/AndroidManifest.xml Warning:
@@ -20,17 +20,19 @@ Starting a Gradle Daemon (subsequent builds will be faster)
 
 > Task :app:processDebugManifest
 > Task :app:preDebugAndroidTestBuild SKIPPED
-> Task :app:generateDebugAndroidTestResValues
 > Task :app:javaPreCompileDebug
+> Task :app:generateDebugAndroidTestResValues
+> Task :app:processDebugManifestForPackage
 > Task :app:extractProguardFiles
 > Task :app:preDebugUnitTestBuild UP-TO-DATE
-> Task :app:processDebugManifestForPackage
 > Task :app:processDebugResources
 
-> Task :app:compileDebugKotlin FAILED
+> Task :app:compileDebugKotlin
 e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/components/ParamSlider.kt:162:22 Unresolved reference 'editorTouchTarget'.
 e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/components/ParamSlider.kt:303:22 Unresolved reference 'editorTouchTarget'.
-gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/__run_3-1795271872158.json
+
+> Task :app:compileDebugKotlin FAILED
+gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/__run_3-1795272597452.json
 
 FAILURE: Build failed with an exception.
 
@@ -45,5 +47,5 @@ Execution failed for task ':app:compileDebugKotlin'.
 > Run with --scan to get full insights.
 > Get more help at https://help.gradle.org.
 
-BUILD FAILED in 35s
+BUILD FAILED in 29s
 19 actionable tasks: 19 executed
