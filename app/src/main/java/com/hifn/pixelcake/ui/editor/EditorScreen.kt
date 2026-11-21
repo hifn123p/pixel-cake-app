@@ -1236,7 +1236,7 @@ fun EditorScreen(
                     .onGloballyPositioned { coords ->
                         if (ownerHeightPx > 0) {
                             photoBottomPx =
-                                (ownerHeightPx - coords.globalPosition.y.toInt()).coerceAtLeast(0)
+                                (ownerHeightPx - coords.positionInWindow().y.toInt()).coerceAtLeast(0)
                         }
                     }
                     .height(44.dp)
