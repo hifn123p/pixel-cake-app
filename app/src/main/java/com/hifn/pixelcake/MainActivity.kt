@@ -252,6 +252,10 @@ private fun AppRoot(settings: AppSettings) {
         } else {
             emptySet()
         }
+        if (masks != null && emptyScopes.isNotEmpty()) {
+            // v0.7.4（用户审计 P1-3）：常驻提示删除后，空作用域信息改为一次性浮出
+            autoMaskNote = "灰色作用域 = 本图未检出该对象（灰色 chip 不可用）"
+        }
         DebugLog.i(
             DebugLog.TAG_ML, "object scopes probed",
             mapOf(

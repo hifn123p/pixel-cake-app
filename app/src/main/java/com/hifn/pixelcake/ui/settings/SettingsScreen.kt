@@ -309,18 +309,31 @@ fun SettingsScreen(
                 }
 
                 Spacer(Modifier.height(Spacing.xs))
-                TextButton(modifier = Modifier.heightIn(min = 44.dp), 
-                    onClick = {
-                        // D4：递归删除是潜在几千个文件的磁盘 IO，绝不能在主线程做。
-                        // v0.7.2（审计 C-F6）：删除后**重新测量**而不是乐观置 0 ——
-                        // 个别文件被占用删不掉时（导出中转、in-flight 临时文件），
-                        // 显示值必须反映真实占用。
-                        cacheScope.launch(Dispatchers.IO) {
-                            context.cacheDir.clearChildren()
-                            cacheMiB = context.cacheDir.dirSizeBytes() / (1024L * 1024L)
+                // v0.7.4（用户审计 P3）：清理缓存弹确认 —— RAW 中转/导出临时文件
+                // 被误清会拖慢下次 RAW 导入，破坏性动作加一道闸。
+                var confirmCacheClear by remember { mutableStateOf(false) }
+                if (confirmCacheClear) {
+                    AlertDialog(
+                        onDismissRequest = { confirmCacheClear = false },
+                        title = { Text("清理缓存？") },
+                        text = { Text("将删除 RAW 预览缓存与导出中转文件；相册成片不受影响。") },
+                        confirmButton = {
+                            TextButton(modifier = Modifier.heightIn(min = 44.dp), onClick = {
+                                confirmCacheClear = false
+                                cacheScope.launch(Dispatchers.IO) {
+                                    context.cacheDir.clearChildren()
+                                    cacheMiB = context.cacheDir.dirSizeBytes() / (1024L * 1024L)
+                                }
+                                cacheMiB = null
+                            }) { Text("清理") }
+                        },
+                        dismissButton = {
+                            TextButton(modifier = Modifier.heightIn(min = 44.dp), onClick = { confirmCacheClear = false }) { Text("取消") }
                         }
-                        cacheMiB = null  // 删除期间显示「统计中…」，不让旧数字冒充已清空
-                    }
+                    )
+                }
+                TextButton(modifier = Modifier.heightIn(min = 44.dp),
+                    onClick = { confirmCacheClear = true }
                 ) { Text("清理缓存") }
             }
         }

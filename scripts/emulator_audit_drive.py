@@ -261,6 +261,30 @@ shot("21_dual_channel_drag", delay=0.3)
 # ———— E. 曲线拖动（切到曲线，拖中锚点）————
 tap("text", "曲线", "22_rail_curve", wait=2.0)
 shot("23_curve_deck")
+# —— v0.7.4 复测：Deck 三档收起（用户痛点 1/2：预览被固定背景遮挡）——
+# 上拖手柄（照片区中缝）→ Deck 吸附收起为 44dp 单行 → 预览面积 +148dp
+run(["shell", "input", "swipe", str(int(W * 0.5)), str(int(H * 0.52)),
+    str(int(W * 0.5)), str(int(H * 0.38)), "400"])
+time.sleep(1.5)
+shot("23b_deck_collapsed")
+root, ct = dump("23c_collapsed_dump")
+results.append("DECK COLLAPSED: " + str("展开参数面板" in ct))
+# 点任意处展开回 S 档
+run(["shell", "input", "tap", str(int(W * 0.5)), str(int(H * 0.85))])
+time.sleep(1.2)
+# —— v0.7.4 复测：滑块 ± 步进钮（用户痛点 3：修图不好控制）——
+root, st = dump("23d_stepper")
+plus = find_contains(root, "content-desc", "加一格")
+if plus:
+    c = bounds_center(plus[0])
+    run(["shell", "input", "tap", str(c[0]), str(c[1])])
+    run(["shell", "input", "tap", str(c[0]), str(c[1])])
+    time.sleep(1.0)
+    root2, st2 = dump("23e_stepper_after")
+    results.append("STEPPER TAPPED x2: value-changed=" + str(st != st2))
+    shot("23f_stepper_after", delay=0.3)
+else:
+    results.append("STEPPER: not found")
 
 # ———— F. 预设应用 + 强度环 ————
 tap("text", "预设", "24_rail_preset", wait=2.0)
@@ -311,6 +335,12 @@ time.sleep(0.15)
 run(["shell", "input", "tap", str(int(W * 0.45)), str(int(H * 0.30))])
 time.sleep(1.5)
 shot("40_double_tap_zoom")
+# —— v0.7.4 复测：直方图悬浮小卡 → 展开全宽条 ——
+tap("content-desc", "RGB 直方图", "40b_hist_expand", wait=1.2, contains=True, allow_missing=True, attempts=3)
+shot("40c_hist_expanded")
+# —— v0.7.4 复测：直方图悬浮小卡 → 展开全宽条 ——
+tap("content-desc", "RGB 直方图", "40b_hist_expand", wait=1.2, contains=True, allow_missing=True, attempts=3)
+shot("40c_hist_expanded")
 # 复位胶囊
 tap("text", "复位", "41_zoom_reset", wait=1.0, contains=True, allow_missing=True)
 
