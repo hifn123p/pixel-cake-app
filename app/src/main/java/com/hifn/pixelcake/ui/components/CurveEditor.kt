@@ -1,5 +1,6 @@
 package com.hifn.pixelcake.ui.components
 
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
