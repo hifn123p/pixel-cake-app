@@ -602,8 +602,8 @@ fun EditorScreen(
     var deckHOverride by remember { mutableStateOf<Dp?>(null) }
     val deckEffH = deckHOverride ?: deckH
     // v0.7.4：顶/底 chrome 实测高度（px）—— 照片保留区与 HUD/提示的定位都吃这两个值
-    var photoTopPx by remember { mutableStateOf(96.dp.value * 2.625f) }
-    var photoBottomPx by remember { mutableStateOf(250.dp.value * 2.625f) }
+    var photoTopPx by remember { mutableStateOf(252) }
+    var photoBottomPx by remember { mutableStateOf(656) }
     // v0.7.4（用户审计 P1-2）：Deck **三档收起** —— 收起态 44dp 单行（展开钮 + 分组 chips），
     // 预览面积 49% → 65%。捏合放大（>1.5×）自动收起让位（Snapseed 惯例）。
     var deckCollapsed by remember { mutableStateOf(false) }
@@ -1368,7 +1368,8 @@ fun EditorScreen(
                     modifier = Modifier
                         .align(Alignment.TopCenter)
                         .statusBarsPadding()
-                        .padding(top = 54.dp, horizontal = 10.dp)
+                        .padding(top = 54.dp)
+                        .padding(horizontal = 10.dp)
                         .inertUnless(enabled = !dragging)
                         .graphicsLayer { alpha = chromeAlpha },
                 ) {
