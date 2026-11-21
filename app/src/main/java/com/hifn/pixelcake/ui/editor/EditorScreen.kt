@@ -2013,7 +2013,7 @@ private fun ExportPill(
 ) {
     val interaction = remember { MutableInteractionSource() }
     Box(
-        modifier = Modifier
+        modifier = modifier
             // v0.7.3（审计 B5）：主操作热区 34→44dp（顶栏 Row 48dp 内可容）
             .height(44.dp)
             .pressScale(interaction)
