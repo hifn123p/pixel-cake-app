@@ -35,10 +35,10 @@ android {
         // v0.7.1：Q5 手动旋转 —— 会话级旋转（pristine 重推导，零累积损失）+ 导出烘焙
         // （sRGB 解码预旋转；RAW renderLinearFile 输出后旋转 + RotatedMask 装饰器映射蒙版
         // + 液化锚点逆映射）+ 顶栏旋转按钮（Material rotate-right）。
-        // v0.7.7：收尾批（P2-2/P3-3/P3-5/P3-6/LOW-3/MEDIUM-1 收口/T4 尾项）；
-        // 同时归位 —— v0.7.5/v0.7.6 两轮漏抬 versionName，About 页停留在 0.7.4。
-        versionCode = 26
-        versionName = "0.7.7"
+        // v0.8.0：自由裁剪（会话级几何 × 旋转复合重推导；RAW 带级裁剪窗口；
+        // sRGB 位图烘焙；撤销栈/会话存档全链路）。里程碑号：编辑器功能面补齐最后一块。
+        versionCode = 27
+        versionName = "0.8.0"
 
         // 刻意**不声明** testInstrumentationRunner（审计 M8）：本项目没有 androidTest 源集、
         // 也没有 androidx.test 依赖，裸声明是死配置 —— 一旦有人加仪器测试会因缺依赖直接红；

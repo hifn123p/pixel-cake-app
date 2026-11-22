@@ -69,6 +69,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.FilterQuality
@@ -88,6 +89,7 @@ import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.graphics.PathOperation
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -100,6 +102,8 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hifn.pixelcake.core.decode.ExportFormat
+import com.hifn.pixelcake.core.edit.CropRect
+import com.hifn.pixelcake.core.edit.EditCrop
 import com.hifn.pixelcake.core.edit.EditParams
 import com.hifn.pixelcake.core.edit.Histogram
 import com.hifn.pixelcake.core.edit.lerped
@@ -282,6 +286,11 @@ fun EditorScreen(
     onImportPresets: (android.net.Uri) -> Unit = {},
     // Q5 手动旋转：每次点击顺时针 90°。上层负责旋转会话源并入撤销栈。
     onRotate: () -> Unit = {},
+    // v0.8.0 自由裁剪：应用/清除（rect = 当前预览空间的归一化矩形；null = 清除裁剪）。
+    // 空间换算（预览→pristine）、会话重推导、撤销栈全部在上层。
+    onCropApply: (CropRect?) -> Unit = {},
+    // 当前会话已有裁剪（控制条「清除裁剪」入口的显隐）。
+    hasCrop: Boolean = false,
     objectScopesAvailable: Boolean = false,
     // 「点哪修哪」的命中测试数据源（探测 effect 顺手存下的那份，无额外推理）。
     // null = 模型不可用 ⇒ 拾取入口隐藏。
@@ -616,6 +625,23 @@ fun EditorScreen(
     // v0.7.4（用户审计 P1-2）：Deck **三档收起** —— 收起态 44dp 单行（展开钮 + 分组 chips），
     // 预览面积 49% → 65%。捏合放大（>1.5×）自动收起让位（Snapseed 惯例）。
     var deckCollapsed by remember { mutableStateOf(false) }
+    // —— v0.8.0 裁剪模式（覆盖层 + 底部控制条；应用经 onCropApply 上抛）——
+    var cropMode by remember { mutableStateOf(false) }
+    // 工作矩形在**当前预览空间**（可能是上次裁剪的结果）；比例 chip = 像素口径 w/h，null = 自由
+    var cropWork by remember { mutableStateOf<CropRect?>(null) }
+    var cropAspect by remember { mutableStateOf<Float?>(null) }
+    val cropModeNow = rememberUpdatedState(cropMode)
+    // 进入裁剪：复位缩放/平移（覆盖层与照片同框的前提）+ 全幅工作框
+    val openCrop: () -> Unit = {
+        cropMode = true
+        cropWork = CropRect(0f, 0f, 1f, 1f)
+        cropAspect = null
+        previewZoom = 1f
+        previewPan = Offset.Zero
+        // 裁剪期间收起 Deck：照片可视区最大化，控制条贴底
+        deckCollapsed = true
+    }
+    val closeCrop: () -> Unit = { cropMode = false; cropWork = null; cropAspect = null }
     LaunchedEffect(previewZoom) {
         if (previewZoom > 1.5f) deckCollapsed = true
     }
@@ -740,18 +766,22 @@ fun EditorScreen(
                         readZoom = { previewZoom },
                         readPan = { previewPan },
                         onTransform = { zoomFactor, panDelta ->
-                            previewZoom = (previewZoom * zoomFactor).coerceIn(1f, MAX_PREVIEW_ZOOM)
-                            previewPan += panDelta
+                            if (!cropModeNow.value) {
+                                previewZoom = (previewZoom * zoomFactor).coerceIn(1f, MAX_PREVIEW_ZOOM)
+                                previewPan += panDelta
+                            }
                         },
                         onDoubleTapToggle = { tap ->
-                            val f = fitContentRect(photoBoxSize, imagePx)
-                            if (f.width > 0f && f.height > 0f) {
-                                val newZoom = if (previewZoom > 1.05f) 1f else DOUBLE_TAP_ZOOM
-                                previewPan = panAnchorAtPoint(
-                                    tap, photoBoxSize.width.toFloat(), photoBoxSize.height.toFloat(),
-                                    f.width, f.height, previewZoom, previewPan, newZoom
-                                )
-                                previewZoom = newZoom
+                            if (!cropModeNow.value) {
+                                val f = fitContentRect(photoBoxSize, imagePx)
+                                if (f.width > 0f && f.height > 0f) {
+                                    val newZoom = if (previewZoom > 1.05f) 1f else DOUBLE_TAP_ZOOM
+                                    previewPan = panAnchorAtPoint(
+                                        tap, photoBoxSize.width.toFloat(), photoBoxSize.height.toFloat(),
+                                        f.width, f.height, previewZoom, previewPan, newZoom
+                                    )
+                                    previewZoom = newZoom
+                                }
                             }
                         },
                         onBrushStroke = onBrushStroke,
@@ -759,7 +789,7 @@ fun EditorScreen(
                         // —— 双通道：照片上横拖 = 调「当前激活参数」（量程全宽 = 全程）——
                         // 增量按「位移 / 画布宽 × 量程」换算，deck 滑块与 HUD 实时同步；
                         // 拖动起止即隐形式开关（chrome 退到 32% 残影）。
-                        onParamAdjust = if (retouchTool == "none") {
+                        onParamAdjust = if (retouchTool == "none" && !cropMode) {
                             { dx ->
                                 val spec = regNow.value.activeSpec()
                                 if (spec != null) {
@@ -781,7 +811,7 @@ fun EditorScreen(
                         },
                         // 分割对比期间禁用「按住看原图」：那个动作会把 display 整屏切成「之前」，
                         // 而分割线右侧本该是「之后」—— 两者叠加的结果是两侧一模一样，读起来像功能坏了。
-                        onPressChanged = { pressed -> if (!splitCompare) showOriginal = pressed },
+                        onPressChanged = { pressed -> if (!splitCompare && !cropModeNow.value) showOriginal = pressed },
                         pickMode = pickActive,
                         onPick = onPickHandler,
                     ),
@@ -928,6 +958,67 @@ fun EditorScreen(
                         .alpha(maskAlpha)
                     // 轮廓用色在组合期捕获（Canvas draw lambda 不是 composable 上下文）
                     val contourColor = MaterialTheme.colorScheme.primary
+                    // —— v0.8.0 裁剪覆盖层：与照片同框（进入时已复位 zoom/pan）——
+                    // scrim 压暗框外、三分线辅助构图、四角手柄拖拽（比例约束时锁定）、框内拖动移框。
+                    // 覆盖层在上层消费全部触摸 ⇒ 画布缩放/平移/双通道手势不并发。
+                    if (cropMode && cropWork != null && dispW > 0f && dispH > 0f) {
+                        val cropFrame = Modifier
+                            .size(with(density) { dispW.toDp() }, with(density) { dispH.toDp() })
+                            .offset { IntOffset(previewPan.x.roundToInt(), previewPan.y.roundToInt()) }
+                        Box(cropFrame) {
+                            CropOverlayCanvas(
+                                rect = cropWork!!,
+                                aspectPx = cropAspect,
+                                onRect = { cropWork = it },
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
+                        // 控制条：比例 chips + 操作按钮，贴照片区底部（deck 已收起）
+                        Column(
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .padding(bottom = 10.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                listOf(
+                                    "自由" to null,
+                                    "1:1" to 1f,
+                                    "3:4" to 3f / 4f,
+                                    "4:3" to 4f / 3f,
+                                    "2:3" to 2f / 3f,
+                                    "3:2" to 3f / 2f,
+                                    "9:16" to 9f / 16f,
+                                    "16:9" to 16f / 9f
+                                ).forEach { (label, ratio) ->
+                                    CropChip(label = label, selected = cropAspect == ratio) {
+                                        cropAspect = ratio
+                                        if (ratio != null && cropWork != null && dispW > 0f && dispH > 0f) {
+                                            cropWork = EditCrop.aspectFit(cropWork!!, ratio, dispW, dispH)
+                                        }
+                                    }
+                                }
+                            }
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                if (hasCrop) {
+                                    CropActionButton(label = "清除裁剪", filled = false) {
+                                        onCropApply(null)
+                                        closeCrop()
+                                    }
+                                }
+                                CropActionButton(label = "重置", filled = false) {
+                                    cropWork = CropRect(0f, 0f, 1f, 1f)
+                                    cropAspect = null
+                                }
+                                CropActionButton(label = "取消", filled = false) { closeCrop() }
+                                CropActionButton(label = "应用裁剪", filled = true) {
+                                    onCropApply(cropWork)
+                                    closeCrop()
+                                }
+                            }
+                        }
+                    }
                     pickMask?.let { (bmp, loops) ->
                         Image(
                             bitmap = bmp,
@@ -1685,6 +1776,12 @@ fun EditorScreen(
                             def = AppIcons.Rotate, label = "旋转 90°",
                             onClick = onRotate
                         )
+                        // v0.8.0 裁剪与旋转同住编辑动作行（v0.7.4 拍板：顶栏容量有限，
+                        // 历史头部本就是撤销/重做/旋转的家；顶栏不再回到 8 元素）。
+                        IconAction(
+                            def = AppIcons.Crop, label = "裁剪",
+                            onClick = { openCrop(); showHistory = false }
+                        )
                     }
                 }
                 Text(
@@ -2417,5 +2514,133 @@ private fun BoxScope.PreviewNotes(
             if (liquifyNote.isNotEmpty()) CapsuleNote(liquifyNote)
             if (pickNote.isNotEmpty()) CapsuleNote(pickNote)
         }
+    }
+}
+
+// ———— v0.8.0 自由裁剪：覆盖层画布与控制件 ————
+
+/** 裁剪覆盖层：scrim 压暗框外 + 边框 + 三分线 + 四角手柄 + 拖拽手势。 */
+@Composable
+private fun CropOverlayCanvas(
+    rect: CropRect,
+    aspectPx: Float?,
+    onRect: (CropRect) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var dragKind by remember { mutableStateOf<EditCrop.CropDrag?>(null) }
+    val rectNow = rememberUpdatedState(rect)
+    val aspectNow = rememberUpdatedState(aspectPx)
+    val onRectNow = rememberUpdatedState(onRect)
+    val cornerR = 24.dp
+    // Canvas draw lambda 非 composable 上下文 —— 用色在组合期捕获（与 pickMask 轮廓同口径）
+    val handleColor = MaterialTheme.colorScheme.primary
+
+    Box(
+        modifier
+            .pointerInput(Unit) {
+                detectDragGestures(
+                    onDragStart = { pos ->
+                        val w = size.width.toFloat().coerceAtLeast(1f)
+                        val h = size.height.toFloat().coerceAtLeast(1f)
+                        val r = cornerR.toPx()
+                        dragKind = EditCrop.hitKind(pos.x / w, pos.y / h, rectNow.value, r / w)
+                    },
+                    onDragEnd = { dragKind = null },
+                    onDragCancel = { dragKind = null }
+                ) { change, amt ->
+                    change.consume()
+                    val kind = dragKind ?: return@detectDragGestures
+                    val w = size.width.toFloat().coerceAtLeast(1f)
+                    val h = size.height.toFloat().coerceAtLeast(1f)
+                    onRectNow.value(
+                        EditCrop.dragRect(
+                            kind, rectNow.value,
+                            amt.x / w, amt.y / h,
+                            aspectNow.value,
+                            w / h
+                        )
+                    )
+                }
+            }
+            // T4 无障碍：裁剪交互自绘，读屏用户需要名称
+            .semantics { contentDescription = "裁剪框：拖角调整大小，框内拖动移动位置" }
+    ) {
+        Canvas(Modifier.fillMaxSize()) {
+            val r = rectNow.value
+            val rl = r.l * size.width
+            val rt = r.t * size.height
+            val rr = r.r * size.width
+            val rb = r.b * size.height
+            // scrim：全帧 − 框内（Path.op 双路径差集）
+            val framePath = Path().apply { addRect(Rect(0f, 0f, size.width, size.height)) }
+            val holePath = Path().apply { addRect(Rect(rl, rt, rr, rb)) }
+            val scrim = Path()
+            scrim.op(framePath, holePath, PathOperation.Difference)
+            drawPath(scrim, Color.Black.copy(alpha = 0.55f))
+            // 边框
+            drawRect(
+                Color.White,
+                topLeft = Offset(rl, rt),
+                size = androidx.compose.ui.geometry.Size(rr - rl, rb - rt),
+                style = Stroke(width = 1.5.dp.toPx())
+            )
+            // 三分线
+            val thirdW = (rr - rl) / 3f
+            val thirdH = (rb - rt) / 3f
+            for (i in 1..2) {
+                drawLine(
+                    Color.White.copy(alpha = 0.35f),
+                    Offset(rl + thirdW * i, rt), Offset(rl + thirdW * i, rb), 1f
+                )
+                drawLine(
+                    Color.White.copy(alpha = 0.35f),
+                    Offset(rl, rt + thirdH * i), Offset(rr, rt + thirdH * i), 1f
+                )
+            }
+            // 四角 L 手柄（琥珀，与选中语言一致）
+            val arm = 18.dp.toPx()
+            val sw = 2.5.dp.toPx()
+            listOf(
+                Offset(rl, rt) to Pair(1f, 1f),
+                Offset(rr, rt) to Pair(-1f, 1f),
+                Offset(rl, rb) to Pair(1f, -1f),
+                Offset(rr, rb) to Pair(-1f, -1f)
+            ).forEach { (c, dir) ->
+                drawLine(handleColor, c, Offset(c.x + arm * dir.first, c.y), sw)
+                drawLine(handleColor, c, Offset(c.x, c.y + arm * dir.second), sw)
+            }
+        }
+    }
+}
+
+/** 裁剪控制条组件：比例/操作 chip（触控 ≥40dp）。 */
+@Composable
+private fun CropChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    val bg = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.24f)
+    else MaterialTheme.colorScheme.surface.copy(alpha = 0.72f)
+    val fg = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+    Box(
+        modifier = Modifier
+            .clip(Radius.pill)
+            .background(bg)
+            .clickable(interactionSource = null, indication = null, onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 10.dp)
+    ) {
+        Text(label, style = MaterialTheme.typography.labelMedium, color = fg)
+    }
+}
+
+@Composable
+private fun CropActionButton(label: String, filled: Boolean, onClick: () -> Unit) {
+    val bg = if (filled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface.copy(alpha = 0.72f)
+    val fg = if (filled) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+    Box(
+        modifier = Modifier
+            .clip(Radius.pill)
+            .background(bg)
+            .clickable(interactionSource = null, indication = null, onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 10.dp)
+    ) {
+        Text(label, style = MaterialTheme.typography.labelLarge, color = fg)
     }
 }

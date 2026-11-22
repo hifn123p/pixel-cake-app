@@ -1650,3 +1650,52 @@ v0.7.6 发布后盘点「还有哪里有优化空间」，把前几轮审计**�
 - **P3-4 LazyColumn key**：全仓核查无数据驱动 `items()` 列表（SettingsScreen 是 8 个静态 item 块）——键无可附着，条目作废。
 - **LOW-5 PendingIntent FLAG_MUTABLE**：平台要求（UsbService 必须向授权回执注入 UsbDevice extra，FLAG_IMMUTABLE 会收不到结果），且 intent 已 `setPackage` 收窄、接收器 NOT_EXPORTED —— 维持现状即正确实现。
 - ktlint/detekt：维持「无本地构建环境不盲开」决策（§ 记录在案）。
+
+## §24 功能补齐批：自由裁剪（v0.8.0，2026-11-22）
+
+「分析功能需求」盘点结论：DEV_PLAN 功能矩阵仅剩 liveview（需 CRSDK PoC，后置）与 NAS（服务端
+项目）显式未做；vignette/颗粒/人脸锚点/曲线/液化/对象作用域均已落地。**唯一用户级大缺口 =
+自由裁剪**（此前只有 Q5 90° 步进旋转）。本批按里程碑号 v0.8.0 交付。
+
+### 24.1 架构决策：裁剪矩形存 pristine（未旋转）空间
+
+- **与旋转解耦**：转图不动裁剪框；旋转 q 变化时重推导自动把矩形映射进新旋转空间
+  （`EditCrop.rectToRotated`，角点映射 + min/max，90° 步进下轴对齐精确无采样）。
+- **RAW 导出零转换**：RAW 渲染就在 pristine 空间 —— 矩形直用。
+- UI 采集的预览空间矩形：二次裁剪先 `composeRects` 合回全幅、再 `rectToUnrotated` 存档。
+
+### 24.2 三条管线的一致性
+
+| 路径 | 实现 |
+|---|---|
+| 预览 | `rederiveSession(q, rect)`：pristine → 旋转(bitmap+linear) → 裁剪（`EditCrop.cropLinear` 16-bit 子矩形拷贝 / Bitmap 窗口裁）→ 替换 imported ⇒ 渲染/ML/缩略图/会话全链路 keyed-on-imported 自动重启 |
+| RAW 导出 | **带级裁剪窗口**：`renderLinearFile(crop=)` 分带只读裁剪行、只写窗口列；PixelProgram frameW/H = 裁剪后画幅 ⇒ **暗角/颗粒中心与预览/sRGB 逐位一致**（这是不做「渲完再裁位图」的原因）；蒙版/描迹/锚点全部换算到裁剪后 (cwU,chU) 尺寸，RotatedMask 复用不变 |
+| sRGB 导出 | 解码 → 旋转 → **位图窗口裁剪** → 渲染（蒙版/描迹/锚点零转换直接可用） |
+
+### 24.3 状态与持久化
+
+- `EditSnapshot.crop` / `EditDocument.crop`（@Serializable CropRect?，带默认值 ⇒ 旧 JSON 自然兼容，
+  与 rotation 同一条「只加字段」路线）；撤销栈 7 个 push 点全部补当前值；applySnapshot 先置
+  cropRect 再重推导；会话恢复/落盘双向接线；导入/退出重置。
+- 「按住看原图」基准与旋转同口径：保留导入时的零编辑帧（含未裁剪取景）—— 原图语义本义。
+
+### 24.4 UI（EditorScreen）
+
+- 顶栏「裁剪」入口（旋转旁，几何操作同族）；进入即复位 zoom/pan + 收起 Deck。
+- 覆盖层：scrim 压暗框外 + 白边框 + 三分线 + 琥珀 L 角手柄；拖角调整（比例约束时锁定）、
+  框内拖动移框、框外无操作；pointerInput(Unit) + rememberUpdatedState（不吃 v0.7.7 P3-6 的
+  手势重启教训）。
+- 控制条：比例 chips（自由/1:1/3:4/4:3/2:3/3:2/9:16/16:9，`aspectFit` 居中适配）+
+  清除裁剪/重置/取消/应用；应用经 onCropApply 上抛（空间换算/撤销栈在上层）。
+- 裁剪期间画布缩放/平移/双通道手势全部门禁（cropModeNow）。
+
+### 24.5 测试
+
+- `EditCropTest` ×12：q0..3 矩形映射往返、像素窗口取整、cropLinear 逐值、MOVE 钳制、
+  角拖锚定、比例约束比例保持、aspectFit、composeRects、hitKind、isFullFrame。
+- 既有 369 项全数保留（rotation/会话/渲染回归覆盖重推导路径）。
+
+### 24.6 教训
+
+- 角拖几何第一版把位移加在了**锚点**上（应为被拖角）—— 单测先行暴露（`corner drag anchors
+  opposite corner` 断言 0.7/0.7 才能对），修正在写 UI 之前，没进 CI。
