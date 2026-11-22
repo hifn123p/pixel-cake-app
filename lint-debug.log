@@ -9,10 +9,10 @@ Starting a Gradle Daemon (subsequent builds will be faster)
 > Task :app:mapDebugSourceSetPaths
 > Task :app:generateDebugResources
 > Task :app:packageDebugResources
+> Task :app:mergeDebugResources
 > Task :app:createDebugCompatibleScreenManifests
 > Task :app:extractDeepLinksDebug
 > Task :app:parseDebugLocalResources
-> Task :app:mergeDebugResources
 
 > Task :app:processDebugMainManifest
 [com.google.ai.edge.litert:litert:2.2.0] /home/runner/.gradle/caches/8.13/transforms/6cd64d3859112caf3769544d574db9c5/transformed/litert-2.2.0/AndroidManifest.xml Warning:
@@ -28,8 +28,8 @@ Starting a Gradle Daemon (subsequent builds will be faster)
 > Task :app:processDebugResources
 
 > Task :app:compileDebugKotlin FAILED
-e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/components/ParamSlider.kt:335:40 Unresolved reference 'Dp'.
-gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/__run_3-1795272716711.json
+e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/home/CameraPanel.kt:209:18 Unresolved reference 'foreground'.
+gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/__run_3-1795332420096.json
 
 FAILURE: Build failed with an exception.
 
