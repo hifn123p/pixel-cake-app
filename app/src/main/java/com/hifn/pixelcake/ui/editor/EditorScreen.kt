@@ -102,7 +102,6 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hifn.pixelcake.core.decode.ExportFormat
-import com.hifn.pixelcake.core.edit.CropDrag
 import com.hifn.pixelcake.core.edit.CropRect
 import com.hifn.pixelcake.core.edit.EditCrop
 import com.hifn.pixelcake.core.edit.EditParams
@@ -1272,7 +1271,6 @@ fun EditorScreen(
                             if (splitCompare) showOriginal = false
                         },
                         onRotate = onRotate,
-                        onOpenCrop = openCrop,
                         onAutoEnhance = { onAutoEnhance(histogram) },
                         histogramReady = histogram != null,
                         onExport = { showExport = true }
@@ -1778,9 +1776,11 @@ fun EditorScreen(
                             def = AppIcons.Rotate, label = "旋转 90°",
                             onClick = onRotate
                         )
+                        // v0.8.0 裁剪与旋转同住编辑动作行（v0.7.4 拍板：顶栏容量有限，
+                        // 历史头部本就是撤销/重做/旋转的家；顶栏不再回到 8 元素）。
                         IconAction(
                             def = AppIcons.Crop, label = "裁剪",
-                            onClick = onOpenCrop
+                            onClick = { openCrop(); showHistory = false }
                         )
                     }
                 }
@@ -2018,7 +2018,6 @@ private fun EditorTopBar(
     histogramReady: Boolean = false,
     onAutoEnhance: () -> Unit = {},
     onRotate: () -> Unit = {},
-    onOpenCrop: () -> Unit = {},
     onExport: () -> Unit
 ) {
     ChromeSkin(lightChrome) {
@@ -2528,7 +2527,7 @@ private fun CropOverlayCanvas(
     onRect: (CropRect) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var dragKind by remember { mutableStateOf<CropDrag?>(null) }
+    var dragKind by remember { mutableStateOf<EditCrop.CropDrag?>(null) }
     val rectNow = rememberUpdatedState(rect)
     val aspectNow = rememberUpdatedState(aspectPx)
     val onRectNow = rememberUpdatedState(onRect)
@@ -2572,12 +2571,11 @@ private fun CropOverlayCanvas(
             val rt = r.t * size.height
             val rr = r.r * size.width
             val rb = r.b * size.height
-            // scrim：全帧 − 框内（even-odd 差集）
-            val scrim = Path().apply {
-                addRect(Rect(0f, 0f, size.width, size.height))
-                val hole = Path().apply { addRect(Rect(rl, rt, rr, rb)) }
-                op(hole, PathOperation.Difference)
-            }
+            // scrim：全帧 − 框内（Path.op 双路径差集）
+            val framePath = Path().apply { addRect(Rect(0f, 0f, size.width, size.height)) }
+            val holePath = Path().apply { addRect(Rect(rl, rt, rr, rb)) }
+            val scrim = Path()
+            scrim.op(framePath, holePath, PathOperation.Difference)
             drawPath(scrim, Color.Black.copy(alpha = 0.55f))
             // 边框
             drawRect(

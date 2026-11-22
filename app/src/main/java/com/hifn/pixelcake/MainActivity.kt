@@ -1468,7 +1468,7 @@ private fun AppRoot(settings: AppSettings) {
                                                 val decoded = Decoder.decodeFullRes(context, it, profile.fullResLongEdge)
                                                 // Q5：会话旋转烘焙进全分辨率底图（与 EXIF 方向烘焙同一模式）
                                                 // —— 下游蒙版/液化/参数全部在旋转后的空间一致工作。
-                                                if (decoded != null && (rotationQuarterTurns != 0 || (cropRect != null && !cropRect.isFullFrame))) {
+                                                if (decoded != null && (rotationQuarterTurns != 0 || cropRect?.isFullFrame == false)) {
                                                     // Q5：会话旋转烘焙进全分辨率底图（与 EXIF 方向烘焙同一模式）
                                                     // —— 下游蒙版/液化/参数全部在旋转后的空间一致工作。
                                                     // v0.8.0：裁剪同块完成 —— 矩形映射进旋转空间按像素窗口裁位图，
