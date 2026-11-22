@@ -25,6 +25,8 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.DisposableEffect
@@ -35,6 +37,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -202,6 +205,11 @@ fun CameraPanel(
             return@LaunchedEffect
         }
         while (tetherOn) {
+            // v0.7.6：后台时暂停轮询（省电）
+            if (!foreground) {
+                delay(5000)
+                continue
+            }
             delay(3000)
             // 每轮现读最新预设（tetherPreset 经 rememberUpdatedState）：effect 的 key 只有
             // (session, tetherOn)，切预设 / 自定义预设库重载不会重启本 effect —— 重启 =
@@ -275,10 +283,12 @@ fun CameraPanel(
                                 try {
                                     // ④ 消费返回值（P1-15）：false = 尺寸不匹配 —— 旧代码无视它，
                                     //    会把一块从未被写过的黑位图当成品导出进相册。
-                                    val okRender = EditEngine.renderIntoSrgb(
-                                        bmp, decoded.bitmap, lp,
-                                        RetouchScale.toRenderState(lr, bmp.width, bmp.height)
-                                    )
+                                    val okRender = withContext(Dispatchers.Default) {
+                                        EditEngine.renderIntoSrgb(
+                                            bmp, decoded.bitmap, lp,
+                                            RetouchScale.toRenderState(lr, bmp.width, bmp.height)
+                                        )
+                                    }
                                     if (!okRender) {
                                         log(photo.info.filename + " · 渲染尺寸不匹配")
                                         continue
@@ -358,7 +368,17 @@ fun CameraPanel(
         // ---------------- 1. 检测 ----------------
         // v0.7.5（流程审计 J6-P3）：打开面板**即自动扫描** —— 旧版要用户自己发现
         // 并点这个按钮，空态文案也没说「可重扫」。
-        LaunchedEffect(Unit) {
+        // v0.7.6（性能审计 P1-3）：App 后台时系留轮询暂停（省电；恢复前台自动续跑）
+    var foreground by remember { mutableStateOf(true) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val obs = LifecycleEventObserver { _, event ->
+            foreground = event == Lifecycle.Event.ON_RESUME
+        }
+        lifecycleOwner.lifecycle.addObserver(obs)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(obs) }
+    }
+    LaunchedEffect(Unit) {
             if (!scanned && !busy) {
                 busy = true
                 phase = "读取 USB 设备…"

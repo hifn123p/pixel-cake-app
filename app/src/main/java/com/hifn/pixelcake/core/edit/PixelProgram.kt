@@ -228,7 +228,7 @@ class PixelProgram(
             hslHue = FloatArray(HslBands.COUNT) { hsl.hueOf(it) }
             hslSat = FloatArray(HslBands.COUNT) { hsl.satOf(it) }
             hslLum = FloatArray(HslBands.COUNT) { hsl.lumOf(it) }
-            val bands = ColorMath.buildHueBandLut()
+            val bands = ColorMath.buildHueBandLutCache
             bandA = bands.first
             bandB = bands.second
             bandW = bands.third

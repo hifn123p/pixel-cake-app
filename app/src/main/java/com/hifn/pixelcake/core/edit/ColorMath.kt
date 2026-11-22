@@ -232,7 +232,10 @@ object ColorMath {
      * 通道之间线性过渡（不做硬切）：硬切会在色相过渡带上留下可见的色块边界，
      * 渐变天空 / 肤色边缘最先暴露，而这两样恰好是本 App 的主场景。
      */
-    fun buildHueBandLut(): Triple<IntArray, IntArray, FloatArray> {
+    // v0.7.6（性能审计 P3-1）：纯常量函数单例化（每帧重建浪费）
+val buildHueBandLutCache by lazy { buildHueBandLutInner() }
+
+private fun buildHueBandLutInner(): Triple<IntArray, IntArray, FloatArray> {
         val centers = HslBands.CENTERS
         val n = centers.size
         val a = IntArray(360)

@@ -212,7 +212,8 @@ Java_com_hifn_pixelcake_core_decode_RawNative_readLinearRows(
         JNIEnv* env, jclass /*clazz*/, jlong handle, jint y0, jint rows, jshortArray outArray) {
     LinearSession* s = asSession(handle);
     if (!s || !s->image || !outArray) return -1;
-    if (y0 < 0 || rows <= 0 || y0 + rows > s->height) return -1;
+    // v0.7.6（安全审计 LOW-1）：32 位 y0+rows 可能溢出，改 64 位判定
+    if (y0 < 0 || rows <= 0 || (jlong)y0 + (jlong)rows > (jlong)s->height) return -1;
 
     // 用 64 位 jlong 比较：rows*width*3 先按 size_t 算再截断成 jsize（32 位）时，
     // 超过 2^31 会变负数 ⇒ `have < need` 判小失效 ⇒ 后续裸指针写出数组边界。
