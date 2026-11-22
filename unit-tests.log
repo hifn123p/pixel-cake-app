@@ -20,10 +20,10 @@
 > Task :app:javaPreCompileDebug UP-TO-DATE
 > Task :app:compileDebugJavaWithJavac NO-SOURCE
 > Task :app:preDebugUnitTestBuild UP-TO-DATE
-> Task :app:processDebugJavaRes UP-TO-DATE
 > Task :app:javaPreCompileDebugUnitTest
-> Task :app:bundleDebugClassesToCompileJar
+> Task :app:processDebugJavaRes UP-TO-DATE
 > Task :app:bundleDebugClassesToRuntimeJar
+> Task :app:bundleDebugClassesToCompileJar
 
 > Task :app:compileDebugUnitTestKotlin
 w: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/test/java/com/hifn/pixelcake/core/edit/EditRotationTest.kt:72:33 The corresponding parameter in the supertype 'RetouchMask' is named 'w'. This may cause problems when calling this function with named arguments.
@@ -42,20 +42,8 @@ EditCropTest > aspect fit centers largest rect of ratio FAILED
         at org.junit.Assert.assertEquals(Assert.java:701)
         at com.hifn.pixelcake.core.edit.EditCropTest.aspect fit centers largest rect of ratio(EditCropTest.kt:133)
 
-EditCropTest > quarter rotation maps full frame to full frame FAILED
-    java.lang.IllegalArgumentException: crop rect out of range CropRect(l=-0.39999998, t=0.0, r=0.6, b=1.0)
-        at com.hifn.pixelcake.core.edit.CropRect.<init>(EditCrop.kt:34)
-        at com.hifn.pixelcake.core.edit.EditCrop.rectToRotated(EditCrop.kt:66)
-        at com.hifn.pixelcake.core.edit.EditCropTest.quarter rotation maps full frame to full frame(EditCropTest.kt:46)
-
-EditCropTest > rectToRotated and back round trips for all quarters FAILED
-    java.lang.IllegalArgumentException: crop rect out of range CropRect(l=-0.35000002, t=0.3, r=0.4, b=0.85)
-        at com.hifn.pixelcake.core.edit.CropRect.<init>(EditCrop.kt:34)
-        at com.hifn.pixelcake.core.edit.EditCrop.rectToRotated(EditCrop.kt:66)
-        at com.hifn.pixelcake.core.edit.EditCropTest.rectToRotated and back round trips for all quarters(EditCropTest.kt:34)
-
-384 tests completed, 3 failed
-gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/__run_5-1795355816186.json
+384 tests completed, 1 failed
+gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/__run_5-1795358520540.json
 
 FAILURE: Build failed with an exception.
 
@@ -229,5 +217,5 @@ Caused by: org.gradle.api.internal.exceptions.MarkedVerificationException: There
 	at org.gradle.internal.concurrent.AbstractManagedExecutor$1.run(AbstractManagedExecutor.java:48)
 
 
-BUILD FAILED in 6s
+BUILD FAILED in 7s
 24 actionable tasks: 6 executed, 18 up-to-date
