@@ -38,27 +38,6 @@
     </issue>
 
     <issue
-        id="SuspiciousIndentation"
-        severity="Error"
-        message="Suspicious indentation: This is indented but is not continuing the previous expression (`status = EditorStatu`...)"
-        category="Correctness"
-        priority="6"
-        summary="Suspicious indentation"
-        explanation="This check looks for cases where the indentation suggests a grouping that isn&apos;t actually there in the code. A common example of this would be something like&#xA;```kotlin&#xA;if (column > width)&#xA;    line++&#xA;    column = 0&#xA;```&#xA;Here, the `column = 0` line will be executed every single time, not just if the condition is true."
-        errorLine1="            nav.push(AppScreen.Editor)"
-        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~">
-        <location
-            file="/home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/MainActivity.kt"
-            line="970"
-            column="13"/>
-        <location
-            file="/home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/MainActivity.kt"
-            line="969"
-            column="9"
-            message="Previous statement here"/>
-    </issue>
-
-    <issue
         id="AndroidGradlePluginVersion"
         severity="Warning"
         message="A newer version of Gradle than 8.13 is available: 8.14.8"
@@ -296,7 +275,7 @@
         errorLine2="                              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="/home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/MainActivity.kt"
-            line="1689"
+            line="1693"
             column="31"/>
     </issue>
 
@@ -368,7 +347,7 @@
         errorLine2="                                                   ~~~~~~~~~~~~~~">
         <location
             file="/home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt"
-            line="370"
+            line="371"
             column="52"/>
     </issue>
 
@@ -384,7 +363,7 @@
         errorLine2="                                            ~~~~~~~~~~~~~~">
         <location
             file="/home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt"
-            line="398"
+            line="399"
             column="45"/>
     </issue>
 
@@ -400,7 +379,7 @@
         errorLine2="                                            ~~~~~~~~~~~~~~">
         <location
             file="/home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt"
-            line="400"
+            line="401"
             column="45"/>
     </issue>
 
@@ -416,7 +395,7 @@
         errorLine2="                              ~~~~~~~~~~~~~~">
         <location
             file="/home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt"
-            line="404"
+            line="405"
             column="31"/>
     </issue>
 
@@ -432,7 +411,7 @@
         errorLine2="                                    ~~~~~~~~~~~~~~">
         <location
             file="/home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt"
-            line="405"
+            line="406"
             column="37"/>
     </issue>
 
@@ -448,7 +427,7 @@
         errorLine2="                               ~~~~~~~~~~~~~~">
         <location
             file="/home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt"
-            line="456"
+            line="457"
             column="32"/>
     </issue>
 
@@ -464,7 +443,7 @@
         errorLine2="                                 ~~~~~~~~~~~~~~">
         <location
             file="/home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt"
-            line="612"
+            line="613"
             column="34"/>
     </issue>
 
@@ -480,7 +459,7 @@
         errorLine2="                                    ~~~~~~~~~~~~~~">
         <location
             file="/home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt"
-            line="613"
+            line="614"
             column="37"/>
     </issue>
 
@@ -576,7 +555,7 @@
         errorLine2="                                   ~~~~~~~~~~~~~~">
         <location
             file="/home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/settings/SettingsScreen.kt"
-            line="102"
+            line="104"
             column="36"/>
     </issue>
 
@@ -592,7 +571,7 @@
         errorLine2="                                     ~~~~~~~~~~~~~~">
         <location
             file="/home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/settings/SettingsScreen.kt"
-            line="103"
+            line="105"
             column="38"/>
     </issue>
 
@@ -880,7 +859,7 @@
         errorLine2="                                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="/home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/home/CameraPanel.kt"
-            line="274"
+            line="293"
             column="43"/>
     </issue>
 
@@ -912,7 +891,7 @@
         errorLine2="                                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="/home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt"
-            line="896"
+            line="897"
             column="43"/>
     </issue>
 
@@ -944,7 +923,7 @@
         errorLine2="                  ~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="/home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/MainActivity.kt"
-            line="927"
+            line="931"
             column="19"/>
     </issue>
 
@@ -960,7 +939,7 @@
         errorLine2="                                                             ^">
         <location
             file="/home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/MainActivity.kt"
-            line="1409"
+            line="1413"
             column="62"/>
     </issue>
 
@@ -976,7 +955,7 @@
         errorLine2="                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="/home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/MainActivity.kt"
-            line="1771"
+            line="1775"
             column="18"/>
     </issue>
 
