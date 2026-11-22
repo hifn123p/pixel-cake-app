@@ -8,6 +8,6 @@
 -->
 <full-backup-content>
     <include domain="sharedpref" path="." />
-    <include domain="database" path="presets.db" />
+    <include domain="file" path="custom_presets.json" />
 <exclude domain="sharedpref" path="session_store.xml"/>
 </full-backup-content>
