@@ -27,18 +27,7 @@
 > Task :app:checkDebugDuplicateClasses
 
 > Task :app:compileDebugKotlin FAILED
-e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/home/CameraPanel.kt:138:9 Conflicting declarations:
-local var foreground: Boolean
-local var foreground: Boolean
-e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/home/CameraPanel.kt:139:9 Conflicting declarations:
-local val lifecycleOwner: LifecycleOwner
-local val lifecycleOwner: LifecycleOwner
-e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/home/CameraPanel.kt:148:9 Conflicting declarations:
-local var foreground: Boolean
-local var foreground: Boolean
-e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/home/CameraPanel.kt:149:9 Conflicting declarations:
-local val lifecycleOwner: LifecycleOwner
-local val lifecycleOwner: LifecycleOwner
+e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/core/ml/MlMaskProvider.kt:333:40 Unresolved reference 'TAG_ML'.
 
 > Task :app:configureCMakeDebug[arm64-v8a]
 
@@ -246,5 +235,5 @@ Caused by: org.jetbrains.kotlin.gradle.tasks.CompilationErrorException: Compilat
 	... 2 more
 
 
-BUILD FAILED in 14s
+BUILD FAILED in 27s
 23 actionable tasks: 7 executed, 16 up-to-date
