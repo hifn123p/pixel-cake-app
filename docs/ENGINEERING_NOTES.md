@@ -1612,3 +1612,41 @@ GlassTabBar 标签「调色台」（产品语言）—— 三者的裁决理由�
   会话恢复（三页签/阈值/半径还原）
 - 走查截图受 SAF 竞态影响部分轮次未进编辑器（脚本竞态非 App 缺陷）——
   已验证的视觉修复（琥珀 chip/眉题/悬浮卡/步进钮/页签）在历史轮次截图均可见
+
+## §23 收尾批：已记录未修项清账（v0.7.7，2026-11-22）
+
+v0.7.6 发布后盘点「还有哪里有优化空间」，把前几轮审计**记录但未修**的条目全部落地，
+另发现并归位一个版本漂移缺陷。新增单测 ArwMagicTest ×6；既有 363 项全数保留。
+
+### 23.1 性能（P2/P3 记录项）
+
+| 级 | 内容 |
+|---|---|
+| **P2-2** | **maskRowSpan 每帧 2.8M 次蒙版采样** → 按蒙版对象身份缓存（拖动期间 `RasterMask.resampleTo` 同尺寸返回自身，身份稳定 ⇒ 拖动全程 0 次全扫）；缓存值带 (w,h) 复核防串尺寸；>8 键整表清空防驻留；**FullMask 快路径**直接返回全高（恒覆盖整幅连扫都省）；`@Synchronized`（导出链路可并发进入）。中性灰阶段核实为分带窗口、无全图扫描，不需处理 |
+| P3-3a | **marching-squares 轮廓环逐帧逐点 lineTo + Path 分配** → `remember(pickMask, dispW, dispH)` 缓存 Path（pickMask 由 produceState 按蒙版代次产出，身份稳定），Canvas 只画不建 |
+| P3-3b | **直方图面积 Path 逐帧重建**（3 × 256 lineTo）→ `remember(histogram)` 缓存；坐标存单位方块 + `withTransform { scale }` 绘制（fill 无描边，缩放不影响视觉）。CurveEditor 三点曲线 Path 保留逐帧构建（3 次 lineTo 成本可忽略，且 points 拖动时本来就要重建，缓存无收益） |
+| P3-5 | **probeCapabilities（一组 DisplayManager/ActivityManager binder 查询）三处移出主线程**：① MainActivity AppRoot ② HomeScreen —— 组合期同步跑 → 保守档（mid）先渲染首帧，`LaunchedEffect + Dispatchers.IO` 探测完热替换；③ PixelCakeApp.onCreate 启动快照 → 后台 Thread（首帧不等待）。同族顺修：HomeScreen 的 SessionStore.load（磁盘 I/O）包 `Dispatchers.IO` |
+| P3-6 | **Deck 手势 pointerInput(deckH, deckScale) 每动画帧重启**（deckH 是 animateDpAsState，收起/展开动画期间 key 每帧都变 ⇒ 进行中的拖动被反复杀掉）→ key 归 Unit；deckH 委托读本就是活值；deckScale（普通 val，闭包冻结）转 `rememberUpdatedState` |
+
+### 23.2 安全（LOW-3 / MEDIUM-1 收口）
+
+| 级 | 内容 |
+|---|---|
+| LOW-3 | **模型指纹 pin**：MlMaskProvider 增加 `EXPECTED_MODEL_SHA256`（资产实际计算值 c6748b12…0e0），加载成功后比对，诊断页新增「模型指纹校验」（符合预期 / ⚠ 与预期不符 / —），不符落 DebugLog.e —— 构建缓存污染、资产被意外替换/损坏可被发现 |
+| **MEDIUM-1 收口** | **LibRaw 攻击面预过滤**：copyToCache 落盘后先验 TIFF 族魔数（小端 `II*\0` / 大端 `MM\0*`；ARW/DNG/CR2/NEF 皆此族），非 TIFF 文件直接拒绝，伪装成照片的任意二进制不再进入原生解析器。`hasTiffMagic` 纯 JVM + 新单测 ArwMagicTest ×6（II/MM 通过、JPEG/PNG/截断/空拒绝）。子模块 pin 核实**早已在位**（LibRaw dde798dd = 0.22.0-92），MEDIUM-1 三项措施（pin + 魔数 + jlong 判定）至此全部闭环 |
+
+### 23.3 无障碍 T4 收尾
+
+- 准星按钮补 `selected = pickActive`（TalkBack 播报「已选中」；名称与点击等价前轮已给）。
+  ParamSlider 名称并入滑杆 / 直方图描述 / Deck 手柄名称+点击等价 —— 核实均已在 v0.7.5 前落地。
+
+### 23.4 版本漂移归位（新发现缺陷）
+
+- **v0.7.5 / v0.7.6 两轮发版漏抬 versionName** —— Release tag 已到 0.7.6，APK「关于」页仍显示 v0.7.4 (25)。
+  归位：versionCode 26 / versionName "0.7.7"，与 tag 一一对应的纪律重新对齐。
+
+### 23.5 记录不改（本轮决策）
+
+- **P3-4 LazyColumn key**：全仓核查无数据驱动 `items()` 列表（SettingsScreen 是 8 个静态 item 块）——键无可附着，条目作废。
+- **LOW-5 PendingIntent FLAG_MUTABLE**：平台要求（UsbService 必须向授权回执注入 UsbDevice extra，FLAG_IMMUTABLE 会收不到结果），且 intent 已 `setPackage` 收窄、接收器 NOT_EXPORTED —— 维持现状即正确实现。
+- ktlint/detekt：维持「无本地构建环境不盲开」决策（§ 记录在案）。

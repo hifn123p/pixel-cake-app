@@ -135,6 +135,16 @@ object MlMaskProvider {
     @Volatile
     private var shaJobStarted = false
 
+    // v0.7.7（安全审计 LOW-3）：随包模型预期指纹 —— 资产被意外替换/损坏时可被发现
+    //（构建缓存污染、传输截断、恶意替换都逃不过这一步）。
+    const val EXPECTED_MODEL_SHA256 =
+        "c6748b1253a99067ef71f7e26ca71096cd449baefa8f101900ea23016507e0e0"
+
+    /** null = 尚未算完；true/false = 与预期指纹比对结果（诊断页展示）。 */
+    @Volatile
+    var modelHashVerifiedForUi: Boolean? = null
+        private set
+
     /** 模型中心（UI 3.0 §N）的行数据：键 = 展示名，值 = 展示值。只读快照。 */
     fun diagnostics(): Map<String, String> = mapOf(
         "模型已加载" to (model != null).toString(),
@@ -150,6 +160,11 @@ object MlMaskProvider {
             else "—"),
         "加速器降级(GPU→CPU)" to gpuDowngradeCountForUi.toString(),
         "模型 SHA-256" to ((modelSha256ForUi?.take(16))?.plus("…") ?: "—"),
+        "模型指纹校验" to when (modelHashVerifiedForUi) {
+            true -> "符合预期"
+            false -> "⚠ 与预期不符"
+            null -> "—"
+        },
         "概率缓存边长" to (if (cacheSide > 0) cacheSide.toString() else "未推理"),
         "缓存键" to (cacheKey?.take(24) ?: "无")
     )
@@ -313,6 +328,10 @@ object MlMaskProvider {
                                 dig.digest().joinToString("") { "%02x".format(it) }
                             }
                         }.getOrNull()
+                        modelHashVerifiedForUi = modelSha256ForUi?.equals(EXPECTED_MODEL_SHA256, ignoreCase = true)
+                        if (modelHashVerifiedForUi == false) {
+                            DebugLog.e(TAG_ML, "skin mask model sha mismatch", mapOf("sha16" to (modelSha256ForUi?.take(16) ?: "—")))
+                        }
                     }
                 }
                 DebugLog.i(
