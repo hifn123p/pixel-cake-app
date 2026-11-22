@@ -144,16 +144,7 @@ fun CameraPanel(
         lifecycleOwner.lifecycle.addObserver(obs)
         onDispose { lifecycleOwner.lifecycle.removeObserver(obs) }
     }
-    // v0.7.6（性能审计 P1-3）：App 后台时系留轮询暂停（省电；恢复前台自动续跑）
-    var foreground by remember { mutableStateOf(true) }
-    val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner) {
-        val obs = LifecycleEventObserver { _, event ->
-            foreground = event == Lifecycle.Event.ON_RESUME
-        }
-        lifecycleOwner.lifecycle.addObserver(obs)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(obs) }
-    }
+    
     val tether = remember {
         // ⚠️ 必须具名传 `log`：TetherProcessor 的**最后一个**参数是 maxPerRound，
         // 尾随 lambda 会绑到它身上（CI 两红才定位到的绑定规则）。
