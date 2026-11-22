@@ -363,7 +363,10 @@ data class EditSnapshot(
     val layers: List<ObjectLayer> = emptyList(),
     // Q5 手动旋转：0/1/2/3 = 顺时针 90° 步数。**带默认值** ⇒ 旧的三参调用点照常编译，
     // 但每个 push 点必须补上当前值（漏掉的后果：撤销一次旋转后，再撤销参数会把它转回来）。
-    val rotationQuarterTurns: Int = 0
+    val rotationQuarterTurns: Int = 0,
+    // v0.8.0 自由裁剪：矩形在 **pristine（未旋转）空间**（与旋转解耦：转图不动裁剪框）。
+    // 带默认值；同 rotation 的纪律 —— **每个 push 点必须补上当前值**。
+    val crop: CropRect? = null
 )
 
 /** 撤销/重做历史：持有当前 [EditSnapshot]，push 新状态即记录旧状态。 */

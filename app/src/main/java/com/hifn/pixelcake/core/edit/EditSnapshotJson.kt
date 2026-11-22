@@ -37,7 +37,10 @@ data class EditDocument(
     val layers: List<ObjectLayer> = emptyList(),
     // v0.7.3（运行时审计 P2-1）：Q5 旋转进文档 —— 会话存档此前丢每步旋转，
     // 「撤销回旋转之前」恢复后失效。带默认值 ⇒ 旧 JSON 自然兼容。
-    val rotationQuarterTurns: Int = 0
+    val rotationQuarterTurns: Int = 0,
+    // v0.8.0 自由裁剪：pristine 空间归一化矩形。带默认值 ⇒ 旧 JSON 自然兼容
+    //（与 rotation 同一条「只加字段不动语义」路线，CURRENT_VERSION 不升）。
+    val crop: CropRect? = null
 )
 
 /**

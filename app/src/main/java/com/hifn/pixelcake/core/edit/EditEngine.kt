@@ -223,31 +223,41 @@ object EditEngine {
         mask: RetouchMask? = null,
         faceAnchor: RetouchLayer.FaceAnchor? = null,
         layers: LayerStack = LayerStack.EMPTY,
+        // v0.8.0 自由裁剪：矩形在 **pristine（未旋转）空间**（RAW 渲染恰好也在该空间，
+        // 零转换）。带级收窄：分带只读裁剪窗口的行、只写窗口内的列 —— 暗角/颗粒等
+        // 画幅几何量按**裁剪后**画幅计算，与 sRGB（先裁后渲）及预览逐位一致。
+        crop: CropRect? = null,
         onProgress: (Int) -> Boolean = { true }
     ): Bitmap? {
         val src = RawLinearSource.open(path, maxLongSide) ?: return null
         return try {
             val w = src.width
             val h = src.height
-            val target = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+            // 裁剪窗口 [x0, y0, cw, ch]；null = 全幅（既有行为逐位不变）。
+            val win = if (crop != null) EditCrop.renderWindow(crop, w, h) else intArrayOf(0, 0, w, h)
+            val x0 = win[0]; val y0 = win[1]
+            val cw = win[2]; val ch = win[3]
+            val target = Bitmap.createBitmap(cw, ch, Bitmap.Config.ARGB_8888)
         val t0 = System.nanoTime()
         // 16-bit 线性 → 8-bit 量化：开 Bayer 抖动（M-3，见 PixelProgram.dither 的 KDoc）。
-        val program = PixelProgram(p, frameW = w, frameH = h, dither = true)
+        val program = PixelProgram(p, frameW = cw, frameH = ch, dither = true)
         val ls = layers.layers
         val srcBand = ShortArray(BAND_ROWS * w * 3)
-            val dstBand = IntArray(BAND_ROWS * w)
-            val invL = 1f / maxOf(w, h).toFloat()
+            val dstBand = IntArray(BAND_ROWS * cw)
+            val invL = 1f / maxOf(cw, ch).toFloat()
             var y = 0
             var ok = true
-            while (y < h && ok) {
-                val rows = minOf(BAND_ROWS, h - y)
-                if (src.readRows(y, rows, srcBand) != rows) {
-                    DebugLog.e(DebugLog.TAG_EDIT, "export readRows failed", mapOf("y" to y))
+            while (y < ch && ok) {
+                val rows = minOf(BAND_ROWS, ch - y)
+                // 读的是**全幅**的行（y0 + y 起步），写的是**裁剪帧**的行 y。
+                if (src.readRows(y0 + y, rows, srcBand) != rows) {
+                    DebugLog.e(DebugLog.TAG_EDIT, "export readRows failed", mapOf("y" to (y0 + y)))
                     ok = false
                     break
                 }
-                runBand(w, y, rows) { x, py, i ->
-                    val o = i * 3
+                runBand(cw, y, rows) { x, py, i ->
+                    // srcBand 行宽是全幅 w；列偏移 x0。行内局部行号 = py - y。
+                    val o = ((py - y) * w + x0 + x) * 3
                     val u = (x + 0.5f) * invL
                     val v = (py + 0.5f) * invL
                     val out = program.applyLinear(
@@ -258,9 +268,9 @@ object EditEngine {
                     )
                     dstBand[i] = applyObjectLayers(out, u, v, x, py, ls)
                 }
-                target.setPixels(dstBand, 0, w, 0, y, w, rows)
+                target.setPixels(dstBand, 0, cw, 0, y, cw, rows)
                 y += rows
-                ok = onProgress(y * 100 / h)
+                ok = onProgress(y * 100 / ch)
             }
             if (ok) {
                 if (retouch != null) RetouchLayer.apply(target, retouch, mask, faceAnchor)
