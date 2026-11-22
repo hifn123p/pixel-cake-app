@@ -1,1 +1,6 @@
-log_20261122_082127.txt
+log_20261122_125151.txt
+2026-11-22 12:51:51.233 [INFO] LIFECYCLE: DebugLog initialized {file=/data/user/0/com.hifn.pixelcake.debug/files/debug/log_20261122_125151.txt}
+2026-11-22 12:51:51.352 [INFO] LIFECYCLE: boot snapshot {summary=manufacturer=Google model=sdk_gphone64_x86_64 soc=ranchu android=16(36) abi=x86_64 totalMem=3920MiB availMem=1910MiB wideColorGamut=false tier=low fullRes=4096 proxy=1024}
+2026-11-22 12:52:05.185 [INFO] IMPORT: pick {uri=image%3A5}
+2026-11-22 12:52:05.598 [INFO] DECODE: decoded {w=800, h=1000, raw=false, mime=image/jpeg, linear=false}
+2026-11-22 12:52:06.935 [WARN] ML: CompiledModel.create failed {accel=GPU, err=Failed to compile model}
