@@ -50,38 +50,54 @@ object EditCrop {
 
     /**
      * pristine 空间矩形 → 旋转后（预览）空间矩形。
-     * 角点经 [EditRotation.mapNormPoint] 映射后取 min/max —— 90° 步进下矩形保持轴对齐。
+     *
+     * ⚠️ 刻意用**像素连续角点映射**（[mapCorner]）而不是 ：
+     * 仓库的归一化约定是 u = x/L（L = 长边，非方形帧 u 不到 1），而 [CropRect] 是
+     * **逐轴 [0,1]** —— 两套口径不能混。像素坐标与约定无关，且边缘（x = w）映射后
+     * 精确落在旋转帧边缘（q2 的 x = w → w − x = 0），全幅帧不丢行列。
+     * 90° 步进下矩形保持轴对齐（角点映射 + min/max）。
      */
     fun rectToRotated(rect: CropRect, quarterTurns: Int, w: Int, h: Int): CropRect {
         val q = ((quarterTurns % 4) + 4) % 4
         if (q == 0) return rect
+        val rw = if (q % 2 == 1) h else w
+        val rh = if (q % 2 == 1) w else h
         val corners = listOf(
-            EditRotation.mapNormPoint(rect.l, rect.t, q, w, h),
-            EditRotation.mapNormPoint(rect.r, rect.t, q, w, h),
-            EditRotation.mapNormPoint(rect.l, rect.b, q, w, h),
-            EditRotation.mapNormPoint(rect.r, rect.b, q, w, h)
+            mapCorner(rect.l * w, rect.t * h, q, w, h),
+            mapCorner(rect.r * w, rect.t * h, q, w, h),
+            mapCorner(rect.l * w, rect.b * h, q, w, h),
+            mapCorner(rect.r * w, rect.b * h, q, w, h)
         )
-        val ls = corners.map { it.first }
-        val ts = corners.map { it.second }
+        val ls = corners.map { it.first / rw }
+        val ts = corners.map { it.second / rh }
         return CropRect(min(ls.min(), ls.max()), min(ts.min(), ts.max()), max(ls.min(), ls.max()), max(ts.min(), ts.max()))
     }
 
     /**
-     * 旋转后（预览）空间矩形 → pristine 空间矩形。
-     * [EditRotation.unmapNormPoint] 的逆与 [rectToRotated] 互逆（90° 步进下精确）。
+     * 旋转后（预览）空间矩形 → pristine 空间矩形（[rectToRotated] 的逆，反向转 4−q）。
      */
     fun rectToUnrotated(rect: CropRect, quarterTurns: Int, w: Int, h: Int): CropRect {
         val q = ((quarterTurns % 4) + 4) % 4
         if (q == 0) return rect
+        val rw = if (q % 2 == 1) h else w
+        val rh = if (q % 2 == 1) w else h
         val corners = listOf(
-            EditRotation.unmapNormPoint(rect.l, rect.t, q, w, h),
-            EditRotation.unmapNormPoint(rect.r, rect.t, q, w, h),
-            EditRotation.unmapNormPoint(rect.l, rect.b, q, w, h),
-            EditRotation.unmapNormPoint(rect.r, rect.b, q, w, h)
+            mapCorner(rect.l * rw, rect.t * rh, (4 - q) % 4, rw, rh),
+            mapCorner(rect.r * rw, rect.t * rh, (4 - q) % 4, rw, rh),
+            mapCorner(rect.l * rw, rect.b * rh, (4 - q) % 4, rw, rh),
+            mapCorner(rect.r * rw, rect.b * rh, (4 - q) % 4, rw, rh)
         )
-        val ls = corners.map { it.first }
-        val ts = corners.map { it.second }
+        val ls = corners.map { it.first / w }
+        val ts = corners.map { it.second / h }
         return CropRect(min(ls.min(), ls.max()), min(ts.min(), ts.max()), max(ls.min(), ls.max()), max(ts.min(), ts.max()))
+    }
+
+    /** 连续坐标的 90° 步进旋转（边缘映射，非像素中心）：q1: (x,y)→(h−y, x)；q2: (w−x, h−y)；q3: (y, w−x)。 */
+    private fun mapCorner(x: Float, y: Float, q: Int, w: Int, h: Int): Pair<Float, Float> = when (q) {
+        1 -> (h - y) to x
+        2 -> (w - x) to (h - y)
+        3 -> y to (w - x)
+        else -> x to y
     }
 
     /**
