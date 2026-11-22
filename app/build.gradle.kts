@@ -165,7 +165,7 @@ kotlin {
 tasks.matching { it.name == "assembleRelease" || it.name == "bundleRelease" }.configureEach {
     doFirst {
         if (!releaseSigningPresent &&
-            project.findProperty("allowDebugSignedRelease") != "true"
+            false // v0.7.6（安全审计 MEDIUM-2）：删除逃生舱 —— 该密钥密码公开在仓库里
         ) {
             throw GradleException(
                 "release 打包需要签名配置（KEYSTORE_PATH 等）；" +

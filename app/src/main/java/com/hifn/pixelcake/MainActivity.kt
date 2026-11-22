@@ -649,14 +649,14 @@ private fun AppRoot(settings: AppSettings) {
             } catch (t: Throwable) {
                 DebugLog.w(
                     DebugLog.TAG_DECODE, "decode failed",
-                    mapOf("uri" to uri.toString(), "err" to (t.message ?: t.javaClass.simpleName))
+                    mapOf("uri" to DebugLog.shortUri(uri), "err" to (t.message ?: t.javaClass.simpleName))
                 )
                 null
             }
             if (dec == null) {
                 loading = false
                 status = EditorStatus(StatusKind.Error, "无法解码该文件")
-                DebugLog.w(DebugLog.TAG_DECODE, "decode failed", mapOf("uri" to uri.toString()))
+                DebugLog.w(DebugLog.TAG_DECODE, "decode failed", mapOf("uri" to DebugLog.shortUri(uri)))
             } else {
                 // 换图：作废在途渲染批次，并登记「等第一次渲染完成后留一份新基线」。
                 // `baselinePending` 必须在 `imported = dec` **之前**设好 —— 渲染副作用以
@@ -917,7 +917,11 @@ private fun AppRoot(settings: AppSettings) {
     // v0.7.5（流程审计 J2-P1）：恢复入口从「冷启动一次性」升级为**可随时触发** ——
     // 用户在编辑器误触返回后，首页的「继续上次编辑」胶囊就是回到会话的路。
     // 记录清除时机：发起恢复即清（防重复触发）；恢复失败按「无会话」处理（既有降级）。
-    var pendingRestore by remember { mutableStateOf(SessionStore.load(context)) }
+    var pendingRestore by remember { mutableStateOf<SessionRecord?>(null) }
+    LaunchedEffect(Unit) {
+        // v0.7.6（性能审计 P1-2）：磁盘 I/O + JSON 解码移出组合期（冷启动首帧前不放主线程阻塞工作）
+        pendingRestore = withContext(Dispatchers.IO) { SessionStore.load(context) }
+    }
     val resumeSession: () -> Unit = resume@{
         val record = pendingRestore ?: return@resume
         pendingRestore = null
