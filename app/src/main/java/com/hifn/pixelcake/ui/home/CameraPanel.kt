@@ -134,6 +134,16 @@ fun CameraPanel(
     var arrivalLog by remember { mutableStateOf(emptyList<String>()) }
     // 批 5 可测化：轮询的「谁是新片 / 坏对象记账 / 基线播种」决策抽进 TetherProcessor
     //（纯 JVM 可测，K1/K2/K3 各有一条会红的回归测试）；本组件只保留下载/渲染/导出。
+    // v0.7.6（性能审计 P1-3）：App 后台时系留轮询暂停（省电；恢复前台自动续跑）
+    var foreground by remember { mutableStateOf(true) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val obs = LifecycleEventObserver { _, event ->
+            foreground = event == Lifecycle.Event.ON_RESUME
+        }
+        lifecycleOwner.lifecycle.addObserver(obs)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(obs) }
+    }
     val tether = remember {
         // ⚠️ 必须具名传 `log`：TetherProcessor 的**最后一个**参数是 maxPerRound，
         // 尾随 lambda 会绑到它身上（CI 两红才定位到的绑定规则）。
@@ -368,17 +378,7 @@ fun CameraPanel(
         // ---------------- 1. 检测 ----------------
         // v0.7.5（流程审计 J6-P3）：打开面板**即自动扫描** —— 旧版要用户自己发现
         // 并点这个按钮，空态文案也没说「可重扫」。
-        // v0.7.6（性能审计 P1-3）：App 后台时系留轮询暂停（省电；恢复前台自动续跑）
-    var foreground by remember { mutableStateOf(true) }
-    val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner) {
-        val obs = LifecycleEventObserver { _, event ->
-            foreground = event == Lifecycle.Event.ON_RESUME
-        }
-        lifecycleOwner.lifecycle.addObserver(obs)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(obs) }
-    }
-    LaunchedEffect(Unit) {
+        LaunchedEffect(Unit) {
             if (!scanned && !busy) {
                 busy = true
                 phase = "读取 USB 设备…"
