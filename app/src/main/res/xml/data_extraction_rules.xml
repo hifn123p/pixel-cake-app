@@ -6,11 +6,11 @@
 <data-extraction-rules>
     <cloud-backup>
         <include domain="sharedpref" path="." />
-        <include domain="database" path="presets.db" />
+        <include domain="file" path="custom_presets.json" />
     </cloud-backup>
     <device-transfer>
         <include domain="sharedpref" path="." />
-        <include domain="database" path="presets.db" />
+        <include domain="file" path="custom_presets.json" />
     </device-transfer>
 <exclude domain="sharedpref" path="session_store.xml"/>
 </data-extraction-rules>
