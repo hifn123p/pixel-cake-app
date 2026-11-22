@@ -126,11 +126,11 @@ class EditCropTest {
 
     @Test
     fun `aspect fit centers largest rect of ratio`() {
-        // 方形帧取 16:9：宽满幅、高 9/16
+        // 方形帧取 16:9：宽满幅、高 9/16（断言的是框高本身，不是上下边距）
         val fit = EditCrop.aspectFit(full, 16f / 9f, 1000f, 1000f)
         assertEquals(0f, fit.l, 1e-4f)
         assertEquals(1f, fit.r, 1e-4f)
-        assertEquals(1f - 9f / 16f, fit.b - fit.t, 1e-3f)
+        assertEquals(9f / 16f, fit.b - fit.t, 1e-3f)
         assertEquals(0.5f, (fit.t + fit.b) / 2f, 1e-3f)
     }
 
