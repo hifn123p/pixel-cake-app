@@ -49,6 +49,17 @@ object ArwFullDecoder {
                 )
                 return null
             }
+            // v0.7.7（安全审计 MEDIUM-1 收口）：LibRaw 主快照解析器是巨大攻击面，
+            // 先验魔数再喂：ARW/DNG/CR2/NEF 全是 TIFF-IFD 族（小端 II 星 NUL / 大端 MM NUL 星），
+            // 其余文件一律拒绝 —— 伪装成照片的任意二进制不再进入原生解析器。
+            if (!hasTiffMagic(file)) {
+                file.delete()
+                DebugLog.e(
+                    DebugLog.TAG_DECODE, "arw copy: not TIFF-family",
+                    mapOf("bytes" to file.length())
+                )
+                return null
+            }
             DebugLog.i(DebugLog.TAG_DECODE, "arw copy ok", mapOf("bytes" to file.length()))
             file
         } catch (t: Throwable) {
@@ -60,6 +71,26 @@ object ArwFullDecoder {
             null
         }
     }
+
+    /**
+     * TIFF 族魔数检查：小端 `II*\0` 或大端 `MM\0*`（TIFF 规范 §1；ARW/DNG/CR2/NEF 皆此族）。
+     * 纯 JVM（只碰 java.io.File），有单测 [ArwMagicTest] 把守。
+     */
+    internal fun hasTiffMagic(file: File): Boolean = runCatching {
+        file.inputStream().use { s ->
+            val b = ByteArray(4)
+            var off = 0
+            while (off < 4) {
+                val n = s.read(b, off, 4 - off)
+                if (n < 0) break
+                off += n
+            }
+            off == 4 && (
+                (b[0] == 0x49.toByte() && b[1] == 0x49.toByte() && b[2] == 0x2A.toByte() && b[3] == 0x00.toByte()) ||
+                    (b[0] == 0x4D.toByte() && b[1] == 0x4D.toByte() && b[2] == 0x00.toByte() && b[3] == 0x2A.toByte())
+                )
+        }
+    }.getOrDefault(false)
 
     /**
      * 解出**代理分辨率**的 16-bit 线性母版（整张取回并缓存，供滑块实时重渲）。

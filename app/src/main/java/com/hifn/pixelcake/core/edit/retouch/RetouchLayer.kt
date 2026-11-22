@@ -6,6 +6,7 @@ import com.hifn.pixelcake.core.edit.ColorTransferParams
 import com.hifn.pixelcake.core.edit.InpaintStroke
 import com.hifn.pixelcake.core.edit.NeutralGrayParams
 import com.hifn.pixelcake.core.edit.RetouchMask
+import com.hifn.pixelcake.core.edit.FullMask
 import com.hifn.pixelcake.core.edit.RetouchState
 import com.hifn.pixelcake.core.ml.FaceDetection
 import kotlin.math.ceil
@@ -278,8 +279,25 @@ object RetouchLayer {
         store.setPixels(buf, 0, w, 0, lo, w, spanRows)
     }
 
-    /** 蒙版支撑（`mv > 0`）的行范围 `[top, bot]`；无支撑返回 `null`。 */
+    // v0.7.7（性能审计 P2-2）：maskRowSpan 是 O(w·h) 全蒙版扫描（渲染档 ≈2.8M 次
+    // sample/次），而拖滑杆期间每一帧都会重跑。拖动期间蒙版对象身份稳定
+    // （RasterMask.resampleTo 同尺寸返回自身），于是按身份缓存；换作用域/重推理
+    // 落到新蒙版对象 = 自动换键；>8 键整表清空防长期驻留。缓存值带 (w,h) 复核，
+    // 尺寸变了自动作废重算。apply 平时在渲染互斥锁内，但导出链路可能并发进入
+    // —— 访问整体 @Synchronized。
+    private val spanCache = java.util.IdentityHashMap<RetouchMask, IntArray?>()
+
+    @Synchronized
     private fun maskRowSpan(mask: RetouchMask, w: Int, h: Int): IntArray? {
+        // FullMask 恒覆盖整幅：直接返回全高，连 O(w·h) 都不用跑
+        if (mask === FullMask) return intArrayOf(0, h - 1)
+        if (spanCache.size > 8) spanCache.clear()
+        if (spanCache.containsKey(mask)) {
+            val v = spanCache[mask]
+            if (v == null || (v[0] == w && v[1] == h)) {
+                return if (v == null) null else intArrayOf(v[2], v[3])
+            }
+        }
         var top = -1
         var bot = -1
         for (y in 0 until h) {
@@ -295,7 +313,9 @@ object RetouchLayer {
                 bot = y
             }
         }
-        return if (top < 0) null else intArrayOf(top, bot)
+        val span = if (top < 0) null else intArrayOf(top, bot)
+        spanCache[mask] = if (span == null) null else intArrayOf(w, h, span[0], span[1])
+        return span
     }
 
     // ---------------- 3. 祛瑕：逐描迹小块 ----------------

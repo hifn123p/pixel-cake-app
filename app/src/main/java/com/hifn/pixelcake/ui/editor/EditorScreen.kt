@@ -88,6 +88,7 @@ import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
@@ -935,15 +936,25 @@ fun EditorScreen(
                             modifier = maskFrame
                         )
                         if (loops.isNotEmpty()) {
+                            // v0.7.7（性能审计 P3-3）：marching-squares 轮廓环逐帧逐点
+                            // lineTo + Path 分配 → 按蒙版代次/显示尺寸缓存 Path，
+                            // Canvas 里只画不建。（dispW/dispH 是 px；Canvas 尺寸 =
+                            // 同值经 Dp 往返，误差 <0.001px，不可见。）
+                            val contourPaths = remember(pickMask, dispW, dispH) {
+                                loops.map { loop ->
+                                    Path().apply {
+                                        loop.forEachIndexed { idx, (u, v) ->
+                                            val px = u * dispW
+                                            val py = v * dispH
+                                            if (idx == 0) moveTo(px, py) else lineTo(px, py)
+                                        }
+                                        close()
+                                    }
+                                }
+                            }
                             Canvas(modifier = maskFrame) {
                                 val strokeW = 2.dp.toPx()
-                                for (loop in loops) {
-                                    val path = Path()
-                                    loop.forEachIndexed { idx, (u, v) ->
-                                        val pt = Offset(u * size.width, v * size.height)
-                                        if (idx == 0) path.moveTo(pt.x, pt.y) else path.lineTo(pt.x, pt.y)
-                                    }
-                                    path.close()
+                                for (path in contourPaths) {
                                     drawPath(
                                         path,
                                         contourColor,
@@ -1228,6 +1239,11 @@ fun EditorScreen(
                 // ———— Deck 拖拽调高手柄（用户可自由调整 Deck 高度）————
                 // 上拖 = Deck 变高（更多参数可见），下拖 = 变矮（更多照片可见）。
                 // 拖拽只改 deckHOverride，不触发动画（跟手）。上限见 deckHOverride 的 KDoc。
+                // v0.7.7（性能审计 P3-6）：deckH 是 animateDpAsState 委托读（手势闭包里
+                // 一直是活值）；deckScale 是普通 val —— 用 rememberUpdatedState 转活。
+                // 手势 key 归 Unit：收起/展开动画每帧改 deckH 不再重启手势
+                //（旧 key 下动画每一帧都杀掉进行中的拖动）。
+                val deckScaleNow by rememberUpdatedState(deckScale)
                 val deckDragHandle = Modifier
                     .fillMaxWidth()
                     // v0.7.3（审计 B2）：触控 20→44dp；v0.7.4（用户审计 P1-2）下拖过半
@@ -1242,7 +1258,7 @@ fun EditorScreen(
                         }
                     }
                     .height(44.dp)
-                    .pointerInput(deckH, deckScale) {
+                    .pointerInput(Unit) {
                         detectVerticalDragGestures(
                             onDragEnd = {
                                 // 松手吸附：低于 S-40 → 收起态
@@ -1253,7 +1269,7 @@ fun EditorScreen(
                             change.consume()
                             val current = deckHOverride ?: deckH
                             val next = (current - dragAmount.toDp())
-                                .coerceIn(160.dp, DECK_HEIGHT_L * deckScale)
+                                .coerceIn(160.dp, DECK_HEIGHT_L * deckScaleNow)
                             if (next < DECK_HEIGHT_S - 40.dp) {
                                 // 拖过收起阈值：进入收起态（本帧起手柄上方只剩 mini bar）
                                 deckCollapsed = true
@@ -1414,23 +1430,33 @@ fun EditorScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             if (histogram != null) {
-                                Canvas(modifier = Modifier.fillMaxWidth().height(22.dp)) {
+                                // v0.7.7（性能审计 P3-3）：面积 Path 逐帧重建（3 × 256 lineTo）
+                                // → 按直方图代次缓存；坐标存单位方块，绘制时 scale 变换
+                                //（fill 无描边，缩放不影响视觉）。
+                                val histPaths = remember(histogram) {
                                     val (r, g, b) = histogram!!
-                                    val channels = listOf(r to HIST_R, g to HIST_G, b to HIST_B)
-                                    for ((arr, color) in channels) {
+                                    listOf(r, g, b).map { arr ->
                                         val n = arr.size
-                                        if (n < 2) continue
-                                        val path = Path()
-                                        path.moveTo(0f, size.height)
-                                        for (i in 0 until n) {
-                                            path.lineTo(
-                                                i.toFloat() / (n - 1) * size.width,
-                                                size.height * (1f - arr[i].coerceIn(0f, 1f))
-                                            )
+                                        Path().apply {
+                                            if (n < 2) return@apply
+                                            moveTo(0f, 1f)
+                                            for (i in 0 until n) {
+                                                lineTo(i.toFloat() / (n - 1), 1f - arr[i].coerceIn(0f, 1f))
+                                            }
+                                            lineTo(1f, 1f)
+                                            close()
                                         }
-                                        path.lineTo(size.width, size.height)
-                                        path.close()
-                                        drawPath(path, color.copy(alpha = 0.42f))
+                                    }
+                                }
+                                Canvas(modifier = Modifier.fillMaxWidth().height(22.dp)) {
+                                    val colors = listOf(HIST_R, HIST_G, HIST_B)
+                                    for ((i, path) in histPaths.withIndex()) {
+                                        if (path.isEmpty) continue
+                                        withTransform({
+                                            scale(size.width, size.height, pivot = Offset.Zero)
+                                        }) {
+                                            drawPath(path, colors[i].copy(alpha = 0.42f))
+                                        }
                                     }
                                 }
                             }

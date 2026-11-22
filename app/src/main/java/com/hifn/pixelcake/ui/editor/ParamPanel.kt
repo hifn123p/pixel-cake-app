@@ -43,6 +43,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.hifn.pixelcake.core.edit.ColorGrading
@@ -600,6 +601,8 @@ fun ParamScopeBar(
                         .semantics {
                             contentDescription =
                                 if (pickActive) "退出点选作用域" else "点选作用域（在照片上点一下要修的对象）"
+                            // v0.7.7（T4 收尾）：选中态对读屏可见（TalkBack 播报「已选中」）。
+                            selected = pickActive
                         },
                     contentAlignment = Alignment.Center
                 ) {

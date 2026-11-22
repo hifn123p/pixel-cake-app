@@ -75,6 +75,7 @@ import com.hifn.pixelcake.ui.nav.NavStack
 import com.hifn.pixelcake.ui.editor.EditorStatus
 import com.hifn.pixelcake.ui.editor.StatusKind
 import com.hifn.pixelcake.ui.home.HomeScreen
+import com.hifn.pixelcake.ui.home.ResolutionProfile
 import com.hifn.pixelcake.ui.home.probeCapabilities
 import com.hifn.pixelcake.ui.home.resolutionProfile
 import com.hifn.pixelcake.ui.settings.AppSettings
@@ -155,7 +156,12 @@ class MainActivity : ComponentActivity() {
 private fun AppRoot(settings: AppSettings) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val profile = remember { context.probeCapabilities().resolutionProfile() }
+    // v0.7.7（性能审计 P3-5）：probeCapabilities 是一组 DisplayManager/ActivityManager
+    // binder 查询，不能在组合期同步跑 —— 先用保守档渲染首帧，IO 线程探测完热替换。
+    var profile by remember { mutableStateOf(ResolutionProfile("mid", 4096, 1536)) }
+    LaunchedEffect(Unit) {
+        profile = withContext(Dispatchers.IO) { context.probeCapabilities().resolutionProfile() }
+    }
 
     var tab by remember { mutableStateOf(PixelCakeTab.Darkroom) }
     // 编辑器是否打开。**刻意不用第三个 Tab**：编辑是全屏工作台，进入后 TabBar 直接消失，

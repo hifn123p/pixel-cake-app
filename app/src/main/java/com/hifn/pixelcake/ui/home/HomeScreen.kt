@@ -30,6 +30,8 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -103,13 +105,18 @@ fun HomeScreen(
 ) {
     val context = LocalContext.current
     // 只为了把「导出长边」口径递给相机 Sheet；首屏不再展示任何设备信息。
-    val profile = remember { context.probeCapabilities().resolutionProfile() }
+    // v0.7.7（性能审计 P3-5）：binder 探测移出组合期（与 MainActivity 同口径）。
+    var profile by remember { mutableStateOf(ResolutionProfile("mid", 4096, 1536)) }
+    LaunchedEffect(Unit) {
+        profile = withContext(Dispatchers.IO) { context.probeCapabilities().resolutionProfile() }
+    }
 
     var showCamera by remember { mutableStateOf(false) }
     // v0.7.5（流程审计 J2-P1）：会话存档在位 ⇒ 首页提供「继续上次编辑」
     var hasSavedSession by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
-        hasSavedSession = SessionStore.load(context) != null
+        // v0.7.7（性能审计 P1-2 同族）：会话存档读取是磁盘 I/O，不在主线程跑。
+        hasSavedSession = withContext(Dispatchers.IO) { SessionStore.load(context) != null }
     }
     // v0.7.2（§M「连接后自动打开会话」）：USB 状态广播 + 到场探测。USB_STATE 是系统
     // 保护广播（targetSdk 34+ 的运行时接收器仍需显式 flag）；组合时相机可能已插着
