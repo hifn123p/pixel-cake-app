@@ -148,7 +148,7 @@ class ToningMathTest {
      */
     @Test
     fun hueBandLutCoversEveryDegree() {
-        val (a, b, w) = ColorMath.buildHueBandLut()
+        val (a, b, w) = ColorMath.buildHueBandLutCache
         assertEquals(360, a.size)
         assertEquals(360, b.size)
         assertEquals(360, w.size)
