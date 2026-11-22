@@ -330,7 +330,7 @@ object MlMaskProvider {
                         }.getOrNull()
                         modelHashVerifiedForUi = modelSha256ForUi?.equals(EXPECTED_MODEL_SHA256, ignoreCase = true)
                         if (modelHashVerifiedForUi == false) {
-                            DebugLog.e(TAG_ML, "skin mask model sha mismatch", mapOf("sha16" to (modelSha256ForUi?.take(16) ?: "—")))
+                            DebugLog.e(DebugLog.TAG_ML, "skin mask model sha mismatch", mapOf("sha16" to (modelSha256ForUi?.take(16) ?: "—")))
                         }
                     }
                 }
