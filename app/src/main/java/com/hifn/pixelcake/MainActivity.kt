@@ -1203,6 +1203,8 @@ private fun AppRoot(settings: AppSettings) {
                     onDismissExportReceipt = { exportReceipt = null },
                     exportFormat = settings.exportFormat,
                     jpegQuality = settings.jpegQuality.value,
+                    exportLongEdge = settings.exportLongEdge,
+                    onExportLongEdgeChange = { settings.exportLongEdge = it },
                     onParamChange = {
                         // F08：拖动过程中只更新参数，不进撤销栈
                         //
@@ -1322,6 +1324,9 @@ private fun AppRoot(settings: AppSettings) {
                             val autoOn = settings.autoMask
                             // 在主线程把格式/质量/缓存键取出来：Dispatchers.Default 里不应读 Compose 快照状态
                             val fmt = settings.exportFormat
+                            // v0.8.1 导出尺寸档位：0 = 原始（设备档位上限），2048/1080 = 分享档。
+                            // 裁剪/旋转后按比例缩放（归一化窗口与尺寸无关）。
+                            val exportEdge = if (settings.exportLongEdge > 0) settings.exportLongEdge else profile.fullResLongEdge
                             val quality = settings.jpegQuality.value
                             // P0-2 M-1：EXIF 回写的来源。在主线程捕获（Default 线程不读快照状态，
                             // 与 fmt/quality 同一条纪律）。
@@ -1346,7 +1351,7 @@ private fun AppRoot(settings: AppSettings) {
                                         // Q5：蒙版/液化/图层在**未旋转空间**渲染（ewU/ehU = 原始朝向尺寸），
                                         // 渲染完成后一次性旋转到会话方向 —— 蒙版经 RotatedMask 装饰器映射采样坐标，
                                         // 与预览（旋转空间）所见一致。
-                                        val (ewU, ehU) = fitLongEdge(pristineDecoded?.width ?: img.width, pristineDecoded?.height ?: img.height, profile.fullResLongEdge)
+                                        val (ewU, ehU) = fitLongEdge(pristineDecoded?.width ?: img.width, pristineDecoded?.height ?: img.height, exportEdge)
                                         // v0.8.0 自由裁剪：矩形在 pristine（未旋转）空间 —— RAW 渲染也在该空间，
                                         // 零转换直用；分带窗口按裁剪收窄（暗角/颗粒按裁剪后画幅算，与 sRGB/预览一致）。
                                         // 蒙版/描迹/锚点全部换算到**裁剪后未旋转** (cwU, chU) 尺寸。
@@ -1416,7 +1421,7 @@ private fun AppRoot(settings: AppSettings) {
                                         DebugLog.i(DebugLog.TAG_EDIT, "raw export pre-render", memorySnapshot(context))
                                         val fullRendered = EditEngine.renderLinearFile(
                                             path = rawPath,
-                                            maxLongSide = profile.fullResLongEdge,
+                                            maxLongSide = exportEdge,
                                             p = tonalParams,
                                             retouch = renderRetouch,
                                             mask = mask,
@@ -1465,7 +1470,7 @@ private fun AppRoot(settings: AppSettings) {
                                         var fullTarget: Bitmap? = null
                                         try {
                                             fullBase = srcUri?.let {
-                                                val decoded = Decoder.decodeFullRes(context, it, profile.fullResLongEdge)
+                                                val decoded = Decoder.decodeFullRes(context, it, exportEdge)
                                                 // Q5：会话旋转烘焙进全分辨率底图（与 EXIF 方向烘焙同一模式）
                                                 // —— 下游蒙版/液化/参数全部在旋转后的空间一致工作。
                                                 if (decoded != null && (rotationQuarterTurns != 0 || cropRect?.isFullFrame == false)) {
@@ -1615,7 +1620,7 @@ private fun AppRoot(settings: AppSettings) {
                                 exportReceiptDims = fitLongEdge(
                                     pristineDecoded?.width ?: 0,
                                     pristineDecoded?.height ?: 0,
-                                    profile.fullResLongEdge
+                                    exportEdge
                                 )
                             }
                             status = when {

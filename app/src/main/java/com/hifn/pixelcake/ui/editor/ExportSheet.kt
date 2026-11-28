@@ -76,7 +76,10 @@ fun ExportSheet(
     onCancelExport: () -> Unit,
     onDismiss: () -> Unit,
     /** 实际生效的 JPEG 质量（来自设置页 `AppSettings.jpegQuality`），用于文案如实展示。 */
-    jpegQuality: Int = 92
+    jpegQuality: Int = 92,
+    // v0.8.1 导出长边档位（0 = 原始/设备档位上限；2048 / 1080 = 分享档）
+    exportLongEdge: Int = 0,
+    onExportLongEdgeChange: (Int) -> Unit = {}
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
@@ -128,11 +131,26 @@ fun ExportSheet(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
+            // v0.8.1 导出尺寸档位：分享场景（社交/聊天）长边 2048/1080 足够且出图快
+            Row(horizontalArrangement = Arrangement.spacedBy(Spacing.s)) {
+                listOf(0 to "原始", 2048 to "2048", 1080 to "1080").forEach { (edge, name) ->
+                    FilterChip(
+                        selected = exportLongEdge == edge,
+                        onClick = { onExportLongEdgeChange(edge) },
+                        enabled = !exporting,
+                        shape = Radius.chip,
+                        colors = amberChipColors(),
+                        label = { Text(name) }
+                    )
+                }
+            }
             Text(
-                // 源图分辨率 ≠ 渲染分辨率（见 memory 里的硬约定）：
-                // RAW 走「边解码边分带渲染」的全分辨率路径，非 RAW 则退到代理分辨率。
-                "RAW 按全分辨率导出（边解码边分带渲染，不把 196MB 线性图搬进堆）；" +
-                    "非 RAW 也按全分辨率解码导出。",
+                if (exportLongEdge == 0) {
+                    "原始尺寸：RAW 按全分辨率导出（边解码边分带渲染，不把 196MB 线性图搬进堆）；" +
+                        "非 RAW 也按全分辨率解码导出。"
+                } else {
+                    "长边 $exportLongEdge：分享档，出图快、体积小；裁剪/旋转后仍按比例缩放。"
+                },
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

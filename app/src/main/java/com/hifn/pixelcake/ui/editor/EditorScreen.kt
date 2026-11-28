@@ -291,6 +291,9 @@ fun EditorScreen(
     onCropApply: (CropRect?) -> Unit = {},
     // 当前会话已有裁剪（控制条「清除裁剪」入口的显隐）。
     hasCrop: Boolean = false,
+    // v0.8.1 导出尺寸档位透传（0 = 原始）
+    exportLongEdge: Int = 0,
+    onExportLongEdgeChange: (Int) -> Unit = {},
     objectScopesAvailable: Boolean = false,
     // 「点哪修哪」的命中测试数据源（探测 effect 顺手存下的那份，无额外推理）。
     // null = 模型不可用 ⇒ 拾取入口隐藏。
@@ -638,8 +641,15 @@ fun EditorScreen(
         cropAspect = null
         previewZoom = 1f
         previewPan = Offset.Zero
+        // 与分割对比互斥：两者都改 display 的呈现，同开会互相干扰
+        splitCompare = false
         // 裁剪期间收起 Deck：照片可视区最大化，控制条贴底
         deckCollapsed = true
+    }
+    // 裁剪外的几何/参数变化（撤销/重做、上层重推导）会让工作矩形失配 —— 有裁剪态
+    // 翻转时把工作框复位成全幅（重新框选，安全基线）。
+    LaunchedEffect(hasCrop, cropMode) {
+        if (cropMode) cropWork = CropRect(0f, 0f, 1f, 1f)
     }
     val closeCrop: () -> Unit = { cropMode = false; cropWork = null; cropAspect = null }
     LaunchedEffect(previewZoom) {
@@ -1296,7 +1306,12 @@ fun EditorScreen(
                         ) {
                             EditorRail(
                                 selected = category,
-                                onSelect = { category = it },
+                                onSelect = {
+                                    // 切类目 = 离开裁剪模式（工具语义互斥，恢复 Deck）
+                                    if (cropModeNow.value) closeCrop()
+                                    category = it
+                                },
+                                onOpenCrop = openCrop,
                                 modifier = Modifier.heightIn(min = RAIL_HEIGHT)
                             )
                         }
@@ -1477,7 +1492,11 @@ fun EditorScreen(
                 ) {
                     EditorRail(
                         selected = category,
-                        onSelect = { category = it },
+                        onSelect = {
+                            if (cropModeNow.value) closeCrop()
+                            category = it
+                        },
+                        onOpenCrop = openCrop,
                         modifier = Modifier.heightIn(min = RAIL_HEIGHT)
                     )
                 }
@@ -1698,7 +1717,9 @@ fun EditorScreen(
             onExport = onExport,
             onCancelExport = onCancelExport,
             onDismiss = { showExport = false },
-            jpegQuality = jpegQuality
+            jpegQuality = jpegQuality,
+            exportLongEdge = exportLongEdge,
+            onExportLongEdgeChange = onExportLongEdgeChange
         )
     }
 

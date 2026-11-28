@@ -64,6 +64,8 @@ private const val KEY_THEME_MODE = "theme_mode"
 private const val KEY_LOW_TRANSPARENCY = "low_transparency"
 private const val KEY_EXPORT_FORMAT = "export_format"
 private const val KEY_JPEG_QUALITY = "jpeg_quality"
+// v0.8.1 导出长边档位：0 = 原始（按设备档位上限）；2048/1080 = 分享档
+private const val KEY_EXPORT_LONG_EDGE = "export_long_edge"
 private const val KEY_AUTO_MASK = "auto_mask"
 private const val KEY_LARGE_TEXT = "large_text"
 private const val KEY_CAMERA_AUTO_OPEN = "camera_auto_open"
@@ -241,6 +243,18 @@ class AppSettings internal constructor(private val prefs: SharedPreferences) {
         }
 
     /**
+     * v0.8.1 导出长边档位（0 = 原始/设备档位上限；2048 / 1080 = 分享档）。
+     * 存数值本身（与 jpegQuality 同纪律）：数值是稳定标识，枚举序号会漂移。
+     */
+    private var exportLongEdgeState by mutableStateOf(prefs.getInt(KEY_EXPORT_LONG_EDGE, 0))
+    var exportLongEdge: Int
+        get() = exportLongEdgeState
+        set(value) {
+            exportLongEdgeState = value
+            prefs.edit().putInt(KEY_EXPORT_LONG_EDGE, value).apply()
+        }
+
+    /**
      * 「放大文本」（UI3.0 §6.1 红线：fontScale ≥1.3 场景需提供独立开关）。
      * 生效字号 = max(系统字号, 1.3×)，包装在 MainActivity 的 LocalDensity 里 ——
      * 读取点唯一，避免「设置页开关与实际生效字号」两处状态漂移。
@@ -321,6 +335,7 @@ class AppSettings internal constructor(private val prefs: SharedPreferences) {
         cameraDefaultPresetId = "portra"
         exportFormat = ExportFormat.JPEG
         jpegQuality = JpegQuality.Standard
+        exportLongEdge = 0
         autoMask = true
     }
 }
