@@ -151,6 +151,10 @@ jobs:
           tail -40 audit-art/drive-log.txt || true
           # 应用私有调试日志（DebugLog 只写文件不上 logcat）—— 平色渲染/ML 失败的第一手证据。
           # ⚠️ 引号必须嵌套到设备端：本地 bash 会吃掉单引号（上一轮 sh -c 只拿到 cat 一个词）
+          # v0.9.2：DebugLog 攒批刷盘（D3）—— App 活着时 cat 只能拿到已刷批次，
+          # 最后一段（恰是排障最需要的）缺失。先 force-stop 强制刷完再拉。
+          adb shell am force-stop com.hifn.pixelcake.debug || true
+          sleep 1
           adb shell "run-as com.hifn.pixelcake.debug sh -c 'ls files/debug 2>/dev/null; cat files/debug/*.txt 2>/dev/null'" > audit-art/app-debuglog.txt || true
           tail -30 audit-art/app-debuglog.txt || true
           adb logcat -d -v time > audit-art/logcat-full.txt
