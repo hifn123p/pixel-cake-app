@@ -1776,3 +1776,47 @@ mono_silver/cyber_teal/sunset_amber 十式），零授权风险——DEV_PLAN �
 
 `CubeLutTest` ×6：栅格点精确等于表值、线性场三线性精确、越界钳制、损坏输入全 null、
 尺寸界检查。既有 381 项全数保留（`lutId=none` 路径逐位不变，LinearPipelineTest 把守）。
+
+## §27 重点批：联机拍摄体验超车（v0.9.1，2026-11-28）
+
+「重点优先相机联机拍摄，超过像素蛋糕的体验」——先分析现状再动手：
+
+### 27.1 差距分析（现状 vs 商业联机体验）
+
+| 维度 | 现状 | 商业体验 | 差距 |
+|---|---|---|---|
+| 触发 | 3s 固定轮询（前台闸门） | 拍摄事件驱动，秒级出片 | **快门不可遥控**：全流程必须摄影师在机身上按 |
+| 拉图延迟 | 最长 3s+ | 1~2s | 按完快门要等下一个轮询节拍 |
+| 会话反馈 | 到达流日志（文字） | 拍摄计数/余量一目了然 | 无拍摄会话计数、无存储余量 |
+
+PTP 层已有 9 个操作（握手/列图/拉图/属性读），**无 InitiateCapture（0x100E 遥控快门）**。
+
+### 27.2 实现（全部标准 PTP，无厂商私有协议）
+
+1. **遥控快门**：`OP_INITIATE_CAPTURE = 0x100E`（无数据阶段，`DATA_PHASE_OPS` 不动）；
+   `CameraSession.initiateCapture()` 返回 `CaptureOutcome(ok, code, name)` —— 错误码
+   上抛给 UI 层按语境翻译（DeviceBusy =「相机正忙（可能在写卡）」；AccessDenied =
+   「请在机身上开启 PC 遥控/联机模式」）。UI：64dp 圆钮（外环描边 + 内芯实心，
+   触发中变色）+ 常驻提示。
+2. **拍后即拉**：轮询从「固定 delay」改为「唤醒或超时」—— `Channel<Unit>(CONFLATED)` +
+   `withTimeoutOrNull(3000) { wake.receive() }`：超时 = 原节拍（前台 3s / 后台 5s 语义不变）；
+   快门成功 `trySend` 立即唤醒一轮，并 4s 后兜底再唤醒（大 RAW/连拍落卡慢）。
+   **「按快门 → 1~2s 出片」。**
+3. **会话反馈**：本次拍摄计数（系留开启归零）+ 存储余量（`freeSpaceBytes`/`freeSpaceImages`
+   直接来自既有 GetStorageInfo，≈换算剩余张数）。
+4. **状态单归属**：`capturing` 只由 `onShutter` 管理（UI 点击直调；首版 UI 先置位再调
+   会被 onShutter 的防重入检查吞掉 —— 自查阶段抓出的逻辑 bug）。
+
+### 27.3 自查清单（提交前逐项过）
+
+- lambda 标签：`val x = { return@x }` 不成立（无隐式标签）→ 显式 `onShutter@{}`；
+- 导入三缺（CircleShape/border/PtpProtocol）；
+- 防重入双检互斥（上面 4）；
+- CONFLATED 通道：连按快门合并为一轮拉图（不会堆积 N 轮）；
+- CE 红线：快门协程 CancellationException 原样上抛；
+- 协议测试：op 常量 0x100E / operationName / 无数据阶段（PtpProtocolTest 新增）。
+
+### 27.4 真机依赖项（记录，非本轮可闭环）
+
+- Sony 机身的 InitiateCapture 行为需真机确认（部分机型要求「PC 遥控」模式）；
+- SetDevicePropValue（远程 ISO/光圈）留作后续——厂商属性码表需真机标定，盲写风险高。
