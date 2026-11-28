@@ -35,10 +35,10 @@ android {
         // v0.7.1：Q5 手动旋转 —— 会话级旋转（pristine 重推导，零累积损失）+ 导出烘焙
         // （sRGB 解码预旋转；RAW renderLinearFile 输出后旋转 + RotatedMask 装饰器映射蒙版
         // + 液化锚点逆映射）+ 顶栏旋转按钮（Material rotate-right）。
-        // v0.8.1：导出尺寸档位（原始/2048/1080，分享场景）+ Rail 裁剪入口（可发现性）
-        // + 裁剪×分割对比互斥门 + 裁剪态翻转工作框复位。
-        versionCode = 28
-        versionName = "0.8.1"
+        // v0.9.0：3D cube LUT 电影感调色（DEV_PLAN §3.4 形态 B）—— 10 张自研公式
+        // PCB3 LUT（33³，2.1MB）+ Cinema 预设组；三线性采样进 PixelProgram 色域级。
+        versionCode = 29
+        versionName = "0.9.0"
 
         // 刻意**不声明** testInstrumentationRunner（审计 M8）：本项目没有 androidTest 源集、
         // 也没有 androidx.test 依赖，裸声明是死配置 —— 一旦有人加仪器测试会因缺依赖直接红；

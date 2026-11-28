@@ -147,6 +147,17 @@ class PixelProgram(
         else -> 0
     }
 
+    // v0.9.0 3D cube LUT（DEV_PLAN §3.4 形态 B）：`cube:` 前缀 → 注册表懒解析。
+    // 构造期解析一次（逐帧一次，非逐像素）；未 init/资产缺失/损坏 ⇒ null，
+    // 逐像素按 no-op 降级（与未知矩阵 lutId 同口径）。
+    private val lut3d: CubeLut? = if (lutId.startsWith("cube:") && lutIntensity > 0f) {
+        CubeLutRegistry.get(lutId.removePrefix("cube:"))
+    } else {
+        null
+    }
+    /** 采样输出缓冲：逐像素复用（finish 单线程调用的口径与既有两级一致）。 */
+    private val lut3dOut = FloatArray(3)
+
     // ——————————————— 需要坐标的两级（批次 3）———————————————
 
     /** 暗角响应（[ColorMath.VIGNETTE_LUT_SIZE] 项，索引 = d²）。`null` = amount 为 0 ⇒ 不执行。 */
@@ -544,6 +555,21 @@ class PixelProgram(
                 g = l2 + (g - l2) * f2
                 b = l2 + (b - l2) * f2
             }
+        }
+
+        // ── 3D cube LUT（v0.9.0）─────────────────────────────────
+        // 排在矩阵套色之后、暗角之前：色域级「整幅调性」先落位，几何/光学层
+        // （暗角/颗粒）永远最后 —— 与「颗粒长在乳剂上、暗角发生在镜头里」同一条
+        // 物理序。强度按运行时 lutIntensity 向原值插值（0 = no-op）。
+        val l3 = lut3d
+        if (l3 != null && lutIntensity > 0f) {
+            l3.sample(
+                r.coerceIn(0f, 1f), g.coerceIn(0f, 1f), b.coerceIn(0f, 1f), lut3dOut
+            )
+            val m = lutIntensity
+            r += (lut3dOut[0] - r) * m
+            g += (lut3dOut[1] - g) * m
+            b += (lut3dOut[2] - b) * m
         }
 
         // ── 暗角（批次 3）─────────────────────────────────────────

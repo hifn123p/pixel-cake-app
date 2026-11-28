@@ -16,6 +16,8 @@ class PixelCakeApp : Application() {
         super.onCreate()
 
         DebugLog.init(this)
+        // v0.9.0：3D cube LUT 注册表锚定 App 上下文（PixelProgram 构造期懒解析用）
+        com.hifn.pixelcake.core.edit.CubeLutRegistry.init(this)
 
         // v0.7.7（性能审计 P3-5）：probeCapabilities 含 binder 查询，启动主线程不再
         // 同步等待 —— 后台线程探测，快照晚几百毫秒落 logcat，用户无感。

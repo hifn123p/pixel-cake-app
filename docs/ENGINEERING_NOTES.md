@@ -1744,3 +1744,35 @@ v0.8.0 发布后的使用审视：裁剪功能完整但**入口藏在历史面�
 
 - liveview（CRSDK）/ NAS 批量（服务端）/ ktlint-detekt 维持既有决策不变。
 - 直角旋转之外的「拉直（任意角度）」列为后续候选（需要旋转插值 + 裁剪联动，非小批）。
+
+## §26 功能批：3D cube LUT 电影感调色（v0.9.0，2026-11-28）
+
+「APK 还有余量，加什么功能」的盘点结论：DEV_PLAN §3.4 形态 B（.cube 3D LUT）是规划内
+唯一未落地项——现有 `lutId`（bw/warm/cool/film）是**解析式矩阵套色**，分区色调
+（暗部青/高光橙这类「按明度分区」的电影感分级）单矩阵表达不了，需要 3D 查表。
+
+### 26.1 关键决策：自制 PCB3 二进制而不是 .cube 文本
+
+`.cube` 文本 33³ ≈ **700KB/张**（浮点冗长）；自定义 `PCB3`（魔数+版本+size+u16 三元组）
+= **216KB/张**，10 张 2.1MB（vs 7MB）。同为无损、加载免文本解析。**全部公式自研**
+（teal_orange/film_fade/bleach_bypass/golden_hour/cool_city/portra_warm/vintage_70s/
+mono_silver/cyber_teal/sunset_amber 十式），零授权风险——DEV_PLAN 提到的 MIT/CC 源
+是可用选项而非必须，自研生成在授权与可复现性上更优（生成器公式在生成脚本内，确定性强）。
+
+### 26.2 集成点（全部复用既有设施，零新 UI）
+
+- **管线**：`PixelProgram` 构造期解析（`lutId` 前缀 `cube:` → `CubeLutRegistry.get`），
+  `finish()` 里矩阵套色之后、暗角之前插 3D 采样级（色域级调性先落位，几何/光学层最后
+  —— 与「颗粒长在乳剂上、暗角发生在镜头里」同一物理序）。强度按运行时 `lutIntensity`
+  插值；未 init/资产缺失/损坏 ⇒ null 降级 no-op。
+- **UI**：滤镜页签 `LUT_OPTIONS` 追加 10 项 —— chips + 强度滑块 + 强度环全现成；
+  电影感预设组（Cinema ×10）进预设网格；预设强度环经 `EditLerp.lutIntensity` 自动工作。
+- **预设/序列化**：`EditParams.lutId/lutIntensity` 字段早已存在且已序列化（矩阵 LUT
+  时代预留）——会话/自定义预设/系留批量零改动。
+- **注册表**：`CubeLutRegistry` 与 AppSettings 同一条「取（并记住）」纪律，App.onCreate
+  锚定上下文；资产路径白名单（拒绝 `/` `\` `..`）。
+
+### 26.3 测试
+
+`CubeLutTest` ×6：栅格点精确等于表值、线性场三线性精确、越界钳制、损坏输入全 null、
+尺寸界检查。既有 381 项全数保留（`lutId=none` 路径逐位不变，LinearPipelineTest 把守）。
