@@ -131,6 +131,19 @@ class CameraSession private constructor(
 
     suspend fun objectInfo(handle: Int): PtpObjectInfo? = io.withLock { readObjectInfo(handle) }
 
+    /** v0.9.1 遥控快门结果（错误码上抛给 UI 层做友好文案）。 */
+    data class CaptureOutcome(val ok: Boolean, val code: Int, val name: String)
+
+    /**
+     * v0.9.1 遥控快门：PTP InitiateCapture（0x100E，无数据阶段）。
+     * 相机需处于「PC 遥控/联机」模式；否则典型回 RC_ACCESS_DENIED / RC_DEVICE_BUSY，
+     * 错误码原样返回给 UI 层（不在此翻译 —— 语境在界面）。
+     */
+    suspend fun initiateCapture(): CaptureOutcome = io.withLock {
+        val t = transport.execute(PtpProtocol.OP_INITIATE_CAPTURE, 0, 0, 0)
+        CaptureOutcome(t.ok, t.responseCode, t.responseName())
+    }
+
     /**
      * 列出相机里的照片（新 → 旧）。
      *

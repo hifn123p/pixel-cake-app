@@ -1,6 +1,8 @@
 package com.hifn.pixelcake.ui.home
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -45,7 +47,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.hifn.pixelcake.camera.CameraBatch
 import com.hifn.pixelcake.camera.CameraConnection
-import com.hifn.pixelcake.camera.CameraPhotoList
+import com.hifn.pixelcake.camera.CameraPhoto
+import com.hifn.pixelcake.camera.PtpProtocolList
 import com.hifn.pixelcake.camera.CameraProbe
 import com.hifn.pixelcake.camera.CameraSession
 import com.hifn.pixelcake.camera.CameraSessionResult
@@ -64,7 +67,9 @@ import com.hifn.pixelcake.core.edit.RetouchScale
 import com.hifn.pixelcake.core.edit.lerped
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeoutOrNull
 import com.hifn.pixelcake.core.edit.preset.CustomPreset
 import com.hifn.pixelcake.core.edit.preset.CustomPresets
 import com.hifn.pixelcake.core.edit.preset.Presets
@@ -132,6 +137,46 @@ fun CameraPanel(
     var defaultPresetId by settings::cameraDefaultPresetId
     var tetherParams by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var arrivalLog by remember { mutableStateOf(emptyList<String>()) }
+    // —— v0.9.1 联机拍摄体验批 ——
+    // 快门唤醒通道（CONFLATED：连按合并为一轮拉图）。轮询节拍 3s 不变；
+    // 遥控快门成功后 trySend 立即唤醒，不等节拍 —— 「按快门 → 1~2s 出片」。
+    val captureWake = remember { Channel<Unit>(Channel.CONFLATED) }
+    var capturing by remember { mutableStateOf(false) }
+    var sessionShots by remember { mutableStateOf(0) }
+    // 到达流日志的状态级写手（快门流程在 LaunchedEffect 之外，与 effect 内的 log 同口径）
+    val uiLog: (String) -> Unit = { m -> arrivalLog = (arrivalLog + m).takeLast(30) }
+    val onShutter: () -> Unit = onShutter@{
+        val sn = session ?: return@onShutter
+        if (!capturing && tetherOn) {
+            scope.launch {
+                capturing = true
+                try {
+                    val outcome = sn.initiateCapture()
+                    if (outcome.ok) {
+                        sessionShots++
+                        uiLog("遥控快门 ✓ 等待新片落卡…")
+                        captureWake.trySend(Unit)
+                        // 写卡延迟兜底：大 RAW/连拍落卡慢，4s 后再唤醒一轮
+                        delay(4000)
+                        captureWake.trySend(Unit)
+                    } else {
+                        val msg = when (outcome.code) {
+                            PtpProtocol.RC_DEVICE_BUSY -> "相机正忙（可能在写卡），稍候再按"
+                            PtpProtocol.RC_ACCESS_DENIED -> "相机拒绝：请在机身上开启「PC 遥控/联机」模式后重试"
+                            else -> "快门失败：" + outcome.name
+                        }
+                        uiLog(msg)
+                    }
+                } catch (c: kotlinx.coroutines.CancellationException) {
+                    throw c
+                } catch (t: Throwable) {
+                    uiLog("快门异常: " + (t.message ?: t.javaClass.simpleName))
+                } finally {
+                    capturing = false
+                }
+            }
+        }
+    }
     // 批 5 可测化：轮询的「谁是新片 / 坏对象记账 / 基线播种」决策抽进 TetherProcessor
     //（纯 JVM 可测，K1/K2/K3 各有一条会红的回归测试）；本组件只保留下载/渲染/导出。
     // v0.7.6（性能审计 P1-3）：App 后台时系留轮询暂停（省电；恢复前台自动续跑）
@@ -199,6 +244,8 @@ fun CameraPanel(
         // 到达流日志上界：P2 债里「arrivalLog 无上界」的最小修 —— 界面只显示最后 5 条，
         // 内存里也只留最后 30 条，长会话不会无限增长。
         val log: (String) -> Unit = { m -> arrivalLog = (arrivalLog + m).takeLast(30) }
+        // 新一轮系留下达：本次拍摄计数归零（会话口径 = 系留开启以来的张数）
+        sessionShots = 0
         // ① 基线播种。失败（PTP 失步 / 拔线）时**不进入轮询**：无基线的轮询会把全卡
         //    当成新片，比「不工作」糟糕得多 —— 提示用户重开开关重试。
         try {
@@ -216,12 +263,13 @@ fun CameraPanel(
             return@LaunchedEffect
         }
         while (tetherOn) {
-            // v0.7.6：后台时暂停轮询（省电）
+            // v0.9.1：轮询改为「唤醒或超时」—— 遥控快门成功即唤醒拉图（不等节拍）；
+            // 超时就是常规节拍（前台 3s / 后台 5s，v0.7.6 语义不变）。
             if (!foreground) {
-                delay(5000)
+                withTimeoutOrNull(5000) { captureWake.receive() }
                 continue
             }
-            delay(3000)
+            withTimeoutOrNull(3000) { captureWake.receive() }
             // 每轮现读最新预设（tetherPreset 经 rememberUpdatedState）：effect 的 key 只有
             // (session, tetherOn)，切预设 / 自定义预设库重载不会重启本 effect —— 重启 =
             // 重跑基线播种，会把在途/刚落卡的新片记成「已知」而**静默漏导**。
@@ -583,6 +631,68 @@ fun CameraPanel(
                             onClick = { defaultPresetId = cp.id },
                             label = { Text(cp.name) },
                             colors = amberChipColors(),
+                        )
+                    }
+                }
+                // —— v0.9.1 遥控快门（主按）：64dp 圆钮 + 存储余量 + 本次拍摄计数 ——
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = Spacing.s),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    val canShoot = !capturing && tetherOn && s.storageIds.isNotEmpty()
+                    Box(
+                        modifier = Modifier
+                            .size(64.dp)
+                            .clip(CircleShape)
+                            .border(
+                                3.dp,
+                                if (canShoot) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.outlineVariant,
+                                CircleShape
+                            )
+                            .clickable(enabled = canShoot) { onShutter() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    if (capturing) MaterialTheme.colorScheme.outlineVariant
+                                    else MaterialTheme.colorScheme.primary
+                                )
+                        )
+                    }
+                    Column {
+                        Text(
+                            when {
+                                capturing -> "快门触发中…"
+                                else -> "遥控快门"
+                            },
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            buildString {
+                                append("本次拍摄 ")
+                                append(sessionShots)
+                                append(" 张")
+                                s.storages.firstOrNull()?.let { st ->
+                                    append(" · 存储余 ")
+                                    append("%.1f".format(st.freeSpaceBytes / 1e9))
+                                    append("GB ≈ ")
+                                    append(st.freeSpaceImages)
+                                    append(" 张")
+                                }
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            "若快门被拒绝，请在相机上开启「PC 遥控/联机」模式",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }

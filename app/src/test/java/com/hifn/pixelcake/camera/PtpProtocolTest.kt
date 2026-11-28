@@ -16,6 +16,14 @@ import org.junit.Test
 class PtpProtocolTest {
 
     @Test
+    fun `initiate capture op registered`() {
+        // v0.9.1 遥控快门：PTP 标准操作码 0x100E，无数据阶段
+        assertEquals(0x100E, PtpProtocol.OP_INITIATE_CAPTURE)
+        assertEquals("InitiateCapture", PtpProtocol.operationName(PtpProtocol.OP_INITIATE_CAPTURE))
+        org.junit.Assert.assertFalse(PtpProtocol.hasDataPhase(PtpProtocol.OP_INITIATE_CAPTURE))
+    }
+
+    @Test
     fun commandContainerHas12ByteLittleEndianHeader() {
         val bytes = PtpProtocol.encodeCommand(PtpProtocol.OP_GET_OBJECT_INFO, listOf(0x0000002A), 7)
         assertEquals(16, bytes.size)

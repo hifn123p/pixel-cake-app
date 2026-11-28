@@ -62,6 +62,8 @@ object PtpProtocol {
     const val DP_EXPOSURE_TIME = 0x5008  // UINT32（快门，单位 0.0001s）
     const val DP_EXPOSURE_INDEX = 0x5009 // UINT16（ISO）
     const val OP_GET_DEVICE_PROP_VALUE = 0x1015
+    /** v0.9.1 遥控快门：无数据阶段（ResponseCode 为准）。 */
+    const val OP_INITIATE_CAPTURE = 0x100E
 
     /**
      * GetDevicePropValue 返回值的数据类型（PTP DataTypeCode；E1 修复的另一半）。
@@ -184,6 +186,7 @@ object PtpProtocol {
     fun isOk(responseCode: Int): Boolean = responseCode == RC_OK
 
     fun operationName(code: Int): String = when (code) {
+        OP_INITIATE_CAPTURE -> "InitiateCapture"
         OP_GET_DEVICE_INFO -> "GetDeviceInfo"
         OP_OPEN_SESSION -> "OpenSession"
         OP_CLOSE_SESSION -> "CloseSession"
