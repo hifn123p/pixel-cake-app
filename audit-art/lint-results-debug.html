@@ -179,7 +179,7 @@ document.getElementById(id).style.display = 'none';
     <div class="mdl-layout__header-row">
       <span class="mdl-layout-title">Lint Report: 51 warnings and 19 hints</span>
       <div class="mdl-layout-spacer"></div>
-      <nav class="mdl-navigation mdl-layout--large-screen-only">Check performed at Sat Nov 28 07:04:17 UTC 2026 by AGP (8.13.2)</nav>
+      <nav class="mdl-navigation mdl-layout--large-screen-only">Check performed at Sat Nov 28 07:30:55 UTC 2026 by AGP (8.13.2)</nav>
     </div>
   </header>
   <div class="mdl-layout__drawer">
@@ -736,14 +736,14 @@ Dismiss</button>            </div>
 <span class="lineno"> 252 </span>        set(value) {
 </pre>
 
-<span class="location"><a href="../../src/main/java/com/hifn/pixelcake/ui/home/CameraPanel.kt">../../src/main/java/com/hifn/pixelcake/ui/home/CameraPanel.kt</a>:148</span>: <span class="message">Prefer <code>mutableIntStateOf</code> instead of <code>mutableStateOf</code></span><br /><pre class="errorlines">
-<span class="lineno">  145 </span>    <span class="comment">// 遥控快门成功后 trySend 立即唤醒，不等节拍 —— 「按快门 → 1~2s 出片」。</span>
-<span class="lineno">  146 </span>    <span class="keyword">val</span> captureWake = remember { Channel&lt;Unit>(Channel.CONFLATED) }
-<span class="lineno">  147 </span>    <span class="keyword">var</span> capturing by remember { mutableStateOf(<span class="keyword">false</span>) }
-<span class="caretline"><span class="lineno">  148 </span>    <span class="keyword">var</span> sessionShots by remember { <span class="warning">mutableStateOf</span>(<span class="number">0</span>) }&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>
-<span class="lineno">  149 </span>    <span class="comment">// 到达流日志的状态级写手（快门流程在 LaunchedEffect 之外，与 effect 内的 log 同口径）</span>
-<span class="lineno">  150 </span>    <span class="keyword">val</span> uiLog: (String) -> Unit = { m -> arrivalLog = (arrivalLog + m).takeLast(<span class="number">30</span>) }
-<span class="lineno">  151 </span>    <span class="keyword">val</span> onShutter: () -> Unit = onShutter@{
+<span class="location"><a href="../../src/main/java/com/hifn/pixelcake/ui/home/CameraPanel.kt">../../src/main/java/com/hifn/pixelcake/ui/home/CameraPanel.kt</a>:150</span>: <span class="message">Prefer <code>mutableIntStateOf</code> instead of <code>mutableStateOf</code></span><br /><pre class="errorlines">
+<span class="lineno">  147 </span>    <span class="comment">// 遥控快门成功后 trySend 立即唤醒，不等节拍 —— 「按快门 → 1~2s 出片」。</span>
+<span class="lineno">  148 </span>    <span class="keyword">val</span> captureWake = remember { Channel&lt;Unit>(Channel.CONFLATED) }
+<span class="lineno">  149 </span>    <span class="keyword">var</span> capturing by remember { mutableStateOf(<span class="keyword">false</span>) }
+<span class="caretline"><span class="lineno">  150 </span>    <span class="keyword">var</span> sessionShots by remember { <span class="warning">mutableStateOf</span>(<span class="number">0</span>) }&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>
+<span class="lineno">  151 </span>    <span class="comment">// 到达流日志的状态级写手（快门流程在 LaunchedEffect 之外，与 effect 内的 log 同口径）</span>
+<span class="lineno">  152 </span>    <span class="keyword">val</span> uiLog: (String) -> Unit = { m -> arrivalLog = (arrivalLog + m).takeLast(<span class="number">30</span>) }
+<span class="lineno">  153 </span>    <span class="keyword">val</span> onShutter: () -> Unit = onShutter@{
 </pre>
 
 <span class="location"><a href="../../src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt">../../src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt</a>:384</span>: <span class="message">Prefer <code>mutableFloatStateOf</code> instead of <code>mutableStateOf</code></span><br /><pre class="errorlines">
@@ -1180,14 +1180,14 @@ Dismiss</button>            </div>
 <span class="lineno"> 227 </span>                    <span class="comment">// 与编辑器导出、RAW 路径完全同序（以前这里是「调色 → 细节」再补精修，</span>
 <span class="lineno"> 228 </span>                    <span class="comment">// 等于「先锐化再磨皮」，锐化量程被吃掉一半）。</span></pre>
 
-<span class="location"><a href="../../src/main/java/com/hifn/pixelcake/ui/home/CameraPanel.kt">../../src/main/java/com/hifn/pixelcake/ui/home/CameraPanel.kt</a>:344</span>: <span class="message">Use the KTX function <code>createBitmap</code> instead?</span><br /><pre class="errorlines">
-<span class="lineno">  341 </span>  <span class="keyword">try</span> {
-<span class="lineno">  342 </span>      <span class="keyword">val</span> lp = preset.params.lerped(<span class="number">1f</span>)
-<span class="lineno">  343 </span>      <span class="keyword">val</span> lr = preset.retouch.lerped(<span class="number">1f</span>)
-<span class="caretline"><span class="lineno">  344 </span>      <span class="keyword">val</span> bmp = <span class="warning">Bitmap.createBitmap(decoded.bitmap.width, decoded.bitmap.height, Bitmap.Config.ARGB_8888)</span></span>
-<span class="lineno">  345 </span>      <span class="keyword">try</span> {
-<span class="lineno">  346 </span>          <span class="comment">// ④ 消费返回值（P1-15）：false = 尺寸不匹配 —— 旧代码无视它，</span>
-<span class="lineno">  347 </span>          <span class="comment">//    会把一块从未被写过的黑位图当成品导出进相册。</span></pre>
+<span class="location"><a href="../../src/main/java/com/hifn/pixelcake/ui/home/CameraPanel.kt">../../src/main/java/com/hifn/pixelcake/ui/home/CameraPanel.kt</a>:348</span>: <span class="message">Use the KTX function <code>createBitmap</code> instead?</span><br /><pre class="errorlines">
+<span class="lineno">  345 </span>  <span class="keyword">try</span> {
+<span class="lineno">  346 </span>      <span class="keyword">val</span> lp = preset.params.lerped(<span class="number">1f</span>)
+<span class="lineno">  347 </span>      <span class="keyword">val</span> lr = preset.retouch.lerped(<span class="number">1f</span>)
+<span class="caretline"><span class="lineno">  348 </span>      <span class="keyword">val</span> bmp = <span class="warning">Bitmap.createBitmap(decoded.bitmap.width, decoded.bitmap.height, Bitmap.Config.ARGB_8888)</span></span>
+<span class="lineno">  349 </span>      <span class="keyword">try</span> {
+<span class="lineno">  350 </span>          <span class="comment">// ④ 消费返回值（P1-15）：false = 尺寸不匹配 —— 旧代码无视它，</span>
+<span class="lineno">  351 </span>          <span class="comment">//    会把一块从未被写过的黑位图当成品导出进相册。</span></pre>
 
 <span class="location"><a href="../../src/main/java/com/hifn/pixelcake/core/edit/EditEngine.kt">../../src/main/java/com/hifn/pixelcake/core/edit/EditEngine.kt</a>:240</span>: <span class="message">Use the KTX function <code>createBitmap</code> instead?</span><br /><pre class="errorlines">
 <span class="lineno"> 237 </span>      <span class="keyword">val</span> win = <span class="keyword">if</span> (crop != <span class="keyword">null</span>) EditCrop.renderWindow(crop, w, h) <span class="keyword">else</span> intArrayOf(<span class="number">0</span>, <span class="number">0</span>, w, h)
