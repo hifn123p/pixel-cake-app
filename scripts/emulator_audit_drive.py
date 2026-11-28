@@ -355,7 +355,12 @@ try:
     tap("text", "青橙对比", "F2_lut_apply", wait=2.0, contains=True)
     time.sleep(1.5)
     shot("24c_lut_applied")
-    root2, t2 = dump("F2_lut_intensity")
+    t2 = ""
+    for attempt in range(3):
+        root2, t2 = dump(f"F2_lut_intensity_try{attempt}")
+        if "滤镜强度" in (t2 or ""):
+            break
+        time.sleep(2.0)
     results.append("LUT INTENSITY SLIDER: " + str("滤镜强度" in (t2 or "")))
     tap("content-desc", "撤销", "F2_lut_undo", wait=1.5, contains=True, allow_missing=True)
 except Exception as e:
@@ -380,7 +385,13 @@ try:
     tap("content-desc", "历史", "G2_open_history", wait=2.0, contains=True, allow_missing=True)
     tap("content-desc", "裁剪", "G2_open_crop", wait=2.5, contains=True, allow_missing=True, attempts=3)
     time.sleep(1.5)
-    root, t = dump("G2_crop_mode")
+    # v0.9.2：单次 dump 有竞态 —— 轮询 3 次 × 2s 再下结论
+    t = ""
+    for attempt in range(3):
+        root, t = dump(f"G2_crop_mode_try{attempt}")
+        if "应用裁剪" in (t or ""):
+            break
+        time.sleep(2.0)
     shot("30b_crop_mode")
     results.append("CROP MODE UI: " + str("应用裁剪" in (t or "")))
     tap("text", "1:1", "G2_crop_aspect", wait=1.5, contains=True, allow_missing=True)
@@ -450,7 +461,9 @@ run(["shell", "am", "start", "-n", "com.hifn.pixelcake.debug/com.hifn.pixelcake.
 time.sleep(9.0)
 root, t = dump("61b_session_restore")
 restored = "导出" in t and "撤销" in t
-results.append(f"SESSION RESTORED: {restored}")
+# v0.9.2：恢复设计 = 首页「继续上次编辑」胶囊（不自动进编辑器）—— 旧预期过时
+restored2 = "继续上次编辑" in (t or "")
+results.append(f"SESSION PILL: {restored2} (editor-open-check={restored})")
 shot("61b_session_restored")
 # 退出编辑器用系统返回键：回执已关（showExport=false）⇒ BackHandler 链落到
 # editorOnBack —— 与顶栏「返回」完全同一条路径，且不依赖动画期的 uiautomator dump。
@@ -480,7 +493,8 @@ try:
     time.sleep(1.5)
     root, t = dump("K2_camera_panel")
     shot("41b_camera_panel")
-    results.append("CAMERA PANEL: " + str(("相机直连" in (t or "")) or ("扫描" in (t or "")) or ("未连接" in (t or ""))))
+    # v0.9.2：实测面板文案是「检测 USB 设备 / 连接并握手」（旧关键词是臆测的）
+    results.append("CAMERA PANEL: " + str(("检测 USB 设备" in (t or "")) or ("连接并握手" in (t or ""))))
     back()
 except Exception as e:
     results.append(f"K2 PROBE CRASHED: {e!r}")
