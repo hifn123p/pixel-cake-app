@@ -1834,3 +1834,22 @@ PTP 层已有 9 个操作（握手/列图/拉图/属性读），**无 InitiateCa
 3. **组合 lambda 级联假象**：`Box` 未解析 ⇒ 组合 lambda 被当普通 lambda ⇒
    同块内 `MaterialTheme.colorScheme` 全部报「@Composable 上下文违规」——
    报错最多的行不是根，**未解析引用才是**；修复后级联全消。
+
+## §28 三路审计批：全量修复（v0.9.2，2026-11-28）
+
+v0.9.0/v0.9.1 新代码面（CubeLut/PCB3/PixelProgram LUT 级/遥控快门/唤醒轮询）的
+功能/性能/安全三路审计。
+
+### 28.1 发现与修复
+
+| 级 | 发现 | 修复 |
+|---|---|---|
+| **P0** | **3D LUT 采样数据竞争**：`runBand` 把像素范围分片到线程池并行执行，`PixelProgram` 被同一条带的所有分片共享；v0.9.0 的 `lut3dOut = FloatArray(3)` 是共享可变缓冲 —— LUT 激活 + 多核 = 采样结果互相覆盖（花屏级）。**EditEngine §AppliedLayer 的 KDoc 早就警告过这条纪律**，新增代码没读 | `CubeLut.sample` 改返回打包 Long（3 × 21-bit 定点，`r<<42/g<<21/b`）—— 零分配、零共享、寄存器级线程安全；21-bit 对 8-bit 输出精度富余；测试改 unpack 断言 |
+| P2 | **计数语义偏差**：`sessionShots` 只在遥控快门时自增 —— 机身快门拍的照片不计入，「本次拍摄 N 张」失真 | 口径改为**出片数**：轮询拉到 `newPhotos` 才累加（两个拍摄来源一致）；文案改「本次出片 N 张」 |
+| P3 | **快门钮无读屏语义**：自绘 64dp 圆钮无 contentDescription（T4 纪律漏网） | `.semantics { contentDescription = "遥控快门" }` |
+
+### 28.2 审计确认无问题（逐项过）
+
+- **安全**：PCB3 解析 bounds 全检（魔数/版本/尺寸 ≤128/长度）；LutRegistry 路径白名单（`/` `\` `..`）；InitiateCapture 仅 UI 按钮可达；无新权限/IPC/网络。
+- **性能**：LUT 采样每像素 24 次数组读 + 插值，与既有每像素工作量同量级；打包 Long 后逐像素零分配；唤醒轮询 CONFLATED 合并无堆积。
+- **功能**：tetherOn=false 时 receive 阻塞 ≤ 节拍上限后退出；前景恢复积压唤醒即拉（期望行为）；快门/轮询事务经同一 io Mutex 串行无死锁；LUT 与矩阵套色/对象层的先后语义一致（整幅调性先落位）。
