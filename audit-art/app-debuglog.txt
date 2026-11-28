@@ -1,25 +1,3 @@
-log_20261128_082400.txt
-log_20261128_082922.txt
-log_20261128_082940.txt
-log_20261128_082949.txt
-2026-11-28 08:24:00.897 [INFO] LIFECYCLE: DebugLog initialized {file=/data/user/0/com.hifn.pixelcake.debug/files/debug/log_20261128_082400.txt}
-2026-11-28 08:24:00.908 [INFO] LIFECYCLE: boot snapshot {summary=manufacturer=Google model=sdk_gphone64_x86_64 soc=ranchu android=16(36) abi=x86_64 totalMem=3920MiB availMem=1845MiB wideColorGamut=false tier=low fullRes=4096 proxy=1024}
-2026-11-28 08:24:17.828 [INFO] IMPORT: pick {uri=image%3A5}
-2026-11-28 08:24:18.385 [INFO] DECODE: decoded {w=800, h=1000, raw=false, mime=image/jpeg, linear=false}
-2026-11-28 08:24:20.739 [WARN] ML: CompiledModel.create failed {accel=GPU, err=Failed to compile model}
-2026-11-28 08:24:21.158 [INFO] ML: skin mask model loaded {accel=CPU, side=256, asset=models/selfie_multiclass_256x256.tflite}
-2026-11-28 08:24:21.220 [INFO] EDIT: detail pass {w=192, h=192, ms=170}
-2026-11-28 08:24:22.011 [INFO] EDIT: preset thumbs ready {count=54, px=192}
-2026-11-28 08:24:37.589 [INFO] ML: object masks ready {key=content://com.android.providers.media.documents/document/image%3A5#800x1000#1, side=256, accel=CPU}
-2026-11-28 08:24:37.859 [INFO] ML: object scopes probed {available=true, empty=人物,皮肤,面部,头发,衣服,配饰}
-2026-11-28 08:24:37.967 [INFO] ML: skin mask ready {key=content://com.android.providers.media.documents/document/image%3A5#800x1000#1, grid=256, accel=CPU}
-2026-11-28 08:24:38.154 [DEBUG] EDIT: render done {w=800, h=1000, stamp=1, ms=18527, layers=0}
-2026-11-28 08:25:17.971 [DEBUG] EDIT: render done {w=800, h=1000, stamp=2, ms=329, layers=0}
-2026-11-28 08:25:18.364 [DEBUG] EDIT: render done {w=800, h=1000, stamp=3, ms=249, layers=0}
-2026-11-28 08:25:18.596 [DEBUG] EDIT: render done {w=800, h=1000, stamp=4, ms=203, layers=0}
-2026-11-28 08:25:58.632 [DEBUG] EDIT: render done {w=800, h=1000, stamp=5, ms=456, layers=0}
-2026-11-28 08:26:07.150 [DEBUG] EDIT: render done {w=800, h=1000, stamp=6, ms=115, layers=0}
-2026-11-28 08:26:23.623 [INFO] EDIT: auto enhance {ev=0.22156858, c=0.07794115}
-2026-11-28 08:26:23.781 [DEBUG] EDIT: render done {w=800, h=1000, stamp=7, ms=124, layers=0}
-2026-11-28 08:27:45.615 [INFO] EDIT: export begin {usedMB=14, totalMB=22, maxMB=576, heapPct=2, thermalHeadroom=0.90}
-2026-11-28 08:27:45.653 [INFO] EDIT: srgb export pre-retouch {usedMB=15, totalMB=22, maxMB=576, heapPct=2, thermalHeadroom=NaN}
+log_20261128_085501.txt
+log_20261128_090238.txt
+log_20261128_090247.txt
