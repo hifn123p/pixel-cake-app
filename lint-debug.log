@@ -9,9 +9,9 @@ Starting a Gradle Daemon (subsequent builds will be faster)
 > Task :app:mapDebugSourceSetPaths
 > Task :app:generateDebugResources
 > Task :app:packageDebugResources
+> Task :app:mergeDebugResources
 > Task :app:createDebugCompatibleScreenManifests
 > Task :app:extractDeepLinksDebug
-> Task :app:mergeDebugResources
 > Task :app:parseDebugLocalResources
 
 > Task :app:processDebugMainManifest
@@ -19,22 +19,17 @@ Starting a Gradle Daemon (subsequent builds will be faster)
 	Namespace 'com.google.ai.edge.litert' is used in multiple modules and/or libraries: com.google.ai.edge.litert:litert:2.2.0, com.google.ai.edge.litert:litert-api:2.2.0. Please ensure that all modules and libraries have a unique namespace. For more information, See https://developer.android.com/studio/build/configure-app-module#set-namespace
 
 > Task :app:processDebugManifest
-> Task :app:preDebugAndroidTestBuild SKIPPED
-> Task :app:generateDebugAndroidTestResValues
 > Task :app:javaPreCompileDebug
 > Task :app:processDebugManifestForPackage
+> Task :app:preDebugAndroidTestBuild SKIPPED
+> Task :app:generateDebugAndroidTestResValues
 > Task :app:extractProguardFiles
 > Task :app:preDebugUnitTestBuild UP-TO-DATE
 > Task :app:processDebugResources
 
 > Task :app:compileDebugKotlin FAILED
-e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/home/CameraPanel.kt:644:21 Unresolved reference 'Box'.
-e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/home/CameraPanel.kt:647:30 Unresolved reference 'clip'.
-e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/home/CameraPanel.kt:657:25 Unresolved reference 'Box'.
-e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/home/CameraPanel.kt:660:34 Unresolved reference 'clip'.
-e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/home/CameraPanel.kt:662:66 @Composable invocations can only happen from the context of a @Composable function
-e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/home/CameraPanel.kt:663:56 @Composable invocations can only happen from the context of a @Composable function
-gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/__run_3-1795848467449.json
+e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/home/CameraPanel.kt:663:34 Unresolved reference 'background'.
+gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/__run_3-1795848632434.json
 
 FAILURE: Build failed with an exception.
 
@@ -49,5 +44,5 @@ Execution failed for task ':app:compileDebugKotlin'.
 > Run with --scan to get full insights.
 > Get more help at https://help.gradle.org.
 
-BUILD FAILED in 36s
+BUILD FAILED in 21s
 19 actionable tasks: 19 executed
