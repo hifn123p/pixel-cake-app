@@ -111,7 +111,19 @@ private val LUT_OPTIONS = listOf(
     "warm" to "暖调",
     "cool" to "冷调",
     "bw" to "黑白",
-    "film" to "胶片"
+    "film" to "胶片",
+    // v0.9.0 3D cube LUT（DEV_PLAN §3.4 形态 B）：自研公式 PCB3 表（33³），
+    // 分区色调（青橙/褪色等）是单矩阵表达不了的 —— 真正的电影感分级。
+    "cube:teal_orange" to "青橙对比",
+    "cube:film_fade" to "胶片褪色",
+    "cube:bleach_bypass" to "漂白旁路",
+    "cube:golden_hour" to "黄金时刻",
+    "cube:cool_city" to "城市冷调",
+    "cube:portra_warm" to "人像暖调",
+    "cube:vintage_70s" to "70 年代",
+    "cube:mono_silver" to "单色银盐",
+    "cube:cyber_teal" to "赛博青",
+    "cube:sunset_amber" to "暮光琥珀"
 )
 
 // ———————————————————————————————————————————————————————————————
@@ -1088,7 +1100,7 @@ private fun LutGroup(
     // 而不是让用户对着一条无效滑块怀疑 App 坏了。选回任意滤镜后滑块原样回来（值保留）。
     if (params.lutId != "none") {
         EditSlider("滤镜强度", params.lutIntensity, 0f, 1f, 0.05f, { p, v -> p.copy(lutIntensity = v) }, params, onParamChange, onCommit, onDraggingChange, format = PERCENT_U)
-        Hint("内置滤镜全部是 MIT / CC 授权，可随包分发。强度 0% 等同关闭，方便对照效果。")
+        Hint("内置滤镜与 LUT 全部自研公式生成，可随包分发。强度 0% 等同关闭，方便对照效果。")
     }
 }
 

@@ -44,6 +44,9 @@ enum class PresetCategory(val label: String) {
     Food("食物"),
     Bw("黑白"),
 
+    /** v0.9.0 电影感（3D cube LUT）：整幅调性套色，强度环可调。 */
+    Cinema("电影"),
+
     /** 用户自定义预设（v0.6.6 用户预设库）。只作元数据；列表由 `CustomPresets` 持久化。 */
     Custom("我的")
 }
@@ -52,6 +55,47 @@ object Presets {
     val ALL: List<Preset> = listOf(
         // ===== 原图兜底 =====
         Preset("none", "原图", PresetCategory.Style),
+        // ===== v0.9.0 电影感（3D cube LUT）=====
+        Preset(
+            id = "cine_teal_orange", name = "青橙对比", category = PresetCategory.Cinema,
+            params = EditParams(lutId = "cube:teal_orange", lutIntensity = 1f)
+        ),
+        Preset(
+            id = "cine_film_fade", name = "胶片褪色", category = PresetCategory.Cinema,
+            params = EditParams(lutId = "cube:film_fade", lutIntensity = 1f)
+        ),
+        Preset(
+            id = "cine_bleach", name = "漂白旁路", category = PresetCategory.Cinema,
+            params = EditParams(lutId = "cube:bleach_bypass", lutIntensity = 1f)
+        ),
+        Preset(
+            id = "cine_golden", name = "黄金时刻", category = PresetCategory.Cinema,
+            params = EditParams(lutId = "cube:golden_hour", lutIntensity = 1f)
+        ),
+        Preset(
+            id = "cine_cool_city", name = "城市冷调", category = PresetCategory.Cinema,
+            params = EditParams(lutId = "cube:cool_city", lutIntensity = 1f)
+        ),
+        Preset(
+            id = "cine_portra", name = "人像暖调", category = PresetCategory.Cinema,
+            params = EditParams(lutId = "cube:portra_warm", lutIntensity = 1f)
+        ),
+        Preset(
+            id = "cine_vintage", name = "70 年代", category = PresetCategory.Cinema,
+            params = EditParams(lutId = "cube:vintage_70s", lutIntensity = 1f)
+        ),
+        Preset(
+            id = "cine_mono", name = "单色银盐", category = PresetCategory.Cinema,
+            params = EditParams(lutId = "cube:mono_silver", lutIntensity = 1f)
+        ),
+        Preset(
+            id = "cine_cyber", name = "赛博青", category = PresetCategory.Cinema,
+            params = EditParams(lutId = "cube:cyber_teal", lutIntensity = 1f)
+        ),
+        Preset(
+            id = "cine_sunset", name = "暮光琥珀", category = PresetCategory.Cinema,
+            params = EditParams(lutId = "cube:sunset_amber", lutIntensity = 1f)
+        ),
         Preset(
             id = "jp", name = "日系", category = PresetCategory.Style,
             params = EditParams(exposureEv = 0.3f, contrast = -0.1f, saturation = 0.1f),
