@@ -43,6 +43,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
@@ -156,7 +158,6 @@ fun CameraPanel(
                 try {
                     val outcome = sn.initiateCapture()
                     if (outcome.ok) {
-                        sessionShots++
                         uiLog("遥控快门 ✓ 等待新片落卡…")
                         captureWake.trySend(Unit)
                         // 写卡延迟兜底：大 RAW/连拍落卡慢，4s 后再唤醒一轮
@@ -287,6 +288,9 @@ fun CameraPanel(
                 val query = sn.objectHandles(storageId)
                 // ②/K3：新片收集与坏对象记账都在 TetherProcessor 里（有单测钉住）。
                 val newPhotos = tether.collectNewPhotos(query.handles) { h -> sn.objectInfo(h) }
+                // v0.9.2（审计 P2）：计数口径 = **出片数**（轮询拉到多少张算多少，
+                // 机身快门/遥控快门两个来源一致）—— 快门侧不再自增（旧口径漏机身拍摄）。
+                if (newPhotos.isNotEmpty()) sessionShots += newPhotos.size
                 for (photo in newPhotos) {
                     log(photo.info.filename + " · 传输中...")
                     val target = CameraBatch.newSingleTarget(context, photo)
@@ -654,7 +658,9 @@ fun CameraPanel(
                                 else MaterialTheme.colorScheme.outlineVariant,
                                 CircleShape
                             )
-                            .clickable(enabled = canShoot) { onShutter() },
+                            .clickable(enabled = canShoot) { onShutter() }
+                            // T4 无障碍：自绘快门钮必须给名称（TalkBack 读不出形状）
+                            .semantics { contentDescription = "遥控快门" },
                         contentAlignment = Alignment.Center
                     ) {
                         Box(
@@ -678,7 +684,7 @@ fun CameraPanel(
                         )
                         Text(
                             buildString {
-                                append("本次拍摄 ")
+                                append("本次出片 ")
                                 append(sessionShots)
                                 append(" 张")
                                 s.storages.firstOrNull()?.let { st ->

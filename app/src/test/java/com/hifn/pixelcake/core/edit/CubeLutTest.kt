@@ -39,19 +39,25 @@ class CubeLutTest {
         return pcb3(size, vals)
     }
 
+    /** Long 打包（3 × 21-bit 定点）解码为 RGB。 */
+    private fun unpack(p: Long): FloatArray = floatArrayOf(
+        ((p shr 42) and 0x1FFFFFL) / CubeLut.FIX_ONE.toFloat(),
+        ((p shr 21) and 0x1FFFFFL) / CubeLut.FIX_ONE.toFloat(),
+        (p and 0x1FFFFFL) / CubeLut.FIX_ONE.toFloat()
+    )
+
     @Test
     fun `parse identity cube and sample lattice points exactly`() {
         val lut = CubeLut.parse(identityBytes(3))
         assertNotNull(lut)
         lut!!
         assertEquals(3, lut.size)
-        val out = FloatArray(3)
         // 栅格点（n=3：0.5 → x = 0.5*2 = 1.0 整数栅格）必须精确等于表值
-        lut.sample(0f, 0f, 0f, out)
+        var out = unpack(lut.sample(0f, 0f, 0f))
         assertEquals(0f, out[0], 1e-4f); assertEquals(0f, out[1], 1e-4f); assertEquals(0f, out[2], 1e-4f)
-        lut.sample(0.5f, 0.5f, 0.5f, out)
+        out = unpack(lut.sample(0.5f, 0.5f, 0.5f))
         assertEquals(0.5f, out[0], 1e-4f); assertEquals(0.5f, out[1], 1e-4f); assertEquals(0.5f, out[2], 1e-4f)
-        lut.sample(1f, 1f, 1f, out)
+        out = unpack(lut.sample(1f, 1f, 1f))
         assertEquals(1f, out[0], 1e-4f); assertEquals(1f, out[1], 1e-4f); assertEquals(1f, out[2], 1e-4f)
     }
 
@@ -59,8 +65,7 @@ class CubeLutTest {
     fun `trilinear on linear field is exact at midpoint`() {
         // 2³ 恒等表 = 单位线性场：三线性插值对线性场是精确的 ⇒ 任意点 = 输入本身
         val lut = CubeLut.parse(identityBytes(2))!!
-        val out = FloatArray(3)
-        lut.sample(0.25f, 0.5f, 0.75f, out)
+        val out = unpack(lut.sample(0.25f, 0.5f, 0.75f))
         assertEquals(0.25f, out[0], 1e-4f)
         assertEquals(0.5f, out[1], 1e-4f)
         assertEquals(0.75f, out[2], 1e-4f)
@@ -69,8 +74,7 @@ class CubeLutTest {
     @Test
     fun `out of range input clamps`() {
         val lut = CubeLut.parse(identityBytes(2))!!
-        val out = FloatArray(3)
-        lut.sample(-0.5f, 2f, 0f, out)
+        val out = unpack(lut.sample(-0.5f, 2f, 0f))
         assertEquals(0f, out[0], 1e-4f)
         assertEquals(1f, out[1], 1e-4f)
         assertEquals(0f, out[2], 1e-4f)

@@ -155,8 +155,8 @@ class PixelProgram(
     } else {
         null
     }
-    /** 采样输出缓冲：逐像素复用（finish 单线程调用的口径与既有两级一致）。 */
-    private val lut3dOut = FloatArray(3)
+    // v0.9.2（审计 P0）：采样结果经 Long 打包返回（21-bit 定点 ×3）——
+    // runBand 并行分片共享本实例，共享可变缓冲 = 数据竞争（旧版 lut3dOut 已删）。
 
     // ——————————————— 需要坐标的两级（批次 3）———————————————
 
@@ -563,13 +563,13 @@ class PixelProgram(
         // 物理序。强度按运行时 lutIntensity 向原值插值（0 = no-op）。
         val l3 = lut3d
         if (l3 != null && lutIntensity > 0f) {
-            l3.sample(
-                r.coerceIn(0f, 1f), g.coerceIn(0f, 1f), b.coerceIn(0f, 1f), lut3dOut
+            val packed = l3.sample(
+                r.coerceIn(0f, 1f), g.coerceIn(0f, 1f), b.coerceIn(0f, 1f)
             )
             val m = lutIntensity
-            r += (lut3dOut[0] - r) * m
-            g += (lut3dOut[1] - g) * m
-            b += (lut3dOut[2] - b) * m
+            r += (((packed shr 42) and 0x1FFFFFL) / CubeLut.FIX_ONE.toFloat() - r) * m
+            g += (((packed shr 21) and 0x1FFFFFL) / CubeLut.FIX_ONE.toFloat() - g) * m
+            b += ((packed and 0x1FFFFFL) / CubeLut.FIX_ONE.toFloat() - b) * m
         }
 
         // ── 暗角（批次 3）─────────────────────────────────────────

@@ -27,8 +27,15 @@ class CubeLut private constructor(
     private val data: ShortArray
 ) {
 
-    /** 三线性采样：输入输出都是归一化 [0,1]；`out[0..2]` = R/G/B。 */
-    fun sample(r: Float, g: Float, b: Float, out: FloatArray) {
+    /**
+     * 三线性采样：输入输出都是归一化 [0,1]。返回打包 Long（每通道 21-bit 定点，
+     * `r<<42 | g<<21 | b`）—— **无共享可变状态**。
+     *
+     * ⚠️ 为什么不用 out 数组：`runBand` 把像素范围分片到多线程并行执行，
+     * `PixelProgram` 被同一条带的所有分片**共享** —— 共享可变缓冲就是数据竞争
+     * （EditEngine §AppliedLayer 的 KDoc 明文警告）。21-bit 定点对 8-bit 输出精度富余。
+     */
+    fun sample(r: Float, g: Float, b: Float): Long {
         val n = size
         val fx = (r.coerceIn(0f, 1f) * (n - 1))
         val fy = (g.coerceIn(0f, 1f) * (n - 1))
@@ -42,6 +49,9 @@ class CubeLut private constructor(
         val tx = fx - x0
         val ty = fy - y0
         val tz = fz - z0
+        var fr = 0f
+        var fg = 0f
+        var fb = 0f
 
         val strideZ = 3          // R 最快：z（蓝）变化时跨 3 个 short
         val strideY = 3 * n      // y（绿）变化时跨一整行 z
@@ -62,13 +72,25 @@ class CubeLut private constructor(
             val v11 = (c011 * s) * (1f - tx) + (c111 * s) * tx
             val v0 = v00 * (1f - ty) + v10 * ty
             val v1 = v01 * (1f - ty) + v11 * ty
-            out[c] = v0 * (1f - tz) + v1 * tz
+            when (c) {
+                0 -> fr = v0 * (1f - tz) + v1 * tz
+                1 -> fg = v0 * (1f - tz) + v1 * tz
+                else -> fb = v0 * (1f - tz) + v1 * tz
+            }
         }
+        // 21-bit 定点打包（clamp 已由输入 coerce 保证，插值结果仍在线性凸包内）
+        val ir = (fr * FIX_ONE + 0.5f).toInt().coerceIn(0, FIX_ONE)
+        val ig = (fg * FIX_ONE + 0.5f).toInt().coerceIn(0, FIX_ONE)
+        val ib = (fb * FIX_ONE + 0.5f).toInt().coerceIn(0, FIX_ONE)
+        return (ir.toLong() shl 42) or (ig.toLong() shl 21) or ib.toLong()
     }
 
     companion object {
 
         private const val MAGIC = "PCB3"
+
+        /** 21-bit 定点满量程（2^21 - 1）。打包/解码共用一个口径。 */
+        const val FIX_ONE = 2097151
 
         /** 解析 `PCB3` 二进制；结构不符返回 null（调用方按「资产损坏」降级为 no-op）。 */
         fun parse(bytes: ByteArray): CubeLut? = runCatching {
