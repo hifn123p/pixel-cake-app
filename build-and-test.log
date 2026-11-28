@@ -27,7 +27,16 @@
 > Task :app:checkDebugDuplicateClasses
 
 > Task :app:compileDebugKotlin FAILED
-e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/core/ml/MlMaskProvider.kt:333:40 Unresolved reference 'TAG_ML'.
+e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt:640:9 Unresolved reference 'DebugLog'.
+e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt:640:20 Unresolved reference 'DebugLog'.
+e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt:656:13 Unresolved reference 'DebugLog'.
+e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt:657:17 Unresolved reference 'DebugLog'.
+e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt:663:40 Unresolved reference 'dispW'.
+e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt:663:47 Unresolved reference 'dispH'.
+e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt:665:13 Unresolved reference 'DebugLog'.
+e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt:666:17 Unresolved reference 'DebugLog'.
+e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt:669:32 Unresolved reference 'dispW'.
+e: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt:670:32 Unresolved reference 'dispH'.
 
 > Task :app:configureCMakeDebug[arm64-v8a]
 
@@ -235,5 +244,5 @@ Caused by: org.jetbrains.kotlin.gradle.tasks.CompilationErrorException: Compilat
 	... 2 more
 
 
-BUILD FAILED in 27s
+BUILD FAILED in 18s
 23 actionable tasks: 7 executed, 16 up-to-date
