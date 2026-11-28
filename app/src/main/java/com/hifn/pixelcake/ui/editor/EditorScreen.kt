@@ -940,57 +940,6 @@ fun EditorScreen(
                 }
 
                 // 拾取模式：整幅照片压暗 + 顶部提示（设计 §D）；单击命中后由 pickNote 回显结果
-                if (pickActive) {
-                    Box(Modifier.fillMaxSize().background(Color(0x73000000)))
-                    // —— 蒙版可视化（规范 §D「琥珀虚线轮廓」/ §05「琥珀填充 14%」；
-                    //     审计 A-P2-2：此前拾取命中后只有压暗层与文字，AI 认出了什么完全是黑箱）——
-                    // v1 实现：把选中作用域的蒙版网格物化成 256² 琥珀位图（`maskFor` 懒构建的
-                    // 那份共享网格，一次 ≈ 256KB），按照片同一 fit 变换叠在压暗层之上；
-                    // 400ms alpha 生长做「描完」的观感。虚线描边轮廓需要 marching-squares，
-                    // 本版先不做（填充已能表达「AI 认出了什么」），记录为后续打磨项。
-                    // ⚠️ 坐标口径与 `scopeAt` / 渲染蒙版一致：推理输入是整图拉伸到 256²
-                    // （MlMaskProvider.ensureProbs 的 createScaledBitmap），网格坐标即图像归一化坐标。
-                    val pickMask by produceState<Pair<ImageBitmap, List<List<Pair<Float, Float>>>>?>(null, objectMasks, scope) {
-                        val masksNow = objectMasks ?: return@produceState
-                        val sc = scope ?: return@produceState
-                        value = null
-                        value = withContext(Dispatchers.Default) {
-                            runCatching {
-                                val side = masksNow.gridSide
-                                val m = masksNow.maskFor(sc).resampleTo(side, side)
-                                val bmp = Bitmap.createBitmap(side, side, Bitmap.Config.ARGB_8888)
-                                val px = IntArray(side * side)
-                                val data = FloatArray(side * side)
-                                var i = 0
-                                for (y in 0 until side) {
-                                    for (x in 0 until side) {
-                                        val v = m.sample(x, y)
-                                        data[i] = v
-                                        val a = (v * 0.26f * 255f).roundToInt().coerceIn(0, 255)
-                                        px[i] = if (a > 0) ((a shl 24) or 0xFFB454) else 0
-                                        i++
-                                    }
-                                }
-                                bmp.setPixels(px, 0, side, 0, 0, side, side)
-                                // v0.7.2：marching squares 琥珀虚线轮廓（规范 §D）—— 与填充同源网格，
-                                // 阈值 0.5 与蒙版羽化口径一致；几何层有 JVM 单测（MaskContourTest）
-                                val loops = MaskContour.contours(FloatGrid(data, side, side))
-                                Pair(bmp.asImageBitmap(), loops)
-                            }.getOrNull()
-                        }
-                    }
-                    val maskAlpha by animateFloatAsState(
-                        targetValue = if (pickMask != null) 1f else 0f,
-                        animationSpec = tween(Motion.durationFor(400), easing = Motion.easingOut),
-                        label = "pickMaskAlpha"
-                    )
-                    val maskFrame = Modifier
-                        .size(with(density) { dispW.toDp() }, with(density) { dispH.toDp() })
-                        .offset { IntOffset(previewPan.x.roundToInt(), previewPan.y.roundToInt()) }
-                        .clip(Radius.chip)
-                        .alpha(maskAlpha)
-                    // 轮廓用色在组合期捕获（Canvas draw lambda 不是 composable 上下文）
-                    val contourColor = MaterialTheme.colorScheme.primary
                     // —— v0.8.0 裁剪覆盖层：与照片同框（进入时已复位 zoom/pan）——
                     // scrim 压暗框外、三分线辅助构图、四角手柄拖拽（比例约束时锁定）、框内拖动移框。
                     // 覆盖层在上层消费全部触摸 ⇒ 画布缩放/平移/双通道手势不并发。
@@ -1056,6 +1005,58 @@ fun EditorScreen(
                             }
                         }
                     }
+
+                if (pickActive) {
+                    Box(Modifier.fillMaxSize().background(Color(0x73000000)))
+                    // —— 蒙版可视化（规范 §D「琥珀虚线轮廓」/ §05「琥珀填充 14%」；
+                    //     审计 A-P2-2：此前拾取命中后只有压暗层与文字，AI 认出了什么完全是黑箱）——
+                    // v1 实现：把选中作用域的蒙版网格物化成 256² 琥珀位图（`maskFor` 懒构建的
+                    // 那份共享网格，一次 ≈ 256KB），按照片同一 fit 变换叠在压暗层之上；
+                    // 400ms alpha 生长做「描完」的观感。虚线描边轮廓需要 marching-squares，
+                    // 本版先不做（填充已能表达「AI 认出了什么」），记录为后续打磨项。
+                    // ⚠️ 坐标口径与 `scopeAt` / 渲染蒙版一致：推理输入是整图拉伸到 256²
+                    // （MlMaskProvider.ensureProbs 的 createScaledBitmap），网格坐标即图像归一化坐标。
+                    val pickMask by produceState<Pair<ImageBitmap, List<List<Pair<Float, Float>>>>?>(null, objectMasks, scope) {
+                        val masksNow = objectMasks ?: return@produceState
+                        val sc = scope ?: return@produceState
+                        value = null
+                        value = withContext(Dispatchers.Default) {
+                            runCatching {
+                                val side = masksNow.gridSide
+                                val m = masksNow.maskFor(sc).resampleTo(side, side)
+                                val bmp = Bitmap.createBitmap(side, side, Bitmap.Config.ARGB_8888)
+                                val px = IntArray(side * side)
+                                val data = FloatArray(side * side)
+                                var i = 0
+                                for (y in 0 until side) {
+                                    for (x in 0 until side) {
+                                        val v = m.sample(x, y)
+                                        data[i] = v
+                                        val a = (v * 0.26f * 255f).roundToInt().coerceIn(0, 255)
+                                        px[i] = if (a > 0) ((a shl 24) or 0xFFB454) else 0
+                                        i++
+                                    }
+                                }
+                                bmp.setPixels(px, 0, side, 0, 0, side, side)
+                                // v0.7.2：marching squares 琥珀虚线轮廓（规范 §D）—— 与填充同源网格，
+                                // 阈值 0.5 与蒙版羽化口径一致；几何层有 JVM 单测（MaskContourTest）
+                                val loops = MaskContour.contours(FloatGrid(data, side, side))
+                                Pair(bmp.asImageBitmap(), loops)
+                            }.getOrNull()
+                        }
+                    }
+                    val maskAlpha by animateFloatAsState(
+                        targetValue = if (pickMask != null) 1f else 0f,
+                        animationSpec = tween(Motion.durationFor(400), easing = Motion.easingOut),
+                        label = "pickMaskAlpha"
+                    )
+                    val maskFrame = Modifier
+                        .size(with(density) { dispW.toDp() }, with(density) { dispH.toDp() })
+                        .offset { IntOffset(previewPan.x.roundToInt(), previewPan.y.roundToInt()) }
+                        .clip(Radius.chip)
+                        .alpha(maskAlpha)
+                    // 轮廓用色在组合期捕获（Canvas draw lambda 不是 composable 上下文）
+                    val contourColor = MaterialTheme.colorScheme.primary
                     pickMask?.let { (bmp, loops) ->
                         Image(
                             bitmap = bmp,
