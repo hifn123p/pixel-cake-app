@@ -105,6 +105,7 @@ import com.hifn.pixelcake.core.decode.ExportFormat
 import com.hifn.pixelcake.core.edit.CropRect
 import com.hifn.pixelcake.core.edit.EditCrop
 import com.hifn.pixelcake.core.edit.EditParams
+import com.hifn.pixelcake.diag.DebugLog
 import com.hifn.pixelcake.core.edit.Histogram
 import com.hifn.pixelcake.core.edit.lerped
 import com.hifn.pixelcake.core.edit.ObjectLayer
@@ -659,19 +660,7 @@ fun EditorScreen(
             )
         }
     }
-    // v0.9.2 审计埋点：覆盖层渲染条件的三个变量逐帧上日志（模拟器可读）
-    LaunchedEffect(cropMode, cropWork, dispW, dispH) {
-        if (cropMode) {
-            DebugLog.i(
-                DebugLog.TAG_EDIT, "crop overlay cond",
-                mapOf(
-                    "workNull" to (cropWork == null).toString(),
-                    "dispW" to dispW.toString(),
-                    "dispH" to dispH.toString()
-                )
-            )
-        }
-    }
+
     val closeCrop: () -> Unit = { cropMode = false; cropWork = null; cropAspect = null }
     LaunchedEffect(previewZoom) {
         if (previewZoom > 1.5f) deckCollapsed = true
@@ -734,6 +723,18 @@ fun EditorScreen(
 
             val dispW = fit.width * previewZoom
             val dispH = fit.height * previewZoom
+            // v0.9.2 审计埋点：覆盖层渲染条件三变量（cropMode 时逐次上日志）
+            if (cropMode) {
+                DebugLog.i(
+                    DebugLog.TAG_EDIT, "crop overlay cond",
+                    mapOf(
+                        "workNull" to (cropWork == null).toString(),
+                        "dispW" to dispW.toString(),
+                        "dispH" to dispH.toString(),
+                        "pan" to previewPan.toString()
+                    )
+                )
+            }
             val clampedPan = clampPreviewPan(
                 previewPan, photoBoxSize.width.toFloat(), photoBoxSize.height.toFloat(), dispW, dispH
             )
