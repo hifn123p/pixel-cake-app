@@ -226,22 +226,46 @@ def import_via_saf(tag):
     return True
 
 
-saf_ok = import_via_saf("B")
-if not saf_ok:
-    # 后备：Photo Picker（MediaStore 就绪时才有效）
-    tap("text", "相册", "02_tap_gallery", wait=3.0)
-    root, txt = dump("picker")
-    shot("03_photo_picker")
-    root, _ = dump("04_pick_image")
-    photo_nodes = find_contains(root, "content-desc", "Photo taken on")
-    if photo_nodes:
-        c = bounds_center(photo_nodes[0])
-        if c:
-            run(["shell", "input", "tap", str(c[0]), str(c[1])])
-            results.append(f"picker tap first 'Photo taken on' at {c}")
-            time.sleep(2.0)
-    else:
-        results.append("PICK: no 'Photo taken on' nodes")
+# v0.9.2：导入环节整体重试 ×3（SAF Recent / Photo Picker 都有 MediaStore·
+# DocumentsProvider 层竞态 —— 单次失败不代表图库未就绪，回首页再来一轮）。
+editor_opened = False
+for import_attempt in range(3):
+    results.append(f"IMPORT ATTEMPT {import_attempt}")
+    saf_ok = import_via_saf(f"B{import_attempt}")
+    if not saf_ok:
+        # 后备：Photo Picker（MediaStore 就绪时才有效）；picker 列表加载也带重试
+        tap("text", "相册", f"02_tap_gallery{import_attempt}", wait=3.0)
+        shot("03_photo_picker")
+        photo_nodes = []
+        for pick_try in range(4):
+            root, txt = dump(f"04_pick_image{import_attempt}_{pick_try}")
+            photo_nodes = find_contains(root, "content-desc", "Photo taken on")
+            if photo_nodes:
+                break
+            time.sleep(3.0)
+        if photo_nodes:
+            c = bounds_center(photo_nodes[0])
+            if c:
+                run(["shell", "input", "tap", str(c[0]), str(c[1])])
+                results.append(f"picker tap first 'Photo taken on' at {c}")
+                time.sleep(2.0)
+        else:
+            results.append(f"PICK: no 'Photo taken on' nodes (attempt {import_attempt})")
+    # 编辑器是否已开（重试轮里任一路成功即算）——没开就回首页重试
+    time.sleep(6.0)
+    root_chk, t_chk = dump(f"editor_check{import_attempt}")
+    if "导出" in (t_chk or "") or "撤销" in (t_chk or ""):
+        editor_opened = True
+        results.append(f"IMPORT OK on attempt {import_attempt}")
+        break
+    back()
+    time.sleep(1.5)
+    root_h, t_h = dump(f"home_again{import_attempt}")
+    if "相册" not in (t_h or ""):
+        run(["shell", "am", "start", "-n", f"{PKG}/com.hifn.pixelcake.MainActivity"])
+        time.sleep(4.0)
+if not editor_opened:
+    results.append("IMPORT: all 3 attempts failed (infrastructure race)")
 # 选定后编辑器渲染需要时间（解码 + 首帧 + ML 探测）
 time.sleep(6.0)
 root, txt = dump("editor")
