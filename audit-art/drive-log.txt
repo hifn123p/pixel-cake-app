@@ -1,0 +1,11 @@
+screen 1080x2400
+foreground: mCurrentFocus=Window{8619e86 u0 com.hifn.pixelcake.debug/com.hifn.pixelcake.MainActivity}
+editor open: True
+Traceback (most recent call last):
+  File "/home/runner/work/pixel-cake-app/pixel-cake-app/scripts/emulator_audit_drive.py", line 273, in <module>
+    handle = find_contains(hDump, "content-desc", "调整参数面板高度")
+             ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/pixel-cake-app/pixel-cake-app/scripts/emulator_audit_drive.py", line 79, in find_contains
+    return [n for n in root.iter("node") if n.get(attr) and value in n.get(attr)]
+                       ^^^^^^^^^
+AttributeError: 'str' object has no attribute 'iter'
