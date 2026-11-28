@@ -56,7 +56,7 @@
     <issue
         id="AndroidGradlePluginVersion"
         severity="Warning"
-        message="A newer version of com.android.application than 8.13.2 is available: 9.5.2"
+        message="A newer version of com.android.application than 8.13.2 is available: 9.5.3"
         category="Correctness"
         priority="4"
         summary="Obsolete Android Gradle Plugin Version"
@@ -152,7 +152,7 @@
     <issue
         id="GradleDependency"
         severity="Warning"
-        message="A newer version of com.google.ai.edge.litert:litert than 2.2.0 is available: 2.4.0"
+        message="A newer version of com.google.ai.edge.litert:litert than 2.2.0 is available: 2.4.1"
         category="Correctness"
         priority="4"
         summary="Obsolete Gradle Dependency"
@@ -275,7 +275,7 @@
         errorLine2="                              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="/home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/MainActivity.kt"
-            line="1789"
+            line="1794"
             column="31"/>
     </issue>
 
@@ -338,6 +338,22 @@
     <issue
         id="AutoboxingStateCreation"
         severity="Hint"
+        message="Prefer `mutableIntStateOf` instead of `mutableStateOf`"
+        category="Performance"
+        priority="3"
+        summary="`State&lt;T>` will autobox values assigned to this state. Use a specialized state type instead."
+        explanation="Calling `mutableStateOf&lt;T>()` when `T` is either backed by a primitive type on the JVM or is a value class results in a state implementation that requires all state values to be boxed. This usually causes an additional allocation for each state write, and adds some additional work to auto-unbox values when reading the value of the state. Instead, prefer to use a specialized primitive state implementation for `Int`, `Long`, `Float`, and `Double` when the state does not need to track null values and does not override the default `SnapshotMutationPolicy`. See `mutableIntStateOf()`, `mutableLongStateOf()`, `mutableFloatStateOf()`, and `mutableDoubleStateOf()` for more information."
+        errorLine1="    private var exportLongEdgeState by mutableStateOf(prefs.getInt(KEY_EXPORT_LONG_EDGE, 0))"
+        errorLine2="                                       ~~~~~~~~~~~~~~">
+        <location
+            file="/home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/settings/AppSettings.kt"
+            line="249"
+            column="40"/>
+    </issue>
+
+    <issue
+        id="AutoboxingStateCreation"
+        severity="Hint"
         message="Prefer `mutableFloatStateOf` instead of `mutableStateOf`"
         category="Performance"
         priority="3"
@@ -347,7 +363,7 @@
         errorLine2="                                                   ~~~~~~~~~~~~~~">
         <location
             file="/home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt"
-            line="381"
+            line="384"
             column="52"/>
     </issue>
 
@@ -363,7 +379,7 @@
         errorLine2="                                            ~~~~~~~~~~~~~~">
         <location
             file="/home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt"
-            line="409"
+            line="412"
             column="45"/>
     </issue>
 
@@ -379,7 +395,7 @@
         errorLine2="                                            ~~~~~~~~~~~~~~">
         <location
             file="/home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt"
-            line="411"
+            line="414"
             column="45"/>
     </issue>
 
@@ -395,7 +411,7 @@
         errorLine2="                              ~~~~~~~~~~~~~~">
         <location
             file="/home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt"
-            line="415"
+            line="418"
             column="31"/>
     </issue>
 
@@ -411,7 +427,7 @@
         errorLine2="                                    ~~~~~~~~~~~~~~">
         <location
             file="/home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt"
-            line="416"
+            line="419"
             column="37"/>
     </issue>
 
@@ -427,7 +443,7 @@
         errorLine2="                               ~~~~~~~~~~~~~~">
         <location
             file="/home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt"
-            line="467"
+            line="470"
             column="32"/>
     </issue>
 
@@ -443,7 +459,7 @@
         errorLine2="                                 ~~~~~~~~~~~~~~">
         <location
             file="/home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt"
-            line="623"
+            line="626"
             column="34"/>
     </issue>
 
@@ -459,7 +475,7 @@
         errorLine2="                                    ~~~~~~~~~~~~~~">
         <location
             file="/home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt"
-            line="624"
+            line="627"
             column="37"/>
     </issue>
 
@@ -667,7 +683,7 @@
         errorLine2="                 ~~~~~~~~~~~~">
         <location
             file="/home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/settings/AppSettings.kt"
-            line="140"
+            line="142"
             column="18"/>
     </issue>
 
@@ -683,7 +699,7 @@
         errorLine2="            ~~~~~~~~~~~~">
         <location
             file="/home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/settings/AppSettings.kt"
-            line="202"
+            line="204"
             column="13"/>
     </issue>
 
@@ -699,7 +715,7 @@
         errorLine2="            ~~~~~~~~~~~~">
         <location
             file="/home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/settings/AppSettings.kt"
-            line="211"
+            line="213"
             column="13"/>
     </issue>
 
@@ -715,7 +731,7 @@
         errorLine2="            ~~~~~~~~~~~~">
         <location
             file="/home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/settings/AppSettings.kt"
-            line="222"
+            line="224"
             column="13"/>
     </issue>
 
@@ -731,7 +747,23 @@
         errorLine2="            ~~~~~~~~~~~~">
         <location
             file="/home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/settings/AppSettings.kt"
-            line="240"
+            line="242"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        severity="Warning"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        category="Productivity"
+        priority="6"
+        summary="Use KTX extension function"
+        explanation="The Android KTX libraries decorates the Android platform SDK as well as various libraries with more convenient extension functions available from Kotlin, allowing you to use default parameters, named parameters, and more."
+        errorLine1="            prefs.edit().putInt(KEY_EXPORT_LONG_EDGE, value).apply()"
+        errorLine2="            ~~~~~~~~~~~~">
+        <location
+            file="/home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/settings/AppSettings.kt"
+            line="254"
             column="13"/>
     </issue>
 
@@ -747,7 +779,7 @@
         errorLine2="            ~~~~~~~~~~~~">
         <location
             file="/home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/settings/AppSettings.kt"
-            line="253"
+            line="267"
             column="13"/>
     </issue>
 
@@ -763,7 +795,7 @@
         errorLine2="            ~~~~~~~~~~~~">
         <location
             file="/home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/settings/AppSettings.kt"
-            line="266"
+            line="280"
             column="13"/>
     </issue>
 
@@ -779,7 +811,7 @@
         errorLine2="            ~~~~~~~~~~~~">
         <location
             file="/home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/settings/AppSettings.kt"
-            line="278"
+            line="292"
             column="13"/>
     </issue>
 
@@ -795,7 +827,7 @@
         errorLine2="            ~~~~~~~~~~~~">
         <location
             file="/home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/settings/AppSettings.kt"
-            line="293"
+            line="307"
             column="13"/>
     </issue>
 
@@ -811,7 +843,7 @@
         errorLine2="            ~~~~~~~~~~~~">
         <location
             file="/home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/settings/AppSettings.kt"
-            line="302"
+            line="316"
             column="13"/>
     </issue>
 
@@ -891,7 +923,7 @@
         errorLine2="                                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="/home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt"
-            line="928"
+            line="938"
             column="43"/>
     </issue>
 
@@ -939,7 +971,7 @@
         errorLine2="                                                             ^">
         <location
             file="/home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/MainActivity.kt"
-            line="1509"
+            line="1514"
             column="62"/>
     </issue>
 
@@ -955,7 +987,7 @@
         errorLine2="                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="/home/runner/work/pixel-cake-app/pixel-cake-app/app/src/main/java/com/hifn/pixelcake/MainActivity.kt"
-            line="1871"
+            line="1876"
             column="18"/>
     </issue>
 
