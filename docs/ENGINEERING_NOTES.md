@@ -1820,3 +1820,17 @@ PTP 层已有 9 个操作（握手/列图/拉图/属性读），**无 InitiateCa
 
 - Sony 机身的 InitiateCapture 行为需真机确认（部分机型要求「PC 遥控」模式）；
 - SetDevicePropValue（远程 ISO/光圈）留作后续——厂商属性码表需真机标定，盲写风险高。
+
+### 27.5 补记：v0.9.1 六轮 CI 收敛复盘（2026-11-28）
+
+编译错误逐个暴露的序列：`PtpProtocolList` 导入错位 → `background` 未导入。三层教训：
+
+1. **前缀子串替换事故**：`import ...CameraPhoto` 是 `...CameraPhotoList` 的前缀——
+   以它为锚的 `replace` 会命中后者前半截（`PtpProtocolList` 错位 + 重复导入）。
+   修复脚本又在同一前缀上再踩一次。**对 import 行做字符串手术必须按行号或带行尾 `\n` 锚**。
+2. **陈旧 build 日志误导**：build job 的日志提交步骤常年失败/落旧文件，
+   `foreground` 冲突实为 v0.7.6 时代记录（两份分属两个 composable 作用域，v0.9.0 绿版即如此）。
+   **只信 job 级结论 + 新鲜 lint 日志**（lint job 的日志提交一直可靠）。
+3. **组合 lambda 级联假象**：`Box` 未解析 ⇒ 组合 lambda 被当普通 lambda ⇒
+   同块内 `MaterialTheme.colorScheme` 全部报「@Composable 上下文违规」——
+   报错最多的行不是根，**未解析引用才是**；修复后级联全消。
