@@ -258,11 +258,18 @@ for import_attempt in range(3):
         editor_opened = True
         results.append(f"IMPORT OK on attempt {import_attempt}")
         break
+    # v0.9.2 实测：SAF 卡住时单次 back 逃不出去（整轮困在 SAF）——
+    # 双 back + 强杀重启，保证每一轮重试都从干净的首页开始。
+    back()
     back()
     time.sleep(1.5)
+    run(["shell", "am", "force-stop", PKG])
+    time.sleep(1.0)
+    run(["shell", "am", "start", "-n", f"{PKG}/com.hifn.pixelcake.MainActivity"])
+    time.sleep(5.0)
     root_h, t_h = dump(f"home_again{import_attempt}")
     if "相册" not in (t_h or ""):
-        run(["shell", "am", "start", "-n", f"{PKG}/com.hifn.pixelcake.MainActivity"])
+        run(["shell", "monkey", "-p", PKG, "1"])
         time.sleep(4.0)
 if not editor_opened:
     results.append("IMPORT: all 3 attempts failed (infrastructure race)")
