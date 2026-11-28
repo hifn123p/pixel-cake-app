@@ -179,7 +179,7 @@ document.getElementById(id).style.display = 'none';
     <div class="mdl-layout__header-row">
       <span class="mdl-layout-title">Lint Report: 51 warnings and 19 hints</span>
       <div class="mdl-layout-spacer"></div>
-      <nav class="mdl-navigation mdl-layout--large-screen-only">Check performed at Sat Nov 28 09:50:04 UTC 2026 by AGP (8.13.2)</nav>
+      <nav class="mdl-navigation mdl-layout--large-screen-only">Check performed at Sat Nov 28 10:10:13 UTC 2026 by AGP (8.13.2)</nav>
     </div>
   </header>
   <div class="mdl-layout__drawer">
@@ -1199,14 +1199,14 @@ Dismiss</button>            </div>
 <span class="lineno"> 243 </span>  <span class="keyword">val</span> program = PixelProgram(p, frameW = cw, frameH = ch, dither = <span class="keyword">true</span>)
 </pre>
 
-<span class="location"><a href="../../src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt">../../src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt</a>:961</span>: <span class="message">Use the KTX function <code>createBitmap</code> instead?</span><br /><pre class="errorlines">
-<span class="lineno">  958 </span>  runCatching {
-<span class="lineno">  959 </span>      <span class="keyword">val</span> side = masksNow.gridSide
-<span class="lineno">  960 </span>      <span class="keyword">val</span> m = masksNow.maskFor(sc).resampleTo(side, side)
-<span class="caretline"><span class="lineno">  961 </span>      <span class="keyword">val</span> bmp = <span class="warning">Bitmap.createBitmap(side, side, Bitmap.Config.ARGB_8888)</span>&nbsp;&nbsp;</span>
-<span class="lineno">  962 </span>      <span class="keyword">val</span> px = IntArray(side * side)
-<span class="lineno">  963 </span>      <span class="keyword">val</span> data = FloatArray(side * side)
-<span class="lineno">  964 </span>      <span class="keyword">var</span> i = <span class="number">0</span></pre>
+<span class="location"><a href="../../src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt">../../src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt</a>:1027</span>: <span class="message">Use the KTX function <code>createBitmap</code> instead?</span><br /><pre class="errorlines">
+<span class="lineno"> 1024 </span>  runCatching {
+<span class="lineno"> 1025 </span>      <span class="keyword">val</span> side = masksNow.gridSide
+<span class="lineno"> 1026 </span>      <span class="keyword">val</span> m = masksNow.maskFor(sc).resampleTo(side, side)
+<span class="caretline"><span class="lineno"> 1027 </span>      <span class="keyword">val</span> bmp = <span class="warning">Bitmap.createBitmap(side, side, Bitmap.Config.ARGB_8888)</span>&nbsp;&nbsp;</span>
+<span class="lineno"> 1028 </span>      <span class="keyword">val</span> px = IntArray(side * side)
+<span class="lineno"> 1029 </span>      <span class="keyword">val</span> data = FloatArray(side * side)
+<span class="lineno"> 1030 </span>      <span class="keyword">var</span> i = <span class="number">0</span></pre>
 
 <span class="location"><a href="../../src/main/java/com/hifn/pixelcake/MainActivity.kt">../../src/main/java/com/hifn/pixelcake/MainActivity.kt</a>:460</span>: <span class="message">Use the KTX function <code>createBitmap</code> instead?</span><br /><pre class="errorlines">
 <span class="lineno">  457 </span>                        <span class="comment">// 旧的那块**不手动回收**：它可能刚离开画面、合成器仍持有它，</span>
