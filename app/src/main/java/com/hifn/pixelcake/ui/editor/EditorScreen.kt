@@ -59,6 +59,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
@@ -994,6 +995,10 @@ fun EditorScreen(
                     // scrim 压暗框外、三分线辅助构图、四角手柄拖拽（比例约束时锁定）、框内拖动移框。
                     // 覆盖层在上层消费全部触摸 ⇒ 画布缩放/平移/双通道手势不并发。
                     if (cropMode && cropWork != null && dispW > 0f && dispH > 0f) {
+                        // v0.9.2 诊断：组合事实 vs LaunchedEffect 读数 —— 区分「没组合」与「组合了但 dump 看不见」
+                        SideEffect {
+                            DebugLog.i(DebugLog.TAG_EDIT, "crop overlay COMPOSED")
+                        }
                         val cropFrame = Modifier
                             .size(with(density) { dispW.toDp() }, with(density) { dispH.toDp() })
                             .offset { IntOffset(previewPan.x.roundToInt(), previewPan.y.roundToInt()) }
