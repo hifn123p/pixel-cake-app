@@ -179,7 +179,7 @@ document.getElementById(id).style.display = 'none';
     <div class="mdl-layout__header-row">
       <span class="mdl-layout-title">Lint Report: 51 warnings and 19 hints</span>
       <div class="mdl-layout-spacer"></div>
-      <nav class="mdl-navigation mdl-layout--large-screen-only">Check performed at Sat Nov 28 09:11:36 UTC 2026 by AGP (8.13.2)</nav>
+      <nav class="mdl-navigation mdl-layout--large-screen-only">Check performed at Sat Nov 28 09:30:03 UTC 2026 by AGP (8.13.2)</nav>
     </div>
   </header>
   <div class="mdl-layout__drawer">
@@ -746,81 +746,81 @@ Dismiss</button>            </div>
 <span class="lineno">  153 </span>    <span class="keyword">val</span> onShutter: () -> Unit = onShutter@{
 </pre>
 
-<span class="location"><a href="../../src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt">../../src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt</a>:385</span>: <span class="message">Prefer <code>mutableFloatStateOf</code> instead of <code>mutableStateOf</code></span><br /><pre class="errorlines">
-<span class="lineno">  382 </span>    <span class="comment">// onParamChange，而 AppRoot 在 onParamChange 里无条件清 activePresetId ⇒</span>
-<span class="lineno">  383 </span>    <span class="comment">// 第一格拖动就把预设取消、环在指下消失（node 销毁连 commit 都发不出）。</span>
-<span class="lineno">  384 </span>    <span class="comment">// 强度环是预设的一部分，不是「手动改动」。</span>
-<span class="caretline"><span class="lineno">  385 </span>    <span class="keyword">var</span> presetAmount by remember(activePresetId) { <span class="warning">mutableStateOf</span>(<span class="number">1f</span>) }&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>
-<span class="lineno">  386 </span>    <span class="keyword">val</span> onPresetAmount: (Float) -> Unit = { a ->
-<span class="lineno">  387 </span>        presetAmount = a
-<span class="lineno">  388 </span>        <span class="keyword">val</span> preset = presets.firstOrNull { it.id == activePresetId }
+<span class="location"><a href="../../src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt">../../src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt</a>:386</span>: <span class="message">Prefer <code>mutableFloatStateOf</code> instead of <code>mutableStateOf</code></span><br /><pre class="errorlines">
+<span class="lineno">  383 </span>    <span class="comment">// onParamChange，而 AppRoot 在 onParamChange 里无条件清 activePresetId ⇒</span>
+<span class="lineno">  384 </span>    <span class="comment">// 第一格拖动就把预设取消、环在指下消失（node 销毁连 commit 都发不出）。</span>
+<span class="lineno">  385 </span>    <span class="comment">// 强度环是预设的一部分，不是「手动改动」。</span>
+<span class="caretline"><span class="lineno">  386 </span>    <span class="keyword">var</span> presetAmount by remember(activePresetId) { <span class="warning">mutableStateOf</span>(<span class="number">1f</span>) }&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>
+<span class="lineno">  387 </span>    <span class="keyword">val</span> onPresetAmount: (Float) -> Unit = { a ->
+<span class="lineno">  388 </span>        presetAmount = a
+<span class="lineno">  389 </span>        <span class="keyword">val</span> preset = presets.firstOrNull { it.id == activePresetId }
 </pre>
 
-<span class="location"><a href="../../src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt">../../src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt</a>:413</span>: <span class="message">Prefer <code>mutableFloatStateOf</code> instead of <code>mutableStateOf</code></span><br /><pre class="errorlines">
-<span class="lineno">  410 </span>    }
-<span class="lineno">  411 </span>
-<span class="lineno">  412 </span>    <span class="comment">// —— 预览缩放 / 平移（双指捏合 ≤8x、双击 2.5x、单指平移；换图整体复位）——</span>
-<span class="caretline"><span class="lineno">  413 </span>    <span class="keyword">var</span> previewZoom by remember(original) { <span class="warning">mutableStateOf</span>(<span class="number">1f</span>) }&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>
-<span class="lineno">  414 </span>    <span class="keyword">var</span> previewPan by remember(original) { mutableStateOf(Offset.Zero) }
-<span class="lineno">  415 </span>    <span class="keyword">val</span> lastFitWidth = remember(original) { mutableStateOf(<span class="number">0f</span>) }
+<span class="location"><a href="../../src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt">../../src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt</a>:414</span>: <span class="message">Prefer <code>mutableFloatStateOf</code> instead of <code>mutableStateOf</code></span><br /><pre class="errorlines">
+<span class="lineno">  411 </span>    }
+<span class="lineno">  412 </span>
+<span class="lineno">  413 </span>    <span class="comment">// —— 预览缩放 / 平移（双指捏合 ≤8x、双击 2.5x、单指平移；换图整体复位）——</span>
+<span class="caretline"><span class="lineno">  414 </span>    <span class="keyword">var</span> previewZoom by remember(original) { <span class="warning">mutableStateOf</span>(<span class="number">1f</span>) }&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>
+<span class="lineno">  415 </span>    <span class="keyword">var</span> previewPan by remember(original) { mutableStateOf(Offset.Zero) }
+<span class="lineno">  416 </span>    <span class="keyword">val</span> lastFitWidth = remember(original) { mutableStateOf(<span class="number">0f</span>) }
 </pre>
 
-<span class="location"><a href="../../src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt">../../src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt</a>:415</span>: <span class="message">Prefer <code>mutableFloatStateOf</code> instead of <code>mutableStateOf</code></span><br /><pre class="errorlines">
-<span class="lineno">  412 </span>    <span class="comment">// —— 预览缩放 / 平移（双指捏合 ≤8x、双击 2.5x、单指平移；换图整体复位）——</span>
-<span class="lineno">  413 </span>    <span class="keyword">var</span> previewZoom by remember(original) { mutableStateOf(<span class="number">1f</span>) }
-<span class="lineno">  414 </span>    <span class="keyword">var</span> previewPan by remember(original) { mutableStateOf(Offset.Zero) }
-<span class="caretline"><span class="lineno">  415 </span>    <span class="keyword">val</span> lastFitWidth = remember(original) { <span class="warning">mutableStateOf</span>(<span class="number">0f</span>) }&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>
-<span class="lineno">  416 </span>
-<span class="lineno">  417 </span>    <span class="comment">// 全屏画布实测尺寸：状态栏 / 导航栏 Insets 会让「屏幕高度」与可用高度差几十 dp，</span>
-<span class="lineno">  418 </span>    <span class="comment">// fit / 缩放补偿都必须用实测值当分母。</span></pre>
+<span class="location"><a href="../../src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt">../../src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt</a>:416</span>: <span class="message">Prefer <code>mutableFloatStateOf</code> instead of <code>mutableStateOf</code></span><br /><pre class="errorlines">
+<span class="lineno">  413 </span>    <span class="comment">// —— 预览缩放 / 平移（双指捏合 ≤8x、双击 2.5x、单指平移；换图整体复位）——</span>
+<span class="lineno">  414 </span>    <span class="keyword">var</span> previewZoom by remember(original) { mutableStateOf(<span class="number">1f</span>) }
+<span class="lineno">  415 </span>    <span class="keyword">var</span> previewPan by remember(original) { mutableStateOf(Offset.Zero) }
+<span class="caretline"><span class="lineno">  416 </span>    <span class="keyword">val</span> lastFitWidth = remember(original) { <span class="warning">mutableStateOf</span>(<span class="number">0f</span>) }&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>
+<span class="lineno">  417 </span>
+<span class="lineno">  418 </span>    <span class="comment">// 全屏画布实测尺寸：状态栏 / 导航栏 Insets 会让「屏幕高度」与可用高度差几十 dp，</span>
+<span class="lineno">  419 </span>    <span class="comment">// fit / 缩放补偿都必须用实测值当分母。</span></pre>
 
 <button class="mdl-button mdl-js-button mdl-button--primary" id="AutoboxingStateCreationDivLink" onclick="reveal('AutoboxingStateCreationDiv');" />+ 12 More Occurrences...</button>
 <div id="AutoboxingStateCreationDiv" style="display: none">
-<span class="location"><a href="../../src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt">../../src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt</a>:419</span>: <span class="message">Prefer <code>mutableIntStateOf</code> instead of <code>mutableStateOf</code></span><br /><pre class="errorlines">
-<span class="lineno">  416 </span>
-<span class="lineno">  417 </span>    <span class="comment">// 全屏画布实测尺寸：状态栏 / 导航栏 Insets 会让「屏幕高度」与可用高度差几十 dp，</span>
-<span class="lineno">  418 </span>    <span class="comment">// fit / 缩放补偿都必须用实测值当分母。</span>
-<span class="caretline"><span class="lineno">  419 </span>    <span class="keyword">var</span> screenW by remember { <span class="warning">mutableStateOf</span>(<span class="number">0</span>) }&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>
-<span class="lineno">  420 </span>    <span class="keyword">var</span> ownerHeightPx by remember { mutableStateOf(<span class="number">0</span>) }
-<span class="lineno">  421 </span>    <span class="comment">// 照片可视区（除去 chrome 后的区域）—— fit 计算用这个而不是全屏</span>
-<span class="lineno">  422 </span>    <span class="keyword">var</span> photoBoxSize by remember { mutableStateOf(IntSize.Zero) }
-</pre>
-
 <span class="location"><a href="../../src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt">../../src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt</a>:420</span>: <span class="message">Prefer <code>mutableIntStateOf</code> instead of <code>mutableStateOf</code></span><br /><pre class="errorlines">
-<span class="lineno">  417 </span>    <span class="comment">// 全屏画布实测尺寸：状态栏 / 导航栏 Insets 会让「屏幕高度」与可用高度差几十 dp，</span>
-<span class="lineno">  418 </span>    <span class="comment">// fit / 缩放补偿都必须用实测值当分母。</span>
-<span class="lineno">  419 </span>    <span class="keyword">var</span> screenW by remember { mutableStateOf(<span class="number">0</span>) }
-<span class="caretline"><span class="lineno">  420 </span>    <span class="keyword">var</span> ownerHeightPx by remember { <span class="warning">mutableStateOf</span>(<span class="number">0</span>) }&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>
-<span class="lineno">  421 </span>    <span class="comment">// 照片可视区（除去 chrome 后的区域）—— fit 计算用这个而不是全屏</span>
-<span class="lineno">  422 </span>    <span class="keyword">var</span> photoBoxSize by remember { mutableStateOf(IntSize.Zero) }
+<span class="lineno">  417 </span>
+<span class="lineno">  418 </span>    <span class="comment">// 全屏画布实测尺寸：状态栏 / 导航栏 Insets 会让「屏幕高度」与可用高度差几十 dp，</span>
+<span class="lineno">  419 </span>    <span class="comment">// fit / 缩放补偿都必须用实测值当分母。</span>
+<span class="caretline"><span class="lineno">  420 </span>    <span class="keyword">var</span> screenW by remember { <span class="warning">mutableStateOf</span>(<span class="number">0</span>) }&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>
+<span class="lineno">  421 </span>    <span class="keyword">var</span> ownerHeightPx by remember { mutableStateOf(<span class="number">0</span>) }
+<span class="lineno">  422 </span>    <span class="comment">// 照片可视区（除去 chrome 后的区域）—— fit 计算用这个而不是全屏</span>
+<span class="lineno">  423 </span>    <span class="keyword">var</span> photoBoxSize by remember { mutableStateOf(IntSize.Zero) }
 </pre>
 
-<span class="location"><a href="../../src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt">../../src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt</a>:471</span>: <span class="message">Prefer <code>mutableFloatStateOf</code> instead of <code>mutableStateOf</code></span><br /><pre class="errorlines">
-<span class="lineno">  468 </span>    <span class="comment">// `BitmapPainter` 失效重绘 —— 拖动分割线时正好每帧都在重组，那就是发闪的根因</span>
-<span class="lineno">  469 </span>    <span class="comment">// （与上面 [display] 同一条纪律）。</span>
-<span class="lineno">  470 </span>    <span class="keyword">var</span> splitCompare by remember { mutableStateOf(<span class="keyword">false</span>) }
-<span class="caretline"><span class="lineno">  471 </span>    <span class="keyword">var</span> splitPos by remember { <span class="warning">mutableStateOf</span>(<span class="number">0.5f</span>) }&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>
-<span class="lineno">  472 </span>    <span class="keyword">val</span> beforeBmp = remember(compareSource) { compareSource.asImageBitmap() }
-<span class="lineno">  473 </span>    <span class="keyword">val</span> afterBmp = remember(rendered) { rendered?.asImageBitmap() }
+<span class="location"><a href="../../src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt">../../src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt</a>:421</span>: <span class="message">Prefer <code>mutableIntStateOf</code> instead of <code>mutableStateOf</code></span><br /><pre class="errorlines">
+<span class="lineno">  418 </span>    <span class="comment">// 全屏画布实测尺寸：状态栏 / 导航栏 Insets 会让「屏幕高度」与可用高度差几十 dp，</span>
+<span class="lineno">  419 </span>    <span class="comment">// fit / 缩放补偿都必须用实测值当分母。</span>
+<span class="lineno">  420 </span>    <span class="keyword">var</span> screenW by remember { mutableStateOf(<span class="number">0</span>) }
+<span class="caretline"><span class="lineno">  421 </span>    <span class="keyword">var</span> ownerHeightPx by remember { <span class="warning">mutableStateOf</span>(<span class="number">0</span>) }&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>
+<span class="lineno">  422 </span>    <span class="comment">// 照片可视区（除去 chrome 后的区域）—— fit 计算用这个而不是全屏</span>
+<span class="lineno">  423 </span>    <span class="keyword">var</span> photoBoxSize by remember { mutableStateOf(IntSize.Zero) }
 </pre>
 
-<span class="location"><a href="../../src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt">../../src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt</a>:627</span>: <span class="message">Prefer <code>mutableIntStateOf</code> instead of <code>mutableStateOf</code></span><br /><pre class="errorlines">
-<span class="lineno">  624 </span>    <span class="keyword">var</span> deckHOverride by remember { mutableStateOf&lt;Dp?>(<span class="keyword">null</span>) }
-<span class="lineno">  625 </span>    <span class="keyword">val</span> deckEffH = deckHOverride ?: deckH
-<span class="lineno">  626 </span>    <span class="comment">// v0.7.4：顶/底 chrome 实测高度（px）—— 照片保留区与 HUD/提示的定位都吃这两个值</span>
-<span class="caretline"><span class="lineno">  627 </span>    <span class="keyword">var</span> photoTopPx by remember { <span class="warning">mutableStateOf</span>(<span class="number">252</span>) }&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>
-<span class="lineno">  628 </span>    <span class="keyword">var</span> photoBottomPx by remember { mutableStateOf(<span class="number">656</span>) }
-<span class="lineno">  629 </span>    <span class="comment">// v0.7.4（用户审计 P1-2）：Deck **三档收起** —— 收起态 44dp 单行（展开钮 + 分组 chips），</span>
-<span class="lineno">  630 </span>    <span class="comment">// 预览面积 49% → 65%。捏合放大（>1.5×）自动收起让位（Snapseed 惯例）。</span></pre>
+<span class="location"><a href="../../src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt">../../src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt</a>:472</span>: <span class="message">Prefer <code>mutableFloatStateOf</code> instead of <code>mutableStateOf</code></span><br /><pre class="errorlines">
+<span class="lineno">  469 </span>    <span class="comment">// `BitmapPainter` 失效重绘 —— 拖动分割线时正好每帧都在重组，那就是发闪的根因</span>
+<span class="lineno">  470 </span>    <span class="comment">// （与上面 [display] 同一条纪律）。</span>
+<span class="lineno">  471 </span>    <span class="keyword">var</span> splitCompare by remember { mutableStateOf(<span class="keyword">false</span>) }
+<span class="caretline"><span class="lineno">  472 </span>    <span class="keyword">var</span> splitPos by remember { <span class="warning">mutableStateOf</span>(<span class="number">0.5f</span>) }&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>
+<span class="lineno">  473 </span>    <span class="keyword">val</span> beforeBmp = remember(compareSource) { compareSource.asImageBitmap() }
+<span class="lineno">  474 </span>    <span class="keyword">val</span> afterBmp = remember(rendered) { rendered?.asImageBitmap() }
+</pre>
 
 <span class="location"><a href="../../src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt">../../src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt</a>:628</span>: <span class="message">Prefer <code>mutableIntStateOf</code> instead of <code>mutableStateOf</code></span><br /><pre class="errorlines">
-<span class="lineno">  625 </span>    <span class="keyword">val</span> deckEffH = deckHOverride ?: deckH
-<span class="lineno">  626 </span>    <span class="comment">// v0.7.4：顶/底 chrome 实测高度（px）—— 照片保留区与 HUD/提示的定位都吃这两个值</span>
-<span class="lineno">  627 </span>    <span class="keyword">var</span> photoTopPx by remember { mutableStateOf(<span class="number">252</span>) }
-<span class="caretline"><span class="lineno">  628 </span>    <span class="keyword">var</span> photoBottomPx by remember { <span class="warning">mutableStateOf</span>(<span class="number">656</span>) }&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>
-<span class="lineno">  629 </span>    <span class="comment">// v0.7.4（用户审计 P1-2）：Deck **三档收起** —— 收起态 44dp 单行（展开钮 + 分组 chips），</span>
-<span class="lineno">  630 </span>    <span class="comment">// 预览面积 49% → 65%。捏合放大（>1.5×）自动收起让位（Snapseed 惯例）。</span>
-<span class="lineno">  631 </span>    <span class="keyword">var</span> deckCollapsed by remember { mutableStateOf(<span class="keyword">false</span>) }
+<span class="lineno">  625 </span>    <span class="keyword">var</span> deckHOverride by remember { mutableStateOf&lt;Dp?>(<span class="keyword">null</span>) }
+<span class="lineno">  626 </span>    <span class="keyword">val</span> deckEffH = deckHOverride ?: deckH
+<span class="lineno">  627 </span>    <span class="comment">// v0.7.4：顶/底 chrome 实测高度（px）—— 照片保留区与 HUD/提示的定位都吃这两个值</span>
+<span class="caretline"><span class="lineno">  628 </span>    <span class="keyword">var</span> photoTopPx by remember { <span class="warning">mutableStateOf</span>(<span class="number">252</span>) }&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>
+<span class="lineno">  629 </span>    <span class="keyword">var</span> photoBottomPx by remember { mutableStateOf(<span class="number">656</span>) }
+<span class="lineno">  630 </span>    <span class="comment">// v0.7.4（用户审计 P1-2）：Deck **三档收起** —— 收起态 44dp 单行（展开钮 + 分组 chips），</span>
+<span class="lineno">  631 </span>    <span class="comment">// 预览面积 49% → 65%。捏合放大（>1.5×）自动收起让位（Snapseed 惯例）。</span></pre>
+
+<span class="location"><a href="../../src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt">../../src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt</a>:629</span>: <span class="message">Prefer <code>mutableIntStateOf</code> instead of <code>mutableStateOf</code></span><br /><pre class="errorlines">
+<span class="lineno">  626 </span>    <span class="keyword">val</span> deckEffH = deckHOverride ?: deckH
+<span class="lineno">  627 </span>    <span class="comment">// v0.7.4：顶/底 chrome 实测高度（px）—— 照片保留区与 HUD/提示的定位都吃这两个值</span>
+<span class="lineno">  628 </span>    <span class="keyword">var</span> photoTopPx by remember { mutableStateOf(<span class="number">252</span>) }
+<span class="caretline"><span class="lineno">  629 </span>    <span class="keyword">var</span> photoBottomPx by remember { <span class="warning">mutableStateOf</span>(<span class="number">656</span>) }&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>
+<span class="lineno">  630 </span>    <span class="comment">// v0.7.4（用户审计 P1-2）：Deck **三档收起** —— 收起态 44dp 单行（展开钮 + 分组 chips），</span>
+<span class="lineno">  631 </span>    <span class="comment">// 预览面积 49% → 65%。捏合放大（>1.5×）自动收起让位（Snapseed 惯例）。</span>
+<span class="lineno">  632 </span>    <span class="keyword">var</span> deckCollapsed by remember { mutableStateOf(<span class="keyword">false</span>) }
 </pre>
 
 <span class="location"><a href="../../src/main/java/com/hifn/pixelcake/MainActivity.kt">../../src/main/java/com/hifn/pixelcake/MainActivity.kt</a>:180</span>: <span class="message">Prefer <code>mutableIntStateOf</code> instead of <code>mutableStateOf</code></span><br /><pre class="errorlines">
@@ -1199,14 +1199,14 @@ Dismiss</button>            </div>
 <span class="lineno"> 243 </span>  <span class="keyword">val</span> program = PixelProgram(p, frameW = cw, frameH = ch, dither = <span class="keyword">true</span>)
 </pre>
 
-<span class="location"><a href="../../src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt">../../src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt</a>:960</span>: <span class="message">Use the KTX function <code>createBitmap</code> instead?</span><br /><pre class="errorlines">
-<span class="lineno">  957 </span>  runCatching {
-<span class="lineno">  958 </span>      <span class="keyword">val</span> side = masksNow.gridSide
-<span class="lineno">  959 </span>      <span class="keyword">val</span> m = masksNow.maskFor(sc).resampleTo(side, side)
-<span class="caretline"><span class="lineno">  960 </span>      <span class="keyword">val</span> bmp = <span class="warning">Bitmap.createBitmap(side, side, Bitmap.Config.ARGB_8888)</span>&nbsp;&nbsp;</span>
-<span class="lineno">  961 </span>      <span class="keyword">val</span> px = IntArray(side * side)
-<span class="lineno">  962 </span>      <span class="keyword">val</span> data = FloatArray(side * side)
-<span class="lineno">  963 </span>      <span class="keyword">var</span> i = <span class="number">0</span></pre>
+<span class="location"><a href="../../src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt">../../src/main/java/com/hifn/pixelcake/ui/editor/EditorScreen.kt</a>:961</span>: <span class="message">Use the KTX function <code>createBitmap</code> instead?</span><br /><pre class="errorlines">
+<span class="lineno">  958 </span>  runCatching {
+<span class="lineno">  959 </span>      <span class="keyword">val</span> side = masksNow.gridSide
+<span class="lineno">  960 </span>      <span class="keyword">val</span> m = masksNow.maskFor(sc).resampleTo(side, side)
+<span class="caretline"><span class="lineno">  961 </span>      <span class="keyword">val</span> bmp = <span class="warning">Bitmap.createBitmap(side, side, Bitmap.Config.ARGB_8888)</span>&nbsp;&nbsp;</span>
+<span class="lineno">  962 </span>      <span class="keyword">val</span> px = IntArray(side * side)
+<span class="lineno">  963 </span>      <span class="keyword">val</span> data = FloatArray(side * side)
+<span class="lineno">  964 </span>      <span class="keyword">var</span> i = <span class="number">0</span></pre>
 
 <span class="location"><a href="../../src/main/java/com/hifn/pixelcake/MainActivity.kt">../../src/main/java/com/hifn/pixelcake/MainActivity.kt</a>:460</span>: <span class="message">Use the KTX function <code>createBitmap</code> instead?</span><br /><pre class="errorlines">
 <span class="lineno">  457 </span>                        <span class="comment">// 旧的那块**不手动回收**：它可能刚离开画面、合成器仍持有它，</span>

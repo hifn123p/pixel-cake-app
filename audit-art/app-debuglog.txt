@@ -1,25 +1,25 @@
-log_20261128_091510.txt
-log_20261128_092103.txt
-log_20261128_092121.txt
-log_20261128_092130.txt
-2026-11-28 09:15:10.611 [INFO] LIFECYCLE: DebugLog initialized {file=/data/user/0/com.hifn.pixelcake.debug/files/debug/log_20261128_091510.txt}
-2026-11-28 09:15:10.643 [INFO] LIFECYCLE: boot snapshot {summary=manufacturer=Google model=sdk_gphone64_x86_64 soc=ranchu android=16(36) abi=x86_64 totalMem=3920MiB availMem=1951MiB wideColorGamut=false tier=low fullRes=4096 proxy=1024}
-2026-11-28 09:15:26.567 [INFO] IMPORT: pick {uri=image%3A16}
-2026-11-28 09:15:26.941 [INFO] DECODE: decoded {w=800, h=1000, raw=false, mime=image/jpeg, linear=false}
-2026-11-28 09:15:28.999 [WARN] ML: CompiledModel.create failed {accel=GPU, err=Failed to compile model}
-2026-11-28 09:15:29.442 [INFO] ML: skin mask model loaded {accel=CPU, side=256, asset=models/selfie_multiclass_256x256.tflite}
-2026-11-28 09:15:30.454 [INFO] EDIT: detail pass {w=192, h=192, ms=263}
-2026-11-28 09:15:31.875 [INFO] EDIT: preset thumbs ready {count=54, px=192}
-2026-11-28 09:16:03.370 [INFO] ML: object masks ready {key=content://com.android.providers.media.documents/document/image%3A16#800x1000#1, side=256, accel=CPU}
-2026-11-28 09:16:03.538 [INFO] ML: skin mask ready {key=content://com.android.providers.media.documents/document/image%3A16#800x1000#1, grid=256, accel=CPU}
-2026-11-28 09:16:03.660 [INFO] ML: object scopes probed {available=true, empty=人物,皮肤,面部,头发,衣服,配饰}
-2026-11-28 09:16:03.697 [DEBUG] EDIT: render done {w=800, h=1000, stamp=1, ms=35262, layers=0}
-2026-11-28 09:16:43.164 [DEBUG] EDIT: render done {w=800, h=1000, stamp=2, ms=467, layers=0}
-2026-11-28 09:16:43.471 [DEBUG] EDIT: render done {w=800, h=1000, stamp=3, ms=161, layers=0}
-2026-11-28 09:17:22.748 [DEBUG] EDIT: render done {w=800, h=1000, stamp=4, ms=477, layers=0}
-2026-11-28 09:17:41.351 [DEBUG] EDIT: render done {w=800, h=1000, stamp=5, ms=123, layers=0}
-2026-11-28 09:17:57.775 [INFO] EDIT: auto enhance {ev=0.22156858, c=0.07794115}
-2026-11-28 09:17:57.931 [DEBUG] EDIT: render done {w=800, h=1000, stamp=6, ms=129, layers=0}
-2026-11-28 09:18:35.885 [INFO] EDIT: crop open requested
-2026-11-28 09:18:35.900 [INFO] EDIT: crop overlay cond {workNull=false, dispW=1032.0, dispH=1290.0, pan=Offset(0.0, 0.0)}
-2026-11-28 09:18:35.937 [INFO] EDIT: crop mode on {hasCrop=false}
+log_20261128_093318.txt
+log_20261128_093848.txt
+log_20261128_093906.txt
+log_20261128_093914.txt
+2026-11-28 09:33:18.334 [INFO] LIFECYCLE: DebugLog initialized {file=/data/user/0/com.hifn.pixelcake.debug/files/debug/log_20261128_093318.txt}
+2026-11-28 09:33:18.377 [INFO] LIFECYCLE: boot snapshot {summary=manufacturer=Google model=sdk_gphone64_x86_64 soc=ranchu android=16(36) abi=x86_64 totalMem=3920MiB availMem=1926MiB wideColorGamut=false tier=low fullRes=4096 proxy=1024}
+2026-11-28 09:33:33.655 [INFO] IMPORT: pick {uri=image%3A16}
+2026-11-28 09:33:34.171 [INFO] DECODE: decoded {w=800, h=1000, raw=false, mime=image/jpeg, linear=false}
+2026-11-28 09:33:35.879 [WARN] ML: CompiledModel.create failed {accel=GPU, err=Failed to compile model}
+2026-11-28 09:33:36.165 [INFO] ML: skin mask model loaded {accel=CPU, side=256, asset=models/selfie_multiclass_256x256.tflite}
+2026-11-28 09:33:36.694 [INFO] EDIT: preset thumbs ready {count=54, px=192}
+2026-11-28 09:33:47.424 [INFO] ML: object masks ready {key=content://com.android.providers.media.documents/document/image%3A16#800x1000#1, side=256, accel=CPU}
+2026-11-28 09:33:47.568 [INFO] ML: object scopes probed {available=true, empty=人物,皮肤,面部,头发,衣服,配饰}
+2026-11-28 09:33:47.739 [INFO] ML: skin mask ready {key=content://com.android.providers.media.documents/document/image%3A16#800x1000#1, grid=256, accel=CPU}
+2026-11-28 09:33:47.870 [DEBUG] EDIT: render done {w=800, h=1000, stamp=1, ms=12416, layers=0}
+2026-11-28 09:34:31.775 [DEBUG] EDIT: render done {w=800, h=1000, stamp=2, ms=440, layers=0}
+2026-11-28 09:34:32.018 [DEBUG] EDIT: render done {w=800, h=1000, stamp=3, ms=194, layers=0}
+2026-11-28 09:34:32.199 [DEBUG] EDIT: render done {w=800, h=1000, stamp=4, ms=162, layers=0}
+2026-11-28 09:35:10.561 [DEBUG] EDIT: render done {w=800, h=1000, stamp=5, ms=444, layers=0}
+2026-11-28 09:35:28.818 [DEBUG] EDIT: render done {w=800, h=1000, stamp=6, ms=110, layers=0}
+2026-11-28 09:35:44.763 [INFO] EDIT: auto enhance {ev=0.22156858, c=0.07794115}
+2026-11-28 09:35:44.894 [DEBUG] EDIT: render done {w=800, h=1000, stamp=7, ms=111, layers=0}
+2026-11-28 09:36:22.537 [INFO] EDIT: crop open requested
+2026-11-28 09:36:22.556 [INFO] EDIT: crop overlay cond {workNull=false, dispW=1032.0, dispH=1290.0, pan=Offset(0.0, 0.0)}
+2026-11-28 09:36:22.587 [INFO] EDIT: crop mode on {hasCrop=false}

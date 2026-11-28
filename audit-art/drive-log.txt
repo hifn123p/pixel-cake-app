@@ -1,100 +1,100 @@
 screen 1080x2400
-foreground: mCurrentFocus=Window{e99b2a u0 com.hifn.pixelcake.debug/com.hifn.pixelcake.MainActivity}
+foreground: mCurrentFocus=Window{f73ff01 u0 com.hifn.pixelcake.debug/com.hifn.pixelcake.MainActivity}
 editor open: True
 
 === WALKTHROUGH RESULT ===
-foreground='mCurrentFocus=Window{e99b2a u0 com.hifn.pixelcake.debug/com.hifn.pixelcake.MainActivity}'
-SHOT 01_home ok (275741 bytes)
+foreground='mCurrentFocus=Window{f73ff01 u0 com.hifn.pixelcake.debug/com.hifn.pixelcake.MainActivity}'
+SHOT 01_home ok (275742 bytes)
 IMPORT ATTEMPT 0
 TAP B0_saf_open: text=文件 ARW at (540, 2022)
 B0: SAF found portrait_test.jpg (try 0)
 B0: SAF tapped portrait_test.jpg at (327, 1060)
 IMPORT OK on attempt 0
-SHOT 05_editor_first_frame ok (202776 bytes)
+SHOT 05_editor_first_frame ok (198163 bytes)
 EDITOR OPEN: True
-first frame ready after ~6s
-SHOT 05b_editor_first_ready ok (210096 bytes)
+first frame ready after ~0s
+SHOT 05b_editor_first_ready ok (198163 bytes)
 TAP 10_rail_明暗: text=明暗 at (258, 2271)
-SHOT 11_deck_明暗 ok (198273 bytes)
+SHOT 11_deck_明暗 ok (198553 bytes)
 TAP 10_rail_颜色: text=颜色 at (399, 2271)
-SHOT 11_deck_颜色 ok (208722 bytes)
+SHOT 11_deck_颜色 ok (209017 bytes)
 TAP 10_rail_曲线: text=曲线 at (540, 2271)
-SHOT 11_deck_曲线 ok (185292 bytes)
+SHOT 11_deck_曲线 ok (185583 bytes)
 TAP 10_rail_细节: text=细节 at (681, 2271)
-SHOT 11_deck_细节 ok (195232 bytes)
+SHOT 11_deck_细节 ok (195479 bytes)
 TAP 10_rail_预设: text=预设 at (822, 2271)
-SHOT 11_deck_预设 ok (241074 bytes)
+SHOT 11_deck_预设 ok (241361 bytes)
 TAP 10_rail_人像: text=人像 at (117, 2271)
-SHOT 11_deck_人像 ok (217838 bytes)
+SHOT 11_deck_人像 ok (218090 bytes)
 TAP 20_rail_light: text=明暗 at (258, 2271)
-SHOT 21_dual_channel_drag ok (203928 bytes)
+SHOT 21_dual_channel_drag ok (205768 bytes)
 TAP 22_rail_curve: text=曲线 at (540, 2271)
-SHOT 23_curve_deck ok (188202 bytes)
-SHOT 23b_deck_collapsed ok (205014 bytes)
+SHOT 23_curve_deck ok (189610 bytes)
+SHOT 23b_deck_collapsed ok (207968 bytes)
 DECK COLLAPSED: False
 STEPPER: not found
 TAP 24_rail_preset: text=预设 at (822, 2271)
-SHOT 25_presets ok (223398 bytes)
+SHOT 25_presets ok (226859 bytes)
 preset tap at (540, 941)
-SHOT 26_preset_applied ok (223398 bytes)
+SHOT 26_preset_applied ok (226859 bytes)
 DIAL: not found (preset not applied?)
 TAP F2_lut_tab: text=滤镜 at (371, 1782)
-SHOT 24b_lut_filter_deck ok (211457 bytes)
+SHOT 24b_lut_filter_deck ok (215025 bytes)
 LUT CHIPS: True
 TAP F2_lut_apply: text=青橙对比 at (435, 2096)
-SHOT 24c_lut_applied ok (212954 bytes)
+SHOT 24c_lut_applied ok (215622 bytes)
 LUT INTENSITY SLIDER: False
 TAP F2_lut_undo: content-desc=撤销 at (340, 212)
 TAP 30_undo: content-desc=撤销 at (340, 212)
 TAP 31_rotate: NOT FOUND content-desc=旋转 (attempts=1)
-SHOT 32_after_rotate ok (208680 bytes)
+SHOT 32_after_rotate ok (209617 bytes)
 TAP 33_undo_rotate: content-desc=撤销 at (340, 212)
 TAP 34_auto_enhance: content-desc=自动增强 at (830, 212)
-SHOT 35_auto_enhanced ok (211783 bytes)
+SHOT 35_auto_enhanced ok (212270 bytes)
 TAP 36_pick_enter: NOT FOUND content-desc=点选作用域 (attempts=3)
-SHOT 37_pick_mask_contour ok (211783 bytes)
+SHOT 37_pick_mask_contour ok (212289 bytes)
 TAP 38_pick_exit: NOT FOUND content-desc=退出点选作用域 (attempts=3)
 TAP G2_open_history: content-desc=历史 at (572, 212)
 TAP G2_open_crop: content-desc=裁剪 at (927, 943)
-SHOT 30b_crop_mode ok (215099 bytes)
+SHOT 30b_crop_mode ok (215561 bytes)
 CROP MODE UI: False
 TAP G2_crop_aspect: NOT FOUND text=1:1 (attempts=1)
-SHOT 30c_crop_aspect ok (215099 bytes)
+SHOT 30c_crop_aspect ok (215603 bytes)
 CROP ASPECT APPLIED: False
 TAP G2_crop_cancel: NOT FOUND text=取消 (attempts=1)
-SHOT 40_double_tap_zoom ok (214282 bytes)
+SHOT 40_double_tap_zoom ok (215603 bytes)
 TAP 40b_hist_expand: content-desc=RGB 直方图 at (540, 498)
-SHOT 40c_hist_expanded ok (214987 bytes)
+SHOT 40c_hist_expanded ok (216334 bytes)
 TAP 40b_hist_expand: content-desc=RGB 直方图 at (540, 508)
-SHOT 40c_hist_expanded ok (214282 bytes)
+SHOT 40c_hist_expanded ok (215292 bytes)
 TAP 41_zoom_reset: NOT FOUND text=复位 (attempts=1)
 TAP 50_open_export: text=导出 at (971, 212)
-SHOT 51_export_sheet ok (207933 bytes)
+SHOT 51_export_sheet ok (208986 bytes)
 TAP 52_export_go: text=导出到相册 at (540, 2190)
 RECEIPT SHOWN: False done_at=None
-SHOT 53_export_receipt ok (199083 bytes)
+SHOT 53_export_receipt ok (199433 bytes)
 TAP 54_receipt_done: NOT FOUND text=完成 (attempts=6)
 export sheet still open -> back()
 SESSION PILL: True (editor-open-check=False)
-SHOT 61b_session_restored ok (283363 bytes)
-focus after back='mCurrentFocus=Window{41a540f u0 com.google.android.apps.nexuslauncher/com.google.android.apps.nexuslauncher.NexusLauncherActivity}'
-SHOT 63c_font13_home ok (303416 bytes)
-SHOT 61_home_after_back ok (283379 bytes)
+SHOT 61b_session_restored ok (284437 bytes)
+focus after back='mCurrentFocus=Window{ceee498 u0 com.google.android.apps.nexuslauncher/com.google.android.apps.nexuslauncher.NexusLauncherActivity}'
+SHOT 63c_font13_home ok (303666 bytes)
+SHOT 61_home_after_back ok (283494 bytes)
 TAP K2_open_camera: text=相机直连 at (837, 2022)
-SHOT 41b_camera_panel ok (330527 bytes)
+SHOT 41b_camera_panel ok (330652 bytes)
 CAMERA PANEL: True
 TAP 62_open_settings: text=设置 at (773, 2243)
-SHOT 63_settings ok (268911 bytes)
-SHOT 63b_settings_scrolled ok (317507 bytes)
+SHOT 63_settings ok (268997 bytes)
+SHOT 63b_settings_scrolled ok (304260 bytes)
 CAMERA GROUP VISIBLE: True
 MODEL STATS ROW: False
 TAP 64_model_center: NOT FOUND text=查看 (attempts=4)
-SHOT 65_model_center ok (317403 bytes)
-SHOT 65b_model_center_stats ok (296005 bytes)
+SHOT 65_model_center ok (304260 bytes)
+SHOT 65b_model_center_stats ok (285879 bytes)
 MODEL STATS ROW: False SHA ROW: False
-SHOT 66_settings_back ok (1389898 bytes)
+SHOT 66_settings_back ok (1390031 bytes)
 TAP 67_reset_tap: NOT FOUND text=恢复 (attempts=1)
-SHOT 68_reset_confirm ok (1389898 bytes)
+SHOT 68_reset_confirm ok (1389875 bytes)
 TAP 69_reset_cancel: NOT FOUND text=取消 (attempts=1)
 TAP 70_back_darkroom: NOT FOUND text=调色台 (attempts=1)
 TAP 71_saf_open: NOT FOUND text=文件 ARW (attempts=1)
@@ -102,9 +102,9 @@ TAP 71_open_gallery2: NOT FOUND text=相册 (attempts=1)
 TAP 72_roots: NOT FOUND content-desc=Show roots (attempts=1)
 TAP 72_pictures: NOT FOUND text=Pictures (attempts=1)
 TINY: saf navigation failed
-SHOT 73_tiny_editor ok (1390335 bytes)
+SHOT 73_tiny_editor ok (1389875 bytes)
 TINY EDITOR OPEN: False
-SHOT 74_drag_during_first_render ok (1390335 bytes)
-SHOT 75_after_render_settle ok (1390335 bytes)
+SHOT 74_drag_during_first_render ok (1389875 bytes)
+SHOT 75_after_render_settle ok (1389589 bytes)
 TAP 74_back2: NOT FOUND content-desc=返回 (attempts=1)
 === END ===
