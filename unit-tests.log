@@ -20,10 +20,10 @@
 > Task :app:javaPreCompileDebug UP-TO-DATE
 > Task :app:compileDebugJavaWithJavac NO-SOURCE
 > Task :app:preDebugUnitTestBuild UP-TO-DATE
-> Task :app:javaPreCompileDebugUnitTest
 > Task :app:processDebugJavaRes UP-TO-DATE
-> Task :app:bundleDebugClassesToRuntimeJar
+> Task :app:javaPreCompileDebugUnitTest
 > Task :app:bundleDebugClassesToCompileJar
+> Task :app:bundleDebugClassesToRuntimeJar
 
 > Task :app:compileDebugUnitTestKotlin
 w: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/test/java/com/hifn/pixelcake/core/edit/EditRotationTest.kt:72:33 The corresponding parameter in the supertype 'RetouchMask' is named 'w'. This may cause problems when calling this function with named arguments.
@@ -34,16 +34,24 @@ w: file:///home/runner/work/pixel-cake-app/pixel-cake-app/app/src/test/java/com/
 
 > Task :app:testDebugUnitTest FAILED
 
-EditCropTest > aspect fit centers largest rect of ratio FAILED
-    java.lang.AssertionError: expected:<0.4375> but was:<0.5625>
+PresetsTest > hasManyBuiltins FAILED
+    java.lang.AssertionError: expected:<44> but was:<54>
         at org.junit.Assert.fail(Assert.java:89)
         at org.junit.Assert.failNotEquals(Assert.java:835)
-        at org.junit.Assert.assertEquals(Assert.java:577)
-        at org.junit.Assert.assertEquals(Assert.java:701)
-        at com.hifn.pixelcake.core.edit.EditCropTest.aspect fit centers largest rect of ratio(EditCropTest.kt:133)
+        at org.junit.Assert.assertEquals(Assert.java:120)
+        at org.junit.Assert.assertEquals(Assert.java:146)
+        at com.hifn.pixelcake.core.edit.preset.PresetsTest.hasManyBuiltins(PresetsTest.kt:14)
 
-384 tests completed, 1 failed
-gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/__run_5-1795358520540.json
+PresetsTest > categoriesPopulated FAILED
+    java.lang.AssertionError: expected:<5> but was:<6>
+        at org.junit.Assert.fail(Assert.java:89)
+        at org.junit.Assert.failNotEquals(Assert.java:835)
+        at org.junit.Assert.assertEquals(Assert.java:120)
+        at org.junit.Assert.assertEquals(Assert.java:146)
+        at com.hifn.pixelcake.core.edit.preset.PresetsTest.categoriesPopulated(PresetsTest.kt:48)
+
+389 tests completed, 2 failed
+gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/__run_5-1795842627393.json
 
 FAILURE: Build failed with an exception.
 
@@ -217,5 +225,5 @@ Caused by: org.gradle.api.internal.exceptions.MarkedVerificationException: There
 	at org.gradle.internal.concurrent.AbstractManagedExecutor$1.run(AbstractManagedExecutor.java:48)
 
 
-BUILD FAILED in 7s
+BUILD FAILED in 6s
 24 actionable tasks: 6 executed, 18 up-to-date
