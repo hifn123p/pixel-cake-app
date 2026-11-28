@@ -273,9 +273,14 @@ root, hDump = dump("23a_handle")
 handle = find_contains(hDump, "content-desc", "调整参数面板高度")
 if handle:
     c = bounds_center(handle[0])
-    # v0.7.5 复测修正：**下拖** = Deck 变矮（上拖是变高）—— 旧方向反了
-    run(["shell", "input", "swipe", str(c[0]), str(c[1]),
-        str(c[0]), str(c[1] + int(H * 0.30)), "500"])
+    if c:
+        # v0.7.5 复测修正：**下拖** = Deck 变矮（上拖是变高）—— 旧方向反了
+        run(["shell", "input", "swipe", str(c[0]), str(c[1]),
+            str(c[0]), str(c[1] + int(H * 0.30)), "500"])
+    else:
+        results.append("HANDLE: zero-size bounds (race snapshot) -> estimated swipe")
+        run(["shell", "input", "swipe", str(int(W * 0.5)), str(int(H * 0.45)),
+            str(int(W * 0.5)), str(int(H * 0.25)), "500"])
 else:
     results.append("HANDLE: not found")
     run(["shell", "input", "swipe", str(int(W * 0.5)), str(int(H * 0.45)),
@@ -331,16 +336,19 @@ if root is not None:
         results.append("DIAL: not found (preset not applied?)")
 
 # ———— F2. v0.9.0 滤镜页（3D cube LUT chips + 强度滑块诚实可见）————
-tap("text", "滤镜", "F2_lut_tab", wait=2.0)
-root, _ = dump("F2_lut_deck")
-shot("24b_lut_filter_deck")
-results.append("LUT CHIPS: " + str("青橙对比" in (_ or "")))
-tap("text", "青橙对比", "F2_lut_apply", wait=2.0, contains=True)
-time.sleep(1.5)
-shot("24c_lut_applied")
-root2, t2 = dump("F2_lut_intensity")
-results.append("LUT INTENSITY SLIDER: " + str("滤镜强度" in (t2 or "")))
-tap("content-desc", "撤销", "F2_lut_undo", wait=1.5, contains=True, allow_missing=True)
+try:
+    tap("text", "滤镜", "F2_lut_tab", wait=2.0)
+    root, _ = dump("F2_lut_deck")
+    shot("24b_lut_filter_deck")
+    results.append("LUT CHIPS: " + str("青橙对比" in (_ or "")))
+    tap("text", "青橙对比", "F2_lut_apply", wait=2.0, contains=True)
+    time.sleep(1.5)
+    shot("24c_lut_applied")
+    root2, t2 = dump("F2_lut_intensity")
+    results.append("LUT INTENSITY SLIDER: " + str("滤镜强度" in (t2 or "")))
+    tap("content-desc", "撤销", "F2_lut_undo", wait=1.5, contains=True, allow_missing=True)
+except Exception as e:
+    results.append(f"F2 PROBE CRASHED: {e!r}")
 
 # ———— G. 顶栏动作：撤销 / 旋转 / 自动增强 ————
 tap("content-desc", "撤销", "30_undo", wait=1.0, contains=True, allow_missing=True)
@@ -357,18 +365,21 @@ shot("37_pick_mask_contour")
 tap("content-desc", "退出点选作用域", "38_pick_exit", wait=1.0, contains=True, allow_missing=True, attempts=3)
 
 # ———— G2. v0.8.0 裁剪模式（历史面板头部入口 → 覆盖层 + 比例 chips）————
-tap("content-desc", "历史", "G2_open_history", wait=2.0, contains=True, allow_missing=True)
-tap("content-desc", "裁剪", "G2_open_crop", wait=2.5, contains=True, allow_missing=True, attempts=3)
-time.sleep(1.5)
-root, t = dump("G2_crop_mode")
-shot("30b_crop_mode")
-results.append("CROP MODE UI: " + str("应用裁剪" in (t or "")))
-tap("text", "1:1", "G2_crop_aspect", wait=1.5, contains=True, allow_missing=True)
-time.sleep(1.0)
-shot("30c_crop_aspect")
-root2, t2 = dump("G2_crop_aspect_dump")
-results.append("CROP ASPECT APPLIED: " + str(("重置" in (t2 or "")) and ("取消" in (t2 or ""))))
-tap("text", "取消", "G2_crop_cancel", wait=1.5, contains=True, allow_missing=True)
+try:
+    tap("content-desc", "历史", "G2_open_history", wait=2.0, contains=True, allow_missing=True)
+    tap("content-desc", "裁剪", "G2_open_crop", wait=2.5, contains=True, allow_missing=True, attempts=3)
+    time.sleep(1.5)
+    root, t = dump("G2_crop_mode")
+    shot("30b_crop_mode")
+    results.append("CROP MODE UI: " + str("应用裁剪" in (t or "")))
+    tap("text", "1:1", "G2_crop_aspect", wait=1.5, contains=True, allow_missing=True)
+    time.sleep(1.0)
+    shot("30c_crop_aspect")
+    root2, t2 = dump("G2_crop_aspect_dump")
+    results.append("CROP ASPECT APPLIED: " + str(("重置" in (t2 or "")) and ("取消" in (t2 or ""))))
+    tap("text", "取消", "G2_crop_cancel", wait=1.5, contains=True, allow_missing=True)
+except Exception as e:
+    results.append(f"G2 PROBE CRASHED: {e!r}")
 
 # ———— H. 缩放：双击放大 + 复位 ————
 run(["shell", "input", "tap", str(int(W * 0.45)), str(int(H * 0.30))])
@@ -453,12 +464,15 @@ root, _ = dump("home_after")
 shot("61_home_after_back")
 
 # ———— K2. v0.9.1 相机直连面板（无真机：扫描/未连接态渲染；快门钮需设备才出现）————
-tap("text", "相机直连", "K2_open_camera", wait=2.5, contains=True, allow_missing=True, attempts=3)
-time.sleep(1.5)
-root, t = dump("K2_camera_panel")
-shot("41b_camera_panel")
-results.append("CAMERA PANEL: " + str(("相机直连" in (t or "")) or ("扫描" in (t or "")) or ("未连接" in (t or ""))))
-back()
+try:
+    tap("text", "相机直连", "K2_open_camera", wait=2.5, contains=True, allow_missing=True, attempts=3)
+    time.sleep(1.5)
+    root, t = dump("K2_camera_panel")
+    shot("41b_camera_panel")
+    results.append("CAMERA PANEL: " + str(("相机直连" in (t or "")) or ("扫描" in (t or "")) or ("未连接" in (t or ""))))
+    back()
+except Exception as e:
+    results.append(f"K2 PROBE CRASHED: {e!r}")
 
 # ———— K. 设置页走查 ————
 tap("text", "设置", "62_open_settings", wait=2.0)
@@ -499,8 +513,11 @@ if not t_node:
     t_node = find_contains(root, "text", "tiny.jpg")
 if t_node:
     c = bounds_center(t_node[0])
-    run(["shell", "input", "tap", str(c[0]), str(c[1])])
-    results.append(f"tiny SAF tap at {c}")
+    if c:
+        run(["shell", "input", "tap", str(c[0]), str(c[1])])
+        results.append(f"tiny SAF tap at {c}")
+    else:
+        results.append("tiny: zero-size bounds (race snapshot) -> skipped")
 else:
     results.append("TINY: saf navigation failed")
 time.sleep(6.0)
