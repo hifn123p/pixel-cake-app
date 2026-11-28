@@ -636,6 +636,8 @@ fun EditorScreen(
     val cropModeNow = rememberUpdatedState(cropMode)
     // 进入裁剪：复位缩放/平移（覆盖层与照片同框的前提）+ 全幅工作框
     val openCrop: () -> Unit = {
+        // v0.9.2 审计埋点：模拟器探针实测「tap 裁剪后覆盖层未渲染」—— 状态链逐环上日志
+        DebugLog.i(DebugLog.TAG_EDIT, "crop open requested")
         cropMode = true
         cropWork = CropRect(0f, 0f, 1f, 1f)
         cropAspect = null
@@ -649,7 +651,26 @@ fun EditorScreen(
     // 裁剪外的几何/参数变化（撤销/重做、上层重推导）会让工作矩形失配 —— 有裁剪态
     // 翻转时把工作框复位成全幅（重新框选，安全基线）。
     LaunchedEffect(hasCrop, cropMode) {
-        if (cropMode) cropWork = CropRect(0f, 0f, 1f, 1f)
+        if (cropMode) {
+            cropWork = CropRect(0f, 0f, 1f, 1f)
+            DebugLog.i(
+                DebugLog.TAG_EDIT, "crop mode on",
+                mapOf("hasCrop" to hasCrop.toString())
+            )
+        }
+    }
+    // v0.9.2 审计埋点：覆盖层渲染条件的三个变量逐帧上日志（模拟器可读）
+    LaunchedEffect(cropMode, cropWork, dispW, dispH) {
+        if (cropMode) {
+            DebugLog.i(
+                DebugLog.TAG_EDIT, "crop overlay cond",
+                mapOf(
+                    "workNull" to (cropWork == null).toString(),
+                    "dispW" to dispW.toString(),
+                    "dispH" to dispH.toString()
+                )
+            )
+        }
     }
     val closeCrop: () -> Unit = { cropMode = false; cropWork = null; cropAspect = null }
     LaunchedEffect(previewZoom) {
