@@ -67,13 +67,24 @@ def bounds_center(node):
     return (x1 + x2) // 2, (y1 + y2) // 2
 
 
+def _is_tree(root):
+    # v0.9.2：dump() 返回 (tree, text) —— 曾有调用点把 text 当 tree 传进 find_*，
+    # 'str'.iter → AttributeError 杀整轮（23a 一行的陈年错位，被 || true 掩成假绿）。
+    # 在入口免疫：str/None 一律空结果，调用点按 NOT FOUND 记录继续走。
+    return root is not None and not isinstance(root, str)
+
+
 def find_nodes(root, attr, value):
+    if not _is_tree(root):
+        return []
     if root is None:
         return []
     return [n for n in root.iter("node") if n.get(attr) == value]
 
 
 def find_contains(root, attr, value):
+    if not _is_tree(root):
+        return []
     if root is None:
         return []
     return [n for n in root.iter("node") if n.get(attr) and value in n.get(attr)]
@@ -270,7 +281,7 @@ shot("23_curve_deck")
 # 上拖手柄 → Deck 吸附收起为 44dp 单行 → 预览面积 +148dp。
 # 复测修正：手柄坐标用 dump 定位（估算坐标会打在 Deck 内容上）。
 root, hDump = dump("23a_handle")
-handle = find_contains(hDump, "content-desc", "调整参数面板高度")
+handle = find_contains(root, "content-desc", "调整参数面板高度")  # v0.9.2：hDump 是文本，曾错传杀整轮
 if handle:
     c = bounds_center(handle[0])
     if c:
