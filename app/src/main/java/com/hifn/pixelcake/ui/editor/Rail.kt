@@ -259,6 +259,9 @@ fun EditorRail(
     selected: EditorCategory,
     onSelect: (EditorCategory) -> Unit,
     modifier: Modifier = Modifier,
+    // v0.8.1：裁剪动作入口（非类目 —— 点击直接进裁剪模式，不切 Deck 内容）。
+    // 与旋转同族的几何操作从此在主工具面直接可达（此前只藏在历史面板头部）。
+    onOpenCrop: (() -> Unit)? = null,
 ) {
     val edge = MaterialTheme.colorScheme.outlineVariant
     Row(
@@ -285,6 +288,16 @@ fun EditorRail(
                 def = def,
                 selected = cat == selected,
                 onClick = { onSelect(cat) },
+                modifier = Modifier.weight(1f),
+            )
+        }
+        // v0.8.1：裁剪动作项（永远非选中态 —— 它是动作不是类目）
+        if (onOpenCrop != null) {
+            RailItem(
+                label = "裁剪",
+                def = AppIcons.Crop,
+                selected = false,
+                onClick = onOpenCrop,
                 modifier = Modifier.weight(1f),
             )
         }
