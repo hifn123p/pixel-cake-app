@@ -144,7 +144,11 @@ jobs:
           adb install -r app/build/outputs/apk/debug/app-debug.apk
           mkdir -p audit-art/shots audit-art/xml
           adb logcat -c
-          python3 scripts/emulator_audit_drive.py || true
+          # v0.9.2：走查脚本输出（含未捕获 traceback）落盘进证据 ——
+          # 上轮脚本中途崩（bounds 竞态），traceback 只在工作流日志里匿名不可读，
+          # 假绿 + 断点无从诊断。git 是唯一匿名可读通道。
+          python3 scripts/emulator_audit_drive.py > audit-art/drive-log.txt 2>&1 || true
+          tail -40 audit-art/drive-log.txt || true
           # 应用私有调试日志（DebugLog 只写文件不上 logcat）—— 平色渲染/ML 失败的第一手证据。
           # ⚠️ 引号必须嵌套到设备端：本地 bash 会吃掉单引号（上一轮 sh -c 只拿到 cat 一个词）
           adb shell "run-as com.hifn.pixelcake.debug sh -c 'ls files/debug 2>/dev/null; cat files/debug/*.txt 2>/dev/null'" > audit-art/app-debuglog.txt || true
